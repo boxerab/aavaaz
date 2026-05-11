@@ -1,0 +1,75 @@
+"""Aavaaz CLI — entry point for the aavaaz command."""
+
+import argparse
+import logging
+import sys
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="aavaaz",
+        description="Aavaaz — production-grade speech-to-text platform",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # --- serve ---
+    serve_parser = subparsers.add_parser("serve", help="Start the Aavaaz server")
+    serve_parser.add_argument("--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
+    serve_parser.add_argument("--port", type=int, default=9090, help="WebSocket port (default: 9090)")
+    serve_parser.add_argument("--rest-port", type=int, default=8000, help="REST API port (default: 8000)")
+    serve_parser.add_argument("--model", default="large-v3", help="Whisper model name or path")
+    serve_parser.add_argument(
+        "--backend", default="faster_whisper",
+        choices=["faster_whisper", "tensorrt", "openvino"],
+        help="Transcription backend",
+    )
+    serve_parser.add_argument("--no-rest", action="store_true", help="Disable REST API")
+    serve_parser.add_argument("--log-json", action="store_true", help="Use JSON structured logging")
+    serve_parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging")
+
+    # --- transcribe ---
+    transcribe_parser = subparsers.add_parser("transcribe", help="Transcribe an audio file")
+    transcribe_parser.add_argument("file", help="Path to audio file")
+    transcribe_parser.add_argument("--model", default="large-v3", help="Whisper model name or path")
+    transcribe_parser.add_argument(
+        "--format", default="text", choices=["text", "json", "srt", "vtt"],
+        help="Output format",
+    )
+    transcribe_parser.add_argument("--language", default=None, help="Language code (auto-detect if omitted)")
+
+    # --- version ---
+    subparsers.add_parser("version", help="Show version")
+
+    args = parser.parse_args()
+
+    level = logging.DEBUG if getattr(args, "verbose", False) else logging.INFO
+    logging.basicConfig(level=level)
+
+    if args.command == "version":
+        from aavaaz import __version__
+        print(f"aavaaz {__version__}")
+
+    elif args.command == "serve":
+        from aavaaz.server import AavaazServer
+        server = AavaazServer(
+            host=args.host,
+            port=args.port,
+            rest_port=args.rest_port,
+            backend=args.backend,
+            model=args.model,
+            enable_rest_api=not args.no_rest,
+        )
+        server.run()
+
+    elif args.command == "transcribe":
+        from aavaaz.transcribe import transcribe_file
+        transcribe_file(
+            path=args.file,
+            model=args.model,
+            output_format=args.format,
+            language=args.language,
+        )
+
+
+if __name__ == "__main__":
+    main()
