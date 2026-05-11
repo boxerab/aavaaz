@@ -1,12 +1,12 @@
 # Keycloak SSO Integration
 
-Connect WhisperLive to your company's Keycloak instance so employees can
+Connect Aavaaz to your company's Keycloak instance so employees can
 authenticate with their existing corporate credentials.
 
 ## Overview
 
 ```
-Employee              Keycloak              WhisperLive
+Employee              Keycloak              Aavaaz
    │                     │                      │
    ├──── Login ─────────►│                      │
    │◄─── JWT Token ──────┤                      │
@@ -36,7 +36,7 @@ In the Keycloak Admin Console:
 
 ## Step 2: Add a Role Mapper
 
-WhisperLive reads roles from the `role` claim. Configure Keycloak to include it:
+Aavaaz reads roles from the `role` claim. Configure Keycloak to include it:
 
 1. Go to **Clients → whisperlive → Client scopes**
 2. Click the `whisperlive-dedicated` scope
@@ -52,9 +52,9 @@ WhisperLive reads roles from the `role` claim. Configure Keycloak to include it:
 
 ### Create Realm Roles
 
-In **Realm roles**, create these roles (matching WhisperLive's role system):
+In **Realm roles**, create these roles (matching Aavaaz's role system):
 
-| Keycloak Role | WhisperLive Role | Permissions |
+| Keycloak Role | Aavaaz Role | Permissions |
 |---------------|-----------------|-------------|
 | `admin` | admin | Full access + user management |
 | `user` | user | Transcribe + read results |
@@ -62,7 +62,7 @@ In **Realm roles**, create these roles (matching WhisperLive's role system):
 
 Assign roles to users under **Users → [user] → Role mappings**.
 
-## Step 3: Start WhisperLive with Keycloak
+## Step 3: Start Aavaaz with Keycloak
 
 ```bash
 # Your Keycloak realm URL
@@ -118,7 +118,7 @@ curl -X POST http://localhost:9090/v1/audio/transcriptions \
 
 ### Option B: Browser-based login (web UI)
 
-If you're using the WhisperLive web UI, add a Keycloak JS adapter to handle
+If you're using the Aavaaz web UI, add a Keycloak JS adapter to handle
 the login flow. Add this to the web UI's `index.html`:
 
 ```html
@@ -208,14 +208,14 @@ curl -X POST http://localhost:9090/v1/audio/transcriptions \
 | `JWT token expired` | Tokens are short-lived (default 5min). Refresh with `keycloak.updateToken()` or re-authenticate |
 | `Invalid JWT token` | Verify `--jwt_issuer` matches the `iss` claim exactly (trailing slashes matter) |
 | Role not recognized | Ensure the role mapper outputs `admin`, `user`, or `readonly` as the `role` claim |
-| JWKS connection refused | Ensure WhisperLive can reach the Keycloak URL. In Docker, use the container network hostname |
+| JWKS connection refused | Ensure Aavaaz can reach the Keycloak URL. In Docker, use the container network hostname |
 | Self-signed Keycloak cert | Set `PYTHONHTTPSVERIFY=0` or mount the CA cert into the container |
 
 ## Security Notes
 
 - Keycloak access tokens are **short-lived** (5 min default). Configure token
   lifespan in **Realm settings → Tokens**.
-- Use **HTTPS** for both Keycloak and WhisperLive in production.
+- Use **HTTPS** for both Keycloak and Aavaaz in production.
 - For the web UI, use **PKCE** (Proof Key for Code Exchange) — Keycloak
   supports it out of the box with public clients.
 - Rotate the client secret periodically if using a confidential client.

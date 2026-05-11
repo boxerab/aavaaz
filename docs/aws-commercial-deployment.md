@@ -1,8 +1,8 @@
-# WhisperLive: Commercial AWS Deployment Guide
+# Aavaaz: Commercial AWS Deployment Guide
 
 ## Overview
 
-This document outlines what is needed to deploy WhisperLive as a commercial transcription service hosted on AWS. It covers infrastructure, security, reliability, observability, business logic, compliance, and cost optimization.
+This document outlines what is needed to deploy Aavaaz as a commercial transcription service hosted on AWS. It covers infrastructure, security, reliability, observability, business logic, compliance, and cost optimization.
 
 ## What's Already Built
 
@@ -235,7 +235,7 @@ The following features have been implemented across our feature branches:
 - **Dedicated tenancy**: EC2 dedicated instances if required.
 
 ### Licensing
-- **WhisperLive**: MIT License ✅ — fully permissive for commercial use.
+- **Aavaaz**: MIT License ✅ — fully permissive for commercial use.
 - **faster-whisper**: MIT License ✅
 - **openai-whisper**: MIT License ✅
 - **PyTorch**: BSD License ✅

@@ -1,6 +1,6 @@
-# WhisperLive SDKs
+# Aavaaz SDKs
 
-Client SDKs for integrating with the WhisperLive transcription API.
+Client SDKs for integrating with the Aavaaz transcription API.
 
 ## Available SDKs
 
@@ -11,10 +11,10 @@ Client SDKs for integrating with the WhisperLive transcription API.
 ```
 
 ```typescript
-import { WhisperLiveClient, WhisperLiveWebSocket } from './whisperlive';
+import { AavaazClient, AavaazWebSocket } from './whisperlive';
 
 // REST API client
-const client = new WhisperLiveClient('http://localhost:8000', { apiKey: 'your-key' });
+const client = new AavaazClient('http://localhost:8000', { apiKey: 'your-key' });
 const result = await client.transcribe(audioFile);
 console.log(result.text);
 
@@ -24,7 +24,7 @@ for await (const segment of client.transcribeStream(audioFile)) {
 }
 
 // WebSocket real-time
-const ws = new WhisperLiveWebSocket('localhost', 9090, {
+const ws = new AavaazWebSocket('localhost', 9090, {
   model: 'small',
   wordTimestamps: true,
   enableDiarization: true,
@@ -38,7 +38,7 @@ ws.sendAudio(audioBuffer);
 ### Go
 
 ```bash
-go get github.com/collabora/WhisperLive/sdks/go
+go get github.com/collabora/Aavaaz/sdks/go
 ```
 
 ```go
@@ -46,7 +46,7 @@ package main
 
 import (
     "fmt"
-    wl "github.com/collabora/WhisperLive/sdks/go"
+    wl "github.com/collabora/Aavaaz/sdks/go"
 )
 
 func main() {
@@ -65,7 +65,7 @@ func main() {
 
 ### Python
 
-The Python client is built into WhisperLive itself:
+The Python client is built into Aavaaz itself:
 
 ```python
 from whisper_live.client import TranscriptionClient

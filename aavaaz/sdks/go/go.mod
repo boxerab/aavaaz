@@ -1,3 +1,3 @@
-module github.com/collabora/WhisperLive/sdks/go
+module github.com/collabora/Aavaaz/sdks/go
 
 go 1.21

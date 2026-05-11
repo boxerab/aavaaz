@@ -1,6 +1,6 @@
 # Horizontal Scaling & Deployment Guide
 
-This document covers strategies for deploying WhisperLive across multiple GPU nodes behind a load balancer.
+This document covers strategies for deploying Aavaaz across multiple GPU nodes behind a load balancer.
 
 ## Architecture Overview
 
@@ -23,7 +23,7 @@ This document covers strategies for deploying WhisperLive across multiple GPU no
        └─────────┘  └─────────┘  └─────────┘
 ```
 
-Each node runs an independent WhisperLive server with its own GPU.
+Each node runs an independent Aavaaz server with its own GPU.
 
 ## Load Balancer Configuration
 

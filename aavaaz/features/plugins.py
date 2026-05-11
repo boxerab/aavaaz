@@ -1,5 +1,5 @@
 """
-Plugin system for WhisperLive post-processing pipeline.
+Plugin system for Aavaaz post-processing pipeline.
 
 Allows users to register custom post-processing plugins that run on
 transcription segments. Plugins are callables that accept a segment dict

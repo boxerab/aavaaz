@@ -1,6 +1,6 @@
 # Edge & Embedded Deployment Guide
 
-WhisperLive can run on edge devices including Raspberry Pi 4/5, NVIDIA Jetson Nano/Xavier/Orin, and other ARM64 platforms.
+Aavaaz can run on edge devices including Raspberry Pi 4/5, NVIDIA Jetson Nano/Xavier/Orin, and other ARM64 platforms.
 
 ## Quick Start
 
@@ -82,8 +82,8 @@ services:
 pip install faster-whisper websockets fastapi uvicorn noisereduce soundfile
 
 # Clone and run
-git clone https://github.com/collabora/WhisperLive.git
-cd WhisperLive
+git clone https://github.com/collabora/Aavaaz.git
+cd Aavaaz
 python run_server.py \
   --backend faster_whisper \
   --faster_whisper_custom_model_path tiny \

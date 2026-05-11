@@ -1,12 +1,12 @@
 /**
- * WhisperLive JavaScript/TypeScript SDK
+ * Aavaaz JavaScript/TypeScript SDK
  *
- * Lightweight client for the WhisperLive REST API and WebSocket streaming.
+ * Lightweight client for the Aavaaz REST API and WebSocket streaming.
  *
  * Usage:
- *   import { WhisperLiveClient } from './whisperlive';
+ *   import { AavaazClient } from './aavaaz';
  *
- *   const client = new WhisperLiveClient('http://localhost:8000', { apiKey: 'your-key' });
+ *   const client = new AavaazClient('http://localhost:8000', { apiKey: 'your-key' });
  *   const result = await client.transcribe(audioFile);
  *   console.log(result.text);
  */
@@ -48,17 +48,17 @@ export interface HealthResponse {
   max_clients: number;
 }
 
-export interface WhisperLiveConfig {
+export interface AavaazConfig {
   apiKey?: string;
   timeout?: number;
 }
 
-export class WhisperLiveClient {
+export class AavaazClient {
   private baseUrl: string;
   private apiKey?: string;
   private timeout: number;
 
-  constructor(baseUrl: string, config: WhisperLiveConfig = {}) {
+  constructor(baseUrl: string, config: AavaazConfig = {}) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.apiKey = config.apiKey;
     this.timeout = config.timeout || 30000;
@@ -224,7 +224,7 @@ export class WhisperLiveClient {
 /**
  * WebSocket client for real-time transcription streaming.
  */
-export class WhisperLiveWebSocket {
+export class AavaazWebSocket {
   private ws: WebSocket | null = null;
   private url: string;
   private config: Record<string, unknown>;

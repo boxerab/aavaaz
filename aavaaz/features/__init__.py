@@ -1,6 +1,6 @@
 """
-Aavaaz feature modules — migrated from WhisperLive PRs.
+Aavaaz feature modules — migrated from Aavaaz PRs.
 
 These modules provide the enterprise features that differentiate Aavaaz
-from upstream WhisperLive.
+from upstream Aavaaz.
 """

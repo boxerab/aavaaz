@@ -1,11 +1,11 @@
-// Package whisperlive provides a Go client for the WhisperLive REST API.
+// Package aavaaz provides a Go client for the Aavaaz REST API.
 //
 // Usage:
 //
-//	client := whisperlive.NewClient("http://localhost:8000", &whisperlive.Config{APIKey: "your-key"})
+//	client := aavaaz.NewClient("http://localhost:8000", &aavaaz.Config{APIKey: "your-key"})
 //	result, err := client.Transcribe("audio.wav", nil)
 //	fmt.Println(result.Text)
-package whisperlive
+package aavaaz
 
 import (
 	"bytes"
@@ -25,7 +25,7 @@ type Config struct {
 	Timeout time.Duration
 }
 
-// Client is the WhisperLive API client.
+// Client is the Aavaaz API client.
 type Client struct {
 	baseURL    string
 	apiKey     string
@@ -56,7 +56,7 @@ type HealthResponse struct {
 	MaxClients int    `json:"max_clients"`
 }
 
-// NewClient creates a new WhisperLive API client.
+// NewClient creates a new Aavaaz API client.
 func NewClient(baseURL string, config *Config) *Client {
 	timeout := 30 * time.Second
 	apiKey := ""

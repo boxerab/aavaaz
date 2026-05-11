@@ -1,6 +1,6 @@
 # User Management & Access Control
 
-WhisperLive includes a built-in multi-user access control system with role-based
+Aavaaz includes a built-in multi-user access control system with role-based
 permissions, per-user API keys, rate limiting, usage quotas, and JWT support for
 enterprise identity providers.
 
@@ -112,7 +112,7 @@ print('Done')
 ## JWT Authentication
 
 For enterprise deployments with an existing identity provider (AWS Cognito,
-Auth0, Keycloak, Okta, etc.), WhisperLive can validate JWT tokens directly.
+Auth0, Keycloak, Okta, etc.), Aavaaz can validate JWT tokens directly.
 
 ### RS256 (Cognito, Auth0, Keycloak)
 

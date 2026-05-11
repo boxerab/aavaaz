@@ -1,8 +1,8 @@
 # Aavaaz
 
-**Production-grade speech-to-text platform built on [WhisperLive](https://github.com/collabora/WhisperLive).**
+**Production-grade speech-to-text platform built on [Aavaaz](https://github.com/collabora/Aavaaz).**
 
-Aavaaz (आवाज़, "voice" in Hindi) extends WhisperLive with enterprise features
+Aavaaz (आवाज़, "voice" in Hindi) extends Aavaaz with enterprise features
 that compete with Deepgram, ElevenLabs, and AssemblyAI — while keeping the
 core transcription engine open-source.
 
@@ -34,7 +34,7 @@ curl -X POST http://localhost:8000/v1/audio/transcriptions \
 
 ## Architecture
 
-Aavaaz uses WhisperLive as its transcription engine and extends it via the
+Aavaaz uses Aavaaz as its transcription engine and extends it via the
 plugin system:
 
 ```
@@ -49,7 +49,7 @@ plugin system:
 │  │  PII redaction → intelligence   │    │
 │  └──────────────┬──────────────────┘    │
 │  ┌──────────────┴──────────────────┐    │
-│  │     WhisperLive Core Engine     │    │
+│  │     Aavaaz Core Engine     │    │
 │  │  faster-whisper / TensorRT /    │    │
 │  │  OpenVINO                       │    │
 │  └─────────────────────────────────┘    │

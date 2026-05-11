@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WhisperLive — Real-Time Speech-to-Text, Open Source</title>
+    <title>Aavaaz — Production-Grade Speech-to-Text, Open Source</title>
     <meta name="description" content="Open-source real-time speech-to-text powered by OpenAI Whisper. Multi-backend, multi-language, production-ready. By Collabora.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -907,7 +907,7 @@
                 <rect x="20" y="4" width="3" rx="1.5" height="20" transform-origin="21.5 14"/>
                 <rect x="26" y="7" width="3" rx="1.5" height="14" transform-origin="27.5 14"/>
             </svg>
-            WhisperLive
+            Aavaaz
         </a>
         <ul class="nav-links">
             <li><a href="#backends">Backends</a></li>
@@ -915,7 +915,7 @@
             <li><a href="#capabilities">Capabilities</a></li>
             <li><a href="#sdks">SDKs</a></li>
             <li><a href="#quickstart">Docs</a></li>
-            <li><a href="https://github.com/collabora/WhisperLive" class="nav-btn-ghost">GitHub</a></li>
+            <li><a href="https://github.com/collabora/Aavaaz" class="nav-btn-ghost">GitHub</a></li>
             <li><a href="#quickstart" class="nav-btn-green">Get Started</a></li>
         </ul>
         <button class="nav-hamburger" onclick="document.querySelector('.nav-links').classList.toggle('show')" aria-label="Toggle menu">&#9776;</button>
@@ -934,10 +934,10 @@
             The most complete open-source transcription server. Multi-backend, multi-language, with enterprise features built in. Self-host on any hardware.
         </p>
         <div class="hero-actions">
-            <a href="https://github.com/collabora/WhisperLive" class="btn btn-green">
+            <a href="https://github.com/collabora/Aavaaz" class="btn btn-green">
                 Get Started Free
             </a>
-            <a href="https://github.com/collabora/WhisperLive" class="btn btn-outline">
+            <a href="https://github.com/collabora/Aavaaz" class="btn btn-outline">
                 View on GitHub &rarr;
             </a>
         </div>
@@ -945,7 +945,7 @@
         <div class="hero-demo">
             <div class="demo-header">
                 <div class="demo-dots"><span></span><span></span><span></span></div>
-                <div class="demo-title">whisperlive &mdash; server</div>
+                <div class="demo-title">aavaaz &mdash; server</div>
                 <div style="width: 38px;"></div>
             </div>
             <div class="demo-body">
@@ -954,7 +954,7 @@
     <span class="f">--enable_rest</span> <span class="f">--api_key</span> <span class="v">"sk-..."</span> <span class="f">--noise_reduction</span> <span class="v">near_field</span> \
     <span class="f">--batch_inference</span> <span class="f">--metrics_port</span> <span class="v">9091</span>
 
-<span class="o">INFO  WhisperLive v0.8.0 starting...</span>
+<span class="o">INFO  Aavaaz v0.8.0 starting...</span>
 <span class="o">INFO  Backend: faster_whisper | Model: small</span>
 <span class="o">INFO  REST API &rarr; http://0.0.0.0:8000</span>
 <span class="o">INFO  Swagger  &rarr; http://0.0.0.0:8000/docs</span>
@@ -1289,7 +1289,7 @@
     <div class="section-inner">
         <span class="section-label">Discover Capabilities</span>
         <h2 class="section-title">Built for the Real World</h2>
-        <p class="section-desc">WhisperLive&rsquo;s capabilities give developers everything they need to produce accurate, readable, and secure transcripts.</p>
+        <p class="section-desc">Aavaaz&rsquo;s capabilities give developers everything they need to produce accurate, readable, and secure transcripts.</p>
 
         <div class="cap-grid fade-in">
             <div class="cap-card">
@@ -1394,7 +1394,7 @@
             <div class="tab-body">
                 <div class="tab-panel active" id="tab-python">
 <pre><span class="cmt"># Install</span>
-pip install whisper-live
+pip install aavaaz
 
 <span class="cmt"># Start server</span>
 python3 run_server.py <span class="kw">--port</span> <span class="num">9090</span> <span class="kw">--backend</span> <span class="str">faster_whisper</span> <span class="kw">--enable_rest</span>
@@ -1414,9 +1414,9 @@ client(<span class="str">"audio.wav"</span>)   <span class="cmt"># transcribe a 
 client()              <span class="cmt"># transcribe from microphone</span></pre>
                 </div>
                 <div class="tab-panel" id="tab-javascript">
-<pre><span class="kw">import</span> { WhisperLiveClient } <span class="kw">from</span> <span class="str">'./whisperlive'</span>;
+<pre><span class="kw">import</span> { AavaazClient } <span class="kw">from</span> <span class="str">'./aavaaz'</span>;
 
-<span class="kw">const</span> client = <span class="kw">new</span> <span class="fn">WhisperLiveClient</span>(<span class="str">'http://localhost:8000'</span>, {
+<span class="kw">const</span> client = <span class="kw">new</span> <span class="fn">AavaazClient</span>(<span class="str">'http://localhost:8000'</span>, {
     apiKey: <span class="str">'your-key'</span>,
 });
 
@@ -1430,7 +1430,7 @@ console.<span class="fn">log</span>(result.text);
 }</pre>
                 </div>
                 <div class="tab-panel" id="tab-go">
-<pre><span class="kw">import</span> wl <span class="str">"github.com/collabora/WhisperLive/sdks/go"</span>
+<pre><span class="kw">import</span> wl <span class="str">"github.com/collabora/Aavaaz/sdks/go"</span>
 
 client := wl.<span class="fn">NewClient</span>(<span class="str">"http://localhost:8000"</span>, &amp;wl.Config{
     APIKey: <span class="str">"your-key"</span>,
@@ -1446,21 +1446,21 @@ fmt.<span class="fn">Printf</span>(<span class="str">"Status: %s (%d/%d clients)
                 </div>
                 <div class="tab-panel" id="tab-docker">
 <pre><span class="cmt"># GPU (NVIDIA)</span>
-docker run -it --gpus all -p <span class="num">9090</span>:<span class="num">9090</span> ghcr.io/collabora/whisperlive-gpu:latest
+docker run -it --gpus all -p <span class="num">9090</span>:<span class="num">9090</span> ghcr.io/collabora/aavaaz-gpu:latest
 
 <span class="cmt"># CPU only</span>
-docker run -it -p <span class="num">9090</span>:<span class="num">9090</span> ghcr.io/collabora/whisperlive-cpu:latest
+docker run -it -p <span class="num">9090</span>:<span class="num">9090</span> ghcr.io/collabora/aavaaz-cpu:latest
 
 <span class="cmt"># OpenVINO (Intel GPU)</span>
-docker run -it --device=/dev/dri -p <span class="num">9090</span>:<span class="num">9090</span> ghcr.io/collabora/whisperlive-openvino
+docker run -it --device=/dev/dri -p <span class="num">9090</span>:<span class="num">9090</span> ghcr.io/collabora/aavaaz-openvino
 
 <span class="cmt"># Edge (Raspberry Pi / ARM64)</span>
-docker build -f docker/Dockerfile.edge -t whisperlive-edge .
-docker run -p <span class="num">9090</span>:<span class="num">9090</span> -p <span class="num">8000</span>:<span class="num">8000</span> whisperlive-edge
+docker build -f docker/Dockerfile.edge -t aavaaz-edge .
+docker run -p <span class="num">9090</span>:<span class="num">9090</span> -p <span class="num">8000</span>:<span class="num">8000</span> aavaaz-edge
 
 <span class="cmt"># NVIDIA Jetson</span>
-docker build -f docker/Dockerfile.jetson -t whisperlive-jetson .
-docker run --runtime nvidia -p <span class="num">9090</span>:<span class="num">9090</span> whisperlive-jetson</pre>
+docker build -f docker/Dockerfile.jetson -t aavaaz-jetson .
+docker run --runtime nvidia -p <span class="num">9090</span>:<span class="num">9090</span> aavaaz-jetson</pre>
                 </div>
                 <div class="tab-panel" id="tab-rest">
 <pre><span class="cmt"># Transcribe a file</span>
@@ -1491,7 +1491,7 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
     <div class="section-inner">
         <span class="section-label">Deployment</span>
         <h2 class="section-title">Run Anywhere</h2>
-        <p class="section-desc">From a Raspberry Pi to a GPU cluster &mdash; WhisperLive scales to your needs.</p>
+        <p class="section-desc">From a Raspberry Pi to a GPU cluster &mdash; Aavaaz scales to your needs.</p>
 
         <div class="deploy-grid fade-in">
             <div class="deploy-card">
@@ -1518,19 +1518,19 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
     <div class="section-inner">
         <span class="section-label">Resources</span>
         <h2 class="section-title">From the Blog</h2>
-        <p class="section-desc">Read about the technology and use cases behind WhisperLive.</p>
+        <p class="section-desc">Read about the technology and use cases behind Aavaaz.</p>
 
         <div class="blog-grid fade-in">
-            <a href="https://www.collabora.com/news-and-blog/blog/2024/05/28/transforming-speech-technology-with-whisperlive/" class="blog-card">
+            <a href="https://www.collabora.com/news-and-blog/blog/2024/05/28/transforming-speech-technology-with-aavaaz/" class="blog-card">
                 <span class="blog-tag">Blog Post</span>
-                <h3>Transforming Speech Technology with WhisperLive</h3>
-                <p>A deep dive into how WhisperLive enables real-time transcription at production scale.</p>
+                <h3>Transforming Speech Technology with Aavaaz</h3>
+                <p>A deep dive into how Aavaaz enables real-time transcription at production scale.</p>
                 <span class="arrow">Read more &rarr;</span>
             </a>
             <a href="https://www.collabora.com/news-and-blog/news-and-events/whisperfusion-ultra-low-latency-conversations-with-an-ai-chatbot.html" class="blog-card">
                 <span class="blog-tag">Case Study</span>
                 <h3>WhisperFusion: Ultra-Low Latency AI Conversations</h3>
-                <p>How WhisperLive powers WhisperFusion for ultra-low latency conversations with AI chatbots.</p>
+                <p>How Aavaaz powers WhisperFusion for ultra-low latency conversations with AI chatbots.</p>
                 <span class="arrow">Read more &rarr;</span>
             </a>
             <a href="https://www.collabora.com/news-and-blog/news-and-events/breaking-language-barriers-20-moving-closer-production-ready-hindi-asr.html" class="blog-card">
@@ -1547,12 +1547,12 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
 <section class="cta-section">
     <div class="cta-content">
         <h2>Ready to get started?</h2>
-        <p>WhisperLive is free, open source, and ready for production. Join 40+ contributors building the future of speech-to-text.</p>
+        <p>Aavaaz is free, open source, and ready for production. Join 40+ contributors building the future of speech-to-text.</p>
         <div class="cta-actions">
-            <a href="https://github.com/collabora/WhisperLive" class="btn btn-green">
+            <a href="https://github.com/collabora/Aavaaz" class="btn btn-green">
                 Get Started Free
             </a>
-            <a href="https://github.com/collabora/WhisperLive/issues" class="btn btn-outline">
+            <a href="https://github.com/collabora/Aavaaz/issues" class="btn btn-outline">
                 Report an Issue
             </a>
         </div>
@@ -1574,35 +1574,35 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
                     <rect x="20" y="4" width="3" rx="1.5" height="20" transform-origin="21.5 14"/>
                     <rect x="26" y="7" width="3" rx="1.5" height="14" transform-origin="27.5 14"/>
                 </svg>
-                WhisperLive
+                Aavaaz
             </a>
             <p>Community-driven open-source real-time speech transcription powered by OpenAI Whisper. Supported by Collabora and contributors worldwide.</p>
         </div>
         <div class="footer-col">
             <h4>Resources</h4>
-            <a href="https://github.com/collabora/WhisperLive">GitHub</a>
-            <a href="https://github.com/collabora/WhisperLive/blob/main/README.md">Documentation</a>
+            <a href="https://github.com/collabora/Aavaaz">GitHub</a>
+            <a href="https://github.com/collabora/Aavaaz/blob/main/README.md">Documentation</a>
             <a href="#enterprise">Scaling Guide</a>
             <a href="#deploy">Deployment Guide</a>
             <a href="#deploy">Edge Deployment</a>
         </div>
         <div class="footer-col">
             <h4>Community</h4>
-            <a href="https://github.com/collabora/WhisperLive/issues">Issues</a>
-            <a href="https://github.com/collabora/WhisperLive/pulls">Pull Requests</a>
+            <a href="https://github.com/collabora/Aavaaz/issues">Issues</a>
+            <a href="https://github.com/collabora/Aavaaz/pulls">Pull Requests</a>
             <a href="../html/index.html">API Docs</a>
         </div>
         <div class="footer-col">
             <h4>Company</h4>
             <a href="https://www.collabora.com">Collabora</a>
-            <a href="https://www.collabora.com/news-and-blog/blog/2024/05/28/transforming-speech-technology-with-whisperlive/">Blog</a>
+            <a href="https://www.collabora.com/news-and-blog/blog/2024/05/28/transforming-speech-technology-with-aavaaz/">Blog</a>
             <a href="mailto:vineet.suryan@collabora.com">Contact</a>
         </div>
     </div>
     <div class="footer-bottom">
         <p>&copy; 2024&ndash;2026 Collabora Ltd. Open source under the MIT License.</p>
         <div class="footer-social">
-            <a href="https://github.com/collabora/WhisperLive">GitHub</a>
+            <a href="https://github.com/collabora/Aavaaz">GitHub</a>
         </div>
     </div>
 </footer>

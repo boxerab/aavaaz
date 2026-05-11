@@ -1,6 +1,6 @@
-# Fine-Tuning Custom Whisper Models for WhisperLive
+# Fine-Tuning Custom Whisper Models for Aavaaz
 
-This guide explains how to fine-tune a Whisper model on your own domain-specific data and deploy it with WhisperLive. This is a **major open-source differentiator** — commercial APIs don't let you customize the underlying model.
+This guide explains how to fine-tune a Whisper model on your own domain-specific data and deploy it with Aavaaz. This is a **major open-source differentiator** — commercial APIs don't let you customize the underlying model.
 
 ## Why Fine-Tune?
 
@@ -96,7 +96,7 @@ python scripts/finetune_whisper.py \
   --quantization int8
 ```
 
-## Step 4: Deploy with WhisperLive
+## Step 4: Deploy with Aavaaz
 
 ```bash
 python run_server.py \

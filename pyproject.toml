@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "aavaaz"
 version = "0.1.0"
-description = "Production-grade speech-to-text platform built on WhisperLive"
+description = "Aavaaz — production-grade speech-to-text platform built on WhisperLive"
 readme = "README.md"
 license = "MPL-2.0"
 requires-python = ">=3.12"
