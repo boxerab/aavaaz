@@ -14,7 +14,7 @@ core transcription engine open-source.
 | **Intelligence** | Speaker diarization, sentiment analysis, topic detection, entity extraction, summarization |
 | **Post-processing** | Smart formatting, PII redaction, profanity filtering, noise reduction, utterance/paragraph segmentation |
 | **Platform** | Webhook delivery, transcript search & tagging, storage backends (local/S3), ACL/auth, GDPR compliance, Prometheus metrics |
-| **Deployment** | Docker, Helm charts, GPU auto-detection, model caching, SSE streaming |
+| **Deployment** | Docker, Helm charts, Terraform (AWS), GPU auto-detection, model caching, SSE streaming |
 
 ## Quick Start
 
@@ -197,6 +197,15 @@ helm install aavaaz deploy/helm/aavaaz \
   --set replicas=3 \
   --set gpu.enabled=true
 ```
+
+### AWS (Terraform)
+```bash
+cd deploy/terraform
+terraform init
+terraform apply -var="model=large-v3" -var="api_key=my-secret"
+```
+Provisions VPC, ALB, ECS with GPU instances (g5.xlarge), ECR, and CloudWatch.
+See [deploy/terraform/README.md](deploy/terraform/README.md) for full options.
 
 ## Development
 
