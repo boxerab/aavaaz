@@ -1,0 +1,6 @@
+apiVersion: v2
+name: aavaaz
+description: Aavaaz — production-grade speech-to-text platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -7,11 +7,10 @@ plugin pipeline without modifying WhisperLive core code.
 """
 
 import logging
-from typing import Optional
 
 from whisper_live.server import TranscriptionServer
-from aavaaz.features.plugins import PluginRegistry
 
+from aavaaz.features.plugins import PluginRegistry
 from aavaaz.plugins import registry as default_registry
 
 logger = logging.getLogger(__name__)
@@ -29,13 +28,17 @@ class AavaazServer:
         *,
         enable_rest_api: bool = True,
         rest_port: int = 8000,
-        plugin_registry: Optional[PluginRegistry] = None,
-        api_key: Optional[str] = None,
+        plugin_registry: PluginRegistry | None = None,
+        api_key: str | None = None,
         rate_limit_rpm: int = 0,
         metrics_port: int = 0,
         batch_inference: bool = False,
         batch_max_size: int = 8,
         batch_window_ms: int = 50,
+        word_timestamps: bool = False,
+        hotwords: str | None = None,
+        enable_diarization: bool = False,
+        max_speakers: int = 10,
     ):
         self.host = host
         self.port = port
@@ -50,6 +53,10 @@ class AavaazServer:
         self.batch_inference = batch_inference
         self.batch_max_size = batch_max_size
         self.batch_window_ms = batch_window_ms
+        self.word_timestamps = word_timestamps
+        self.hotwords = hotwords
+        self.enable_diarization = enable_diarization
+        self.max_speakers = max_speakers
 
     def run(self):
         """Start the Aavaaz server (WhisperLive + plugins + REST API)."""
@@ -57,7 +64,10 @@ class AavaazServer:
 
         logger.info(
             "Starting Aavaaz server on %s:%d (backend=%s, model=%s)",
-            self.host, self.port, self.backend, self.model,
+            self.host,
+            self.port,
+            self.backend,
+            self.model,
         )
 
         plugins = self.plugin_registry.list_plugins()
@@ -80,4 +90,8 @@ class AavaazServer:
             api_key=self.api_key,
             rate_limit_rpm=self.rate_limit_rpm,
             metrics_port=self.metrics_port,
+            word_timestamps=self.word_timestamps,
+            hotwords=self.hotwords,
+            enable_diarization=self.enable_diarization,
+            max_speakers=self.max_speakers,
         )

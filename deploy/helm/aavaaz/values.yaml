@@ -1,0 +1,37 @@
+replicaCount: 1
+
+image:
+  repository: collabora/aavaaz
+  tag: latest
+  pullPolicy: IfNotPresent
+
+model: large-v3
+apiKey: ""
+metricsPort: 0
+batchInference: false
+
+gpu:
+  enabled: true
+  count: 1
+
+service:
+  type: ClusterIP
+  restPort: 8000
+  wsPort: 9090
+
+ingress:
+  enabled: false
+  className: ""
+  hosts:
+    - host: aavaaz.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+resources:
+  requests:
+    memory: "8Gi"
+    cpu: "2"
+  limits:
+    memory: "16Gi"
+    nvidia.com/gpu: "1"

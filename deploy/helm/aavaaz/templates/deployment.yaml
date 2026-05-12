@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: aavaaz
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "--model"
+            - "{{ .Values.model }}"
+            {{- if .Values.apiKey }}
+            - "--api-key"
+            - "{{ .Values.apiKey }}"
+            {{- end }}
+            {{- if .Values.batchInference }}
+            - "--batch-inference"
+            {{- end }}
+            {{- if gt (int .Values.metricsPort) 0 }}
+            - "--metrics-port"
+            - "{{ .Values.metricsPort }}"
+            {{- end }}
+          ports:
+            - name: rest
+              containerPort: 8000
+              protocol: TCP
+            - name: websocket
+              containerPort: 9090
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
