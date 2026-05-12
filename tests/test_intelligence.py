@@ -26,7 +26,10 @@ def test_sentiment_neutral():
 
 
 def test_detect_topics():
-    text = "The artificial intelligence model uses deep learning neural networks for natural language processing."
+    text = (
+        "The artificial intelligence model uses deep learning"
+        " neural networks for natural language processing."
+    )
     topics = detect_topics(text)
     assert isinstance(topics, list)
     assert len(topics) > 0
