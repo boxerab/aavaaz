@@ -140,13 +140,6 @@ Batch multiple client sessions into single GPU calls for higher throughput:
 aavaaz serve --model large-v3 --batch_inference --batch_max_size 8 --batch_window_ms 50
 ```
 
-### Raw PCM Input
-Accept raw PCM int16 audio from clients (useful for embedded devices):
-```bash
-aavaaz serve --model large-v3 --raw_pcm_input
-```
-Audio is automatically normalized to float32 range [-1.0, 1.0].
-
 ### Prometheus Metrics
 Monitor server health with a Prometheus `/metrics` endpoint:
 ```bash
