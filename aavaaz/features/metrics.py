@@ -6,7 +6,6 @@ All metrics are optional — the server works fine without prometheus_client ins
 """
 
 import logging
-import threading
 
 try:
     from prometheus_client import (

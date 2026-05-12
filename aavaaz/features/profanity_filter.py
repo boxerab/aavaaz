@@ -7,7 +7,6 @@ modes.
 """
 
 import re
-from typing import Optional, Set
 
 # Common English profanity word list (kept minimal and non-exhaustive)
 _DEFAULT_PROFANITY = {
@@ -17,7 +16,7 @@ _DEFAULT_PROFANITY = {
 }
 
 
-def _build_pattern(words: Set[str]) -> re.Pattern:
+def _build_pattern(words: set[str]) -> re.Pattern:
     """Build a compiled regex that matches any of the given words (case-insensitive)."""
     escaped = sorted((re.escape(w) for w in words), key=len, reverse=True)
     return re.compile(r'\b(' + '|'.join(escaped) + r')\b', re.IGNORECASE)
@@ -46,8 +45,8 @@ def filter_profanity(
     text: str,
     mode: str = "partial",
     mask_char: str = "*",
-    custom_words: Optional[Set[str]] = None,
-    extra_words: Optional[Set[str]] = None,
+    custom_words: set[str] | None = None,
+    extra_words: set[str] | None = None,
 ) -> str:
     """Filter profanity from text by masking offensive words.
 
@@ -82,6 +81,6 @@ def filter_profanity(
     return pattern.sub(_replacer, text)
 
 
-def get_default_profanity_words() -> Set[str]:
+def get_default_profanity_words() -> set[str]:
     """Return a copy of the default profanity word set."""
     return set(_DEFAULT_PROFANITY)

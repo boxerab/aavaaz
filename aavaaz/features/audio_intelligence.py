@@ -11,11 +11,10 @@ These are designed as a fast baseline. For production NLP, integrate
 spaCy, transformers, or a dedicated NLP API.
 """
 
-import re
 import math
+import re
 from collections import Counter
-from typing import Dict, List, Optional, Any
-
+from typing import Any
 
 # --- Sentiment Analysis ---
 
@@ -36,7 +35,7 @@ _NEGATIVE_WORDS = {
 }
 
 
-def analyze_sentiment(text: str) -> Dict[str, Any]:
+def analyze_sentiment(text: str) -> dict[str, Any]:
     """Analyze sentiment of text using keyword scoring.
 
     Returns:
@@ -89,7 +88,7 @@ _STOP_WORDS = {
 }
 
 
-def detect_topics(text: str, top_n: int = 5, min_word_length: int = 4) -> List[Dict[str, Any]]:
+def detect_topics(text: str, top_n: int = 5, min_word_length: int = 4) -> list[dict[str, Any]]:
     """Detect topics by word frequency analysis.
 
     Args:
@@ -134,7 +133,7 @@ _ENTITY_PATTERNS = {
 }
 
 
-def extract_entities(text: str) -> Dict[str, List[str]]:
+def extract_entities(text: str) -> dict[str, list[str]]:
     """Extract named entities from text using regex patterns.
 
     Returns:
@@ -195,7 +194,7 @@ def summarize(text: str, num_sentences: int = 3) -> str:
 
 # --- Auto-Highlights (Key Phrases) ---
 
-def extract_highlights(text: str, max_highlights: int = 10, min_phrase_length: int = 2) -> List[Dict[str, Any]]:
+def extract_highlights(text: str, max_highlights: int = 10, min_phrase_length: int = 2) -> list[dict[str, Any]]:
     """Extract key phrases / highlights from a transcript.
 
     Uses TF-based scoring on multi-word phrases (bigrams and trigrams)
@@ -253,10 +252,10 @@ def extract_highlights(text: str, max_highlights: int = 10, min_phrase_length: i
 # --- Auto-Chapters ---
 
 def generate_chapters(
-    segments: List[Dict[str, Any]],
+    segments: list[dict[str, Any]],
     max_chapter_duration: float = 300.0,
     min_chapter_duration: float = 30.0,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Generate auto-chapters from transcription segments.
 
     Groups segments into chapters based on time gaps and topic shifts.
@@ -301,7 +300,7 @@ def generate_chapters(
     return chapters
 
 
-def _build_chapter(segments: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _build_chapter(segments: list[dict[str, Any]]) -> dict[str, Any]:
     """Build a chapter from a group of segments."""
     text = " ".join(s.get("text", "").strip() for s in segments)
     # Generate title from top keywords
@@ -389,7 +388,7 @@ def remove_filler_words(text: str, aggressive: bool = False) -> str:
 
 # --- Custom Spelling Hints ---
 
-def apply_spelling_hints(text: str, hints: Dict[str, str]) -> str:
+def apply_spelling_hints(text: str, hints: dict[str, str]) -> str:
     """Apply custom spelling corrections to transcript text.
 
     Unlike find & replace, this is specifically for correcting ASR
@@ -425,7 +424,7 @@ def analyze_transcript(
     summary_sentences: int = 3,
     topic_count: int = 5,
     max_highlights: int = 10,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run the full audio intelligence pipeline on a transcript.
 
     Args:
@@ -442,7 +441,7 @@ def analyze_transcript(
     Returns:
         Dict with results for each enabled analysis type.
     """
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
 
     if sentiment:
         result["sentiment"] = analyze_sentiment(text)

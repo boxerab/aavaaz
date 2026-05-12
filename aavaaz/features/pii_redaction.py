@@ -12,8 +12,6 @@ All redaction is applied as a post-processing step on transcription text.
 """
 
 import re
-from typing import List, Optional, Set
-
 
 # Redaction placeholder per PII type
 _REDACTION_MAP = {
@@ -51,8 +49,8 @@ _APPLICATION_ORDER = ["credit_card", "ssn", "ip_address", "email", "phone"]
 
 def redact_pii(
     text: str,
-    pii_types: Optional[Set[str]] = None,
-    custom_patterns: Optional[dict] = None,
+    pii_types: set[str] | None = None,
+    custom_patterns: dict | None = None,
 ) -> str:
     """Redact PII from text using regex patterns.
 
@@ -82,6 +80,6 @@ def redact_pii(
     return text
 
 
-def get_supported_pii_types() -> List[str]:
+def get_supported_pii_types() -> list[str]:
     """Return list of supported PII type names."""
     return sorted(ALL_PII_TYPES)

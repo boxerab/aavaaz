@@ -6,11 +6,11 @@ and provides helpers for merging per-channel transcription results.
 """
 
 import logging
+
 import numpy as np
-from typing import List, Optional, Tuple
 
 
-def split_channels(audio_np: np.ndarray, channels: int = 2) -> List[np.ndarray]:
+def split_channels(audio_np: np.ndarray, channels: int = 2) -> list[np.ndarray]:
     """Split interleaved multi-channel audio into a list of mono arrays.
 
     Args:
@@ -32,9 +32,9 @@ def split_channels(audio_np: np.ndarray, channels: int = 2) -> List[np.ndarray]:
 
 
 def merge_channel_segments(
-    channel_segments: List[List[dict]],
-    channel_labels: Optional[List[str]] = None,
-) -> List[dict]:
+    channel_segments: list[list[dict]],
+    channel_labels: list[str] | None = None,
+) -> list[dict]:
     """Merge per-channel segment lists into a single timeline sorted by start time.
 
     Each segment gets a 'channel' field added.

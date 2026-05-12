@@ -9,6 +9,7 @@ Install: pip install pyannote.audio
 """
 
 import logging
+
 import numpy as np
 
 
@@ -52,8 +53,8 @@ class SpeakerDiarizer:
         if self._model is not None:
             return
         try:
-            from pyannote.audio import Model, Inference
             import torch
+            from pyannote.audio import Inference, Model
 
             model = Model.from_pretrained(
                 self._embedding_model_name,

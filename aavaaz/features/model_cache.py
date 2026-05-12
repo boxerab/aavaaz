@@ -8,7 +8,6 @@ per-request model selection without re-loading on every call.
 import logging
 import threading
 from collections import OrderedDict
-from typing import Optional
 
 
 class ModelCache:
@@ -27,7 +26,7 @@ class ModelCache:
         self._cache: OrderedDict = OrderedDict()
         self._lock = threading.Lock()
 
-    def get(self, model_name: Optional[str] = None, device: str = "cpu",
+    def get(self, model_name: str | None = None, device: str = "cpu",
             compute_type: str = "int8"):
         """Get or load a WhisperModel, returning it from cache if available.
 

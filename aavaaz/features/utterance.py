@@ -11,7 +11,6 @@ longer pauses, topic shifts, or speaker changes.
 
 import re
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 
 @dataclass
@@ -20,7 +19,7 @@ class Utterance:
     text: str
     start: float  # seconds
     end: float  # seconds
-    speaker: Optional[str] = None
+    speaker: str | None = None
     is_final: bool = True  # False if still being built
 
     @property
@@ -38,8 +37,8 @@ class Utterance:
 @dataclass
 class Paragraph:
     """A paragraph is a group of related utterances."""
-    utterances: List[Utterance] = field(default_factory=list)
-    speaker: Optional[str] = None
+    utterances: list[Utterance] = field(default_factory=list)
+    speaker: str | None = None
 
     @property
     def text(self) -> str:
@@ -112,8 +111,8 @@ class UtteranceDetector:
         text: str,
         start: float,
         end: float,
-        speaker: Optional[str] = None,
-    ) -> List[Utterance]:
+        speaker: str | None = None,
+    ) -> list[Utterance]:
         """Process a transcription segment and return any completed utterances.
 
         Args:
@@ -180,7 +179,7 @@ class UtteranceDetector:
 
         return completed
 
-    def flush(self) -> Optional[Utterance]:
+    def flush(self) -> Utterance | None:
         """Flush any remaining buffered text as a final utterance."""
         if self._buffer_text:
             utterance = Utterance(
@@ -223,7 +222,7 @@ class ParagraphSegmenter:
         self.max_sentences = max_sentences_per_paragraph
         self.split_on_speaker = split_on_speaker_change
 
-    def segment(self, utterances: List[Utterance]) -> List[Paragraph]:
+    def segment(self, utterances: list[Utterance]) -> list[Paragraph]:
         """Segment a list of utterances into paragraphs.
 
         Args:
@@ -275,10 +274,10 @@ class ParagraphSegmenter:
 
 
 def detect_utterances_from_segments(
-    segments: List[dict],
+    segments: list[dict],
     min_pause: float = 0.7,
     max_duration: float = 30.0,
-) -> List[Utterance]:
+) -> list[Utterance]:
     """Convenience function: convert a list of segment dicts to utterances.
 
     Each segment dict should have 'text', 'start', 'end', and optionally 'speaker'.
@@ -303,10 +302,10 @@ def detect_utterances_from_segments(
 
 
 def segment_into_paragraphs(
-    segments: List[dict],
+    segments: list[dict],
     paragraph_pause: float = 2.0,
     max_sentences: int = 8,
-) -> List[dict]:
+) -> list[dict]:
     """Convenience function: segments → utterances → paragraphs as dicts.
 
     Returns list of paragraph dicts with 'text', 'start', 'end', 'sentences'.

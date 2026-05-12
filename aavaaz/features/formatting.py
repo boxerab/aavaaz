@@ -10,7 +10,6 @@ Applies optional formatting rules:
 """
 
 import re
-from typing import List, Tuple, Optional
 
 # Spoken-number word values
 _ONES = {
@@ -264,7 +263,7 @@ def smart_format(text):
 
 def find_and_replace(
     text: str,
-    replacements: List[Tuple[str, str]],
+    replacements: list[tuple[str, str]],
     use_regex: bool = False,
     case_sensitive: bool = False,
 ) -> str:

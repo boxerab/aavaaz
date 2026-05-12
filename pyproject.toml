@@ -25,7 +25,6 @@ classifiers = [
 ]
 
 dependencies = [
-    "whisper-live>=0.8.0",
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "python-multipart",
@@ -35,6 +34,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+whisper = [
+    "whisper-live>=0.8.0",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio",
@@ -59,6 +61,8 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+ignore = ["B008", "B904", "SIM108", "B007", "SIM102", "SIM118", "UP042"]
+per-file-ignores = {"aavaaz/features/*" = ["E501", "F841"]}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

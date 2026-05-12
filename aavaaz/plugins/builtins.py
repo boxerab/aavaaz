@@ -7,6 +7,7 @@ activates when the corresponding feature is enabled in the client config.
 """
 
 import logging
+
 from aavaaz.features.plugins import PluginRegistry
 
 logger = logging.getLogger(__name__)

@@ -6,13 +6,11 @@ Audio files and transcription results can be persisted for auditing,
 data retention, and GDPR compliance.
 """
 
-import os
 import json
-import time
 import logging
+import os
 import tempfile
-import shutil
-from typing import Optional
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +18,7 @@ logger = logging.getLogger(__name__)
 class LocalStorage:
     """Store files on the local filesystem (default for dev/testing)."""
 
-    def __init__(self, base_dir: Optional[str] = None):
+    def __init__(self, base_dir: str | None = None):
         self.base_dir = base_dir or tempfile.mkdtemp(prefix="whisperlive-")
         os.makedirs(self.base_dir, exist_ok=True)
 
@@ -36,7 +34,7 @@ class LocalStorage:
             json.dump(result, f)
         return path
 
-    def get_result(self, job_id: str) -> Optional[dict]:
+    def get_result(self, job_id: str) -> dict | None:
         path = os.path.join(self.base_dir, f"{job_id}.json")
         if not os.path.exists(path):
             return None
@@ -74,7 +72,7 @@ class LocalStorage:
 class S3Storage:
     """Store files in AWS S3 for production deployments."""
 
-    def __init__(self, bucket: str, prefix: str = "whisperlive/", region: Optional[str] = None):
+    def __init__(self, bucket: str, prefix: str = "whisperlive/", region: str | None = None):
         try:
             import boto3
         except ImportError:
@@ -90,7 +88,6 @@ class S3Storage:
             kwargs["endpoint_url"] = endpoint_url
             # For MinIO with self-signed certs, disable SSL verification
             if endpoint_url.startswith("https://") and os.environ.get("PYTHONHTTPSVERIFY") == "0":
-                import botocore
                 kwargs["verify"] = False
                 # Suppress InsecureRequestWarning for self-signed certs
                 import urllib3
@@ -117,7 +114,7 @@ class S3Storage:
         )
         return f"s3://{self.bucket}/{key}"
 
-    def get_result(self, job_id: str) -> Optional[dict]:
+    def get_result(self, job_id: str) -> dict | None:
         key = self._key(f"results/{job_id}.json")
         try:
             resp = self._s3.get_object(Bucket=self.bucket, Key=key)

@@ -2,12 +2,9 @@
 JWT-based authentication and API key access control for Aavaaz REST API.
 """
 
-import hashlib
-import hmac
 import logging
 import os
 import time
-from typing import Optional
 
 import jwt
 from fastapi import HTTPException, Request, Security
@@ -23,7 +20,7 @@ _JWT_ALGORITHM = "HS256"
 _API_KEYS: set[str] = set()
 
 
-def configure_auth(jwt_secret: str, api_keys: Optional[list[str]] = None):
+def configure_auth(jwt_secret: str, api_keys: list[str] | None = None):
     """Configure authentication settings."""
     global _JWT_SECRET, _API_KEYS
     _JWT_SECRET = jwt_secret
@@ -53,7 +50,7 @@ def verify_token(token: str) -> dict:
 
 async def require_auth(
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Security(_security),
+    credentials: HTTPAuthorizationCredentials | None = Security(_security),
 ) -> dict:
     """FastAPI dependency that requires valid authentication.
 

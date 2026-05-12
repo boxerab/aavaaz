@@ -8,16 +8,16 @@ with configurable backoff and max attempts.
 import json
 import logging
 import time
-import urllib.request
 import urllib.error
-from typing import Any, Dict, Optional
+import urllib.request
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 def send_webhook(
     url: str,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     max_retries: int = 3,
     initial_delay: float = 1.0,
     backoff_factor: float = 2.0,

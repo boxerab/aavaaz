@@ -7,16 +7,15 @@ local filesystem and S3-compatible storage.
 
 import json
 import logging
-import os
 from pathlib import Path
-from typing import Optional, Protocol
+from typing import Protocol
 
 logger = logging.getLogger(__name__)
 
 
 class StorageBackend(Protocol):
     def save(self, transcript_id: str, data: dict) -> str: ...
-    def load(self, transcript_id: str) -> Optional[dict]: ...
+    def load(self, transcript_id: str) -> dict | None: ...
     def delete(self, transcript_id: str) -> bool: ...
     def list_ids(self) -> list[str]: ...
 
@@ -37,7 +36,7 @@ class LocalStorage:
         path.write_text(json.dumps(data, indent=2))
         return str(path)
 
-    def load(self, transcript_id: str) -> Optional[dict]:
+    def load(self, transcript_id: str) -> dict | None:
         path = self._path(transcript_id)
         if not path.exists():
             return None
@@ -61,7 +60,7 @@ class S3Storage:
         self,
         bucket: str,
         prefix: str = "transcripts/",
-        endpoint_url: Optional[str] = None,
+        endpoint_url: str | None = None,
     ):
         import boto3
 
@@ -84,7 +83,7 @@ class S3Storage:
         )
         return f"s3://{self.bucket}/{key}"
 
-    def load(self, transcript_id: str) -> Optional[dict]:
+    def load(self, transcript_id: str) -> dict | None:
         key = self._key(transcript_id)
         try:
             resp = self.s3.get_object(Bucket=self.bucket, Key=key)

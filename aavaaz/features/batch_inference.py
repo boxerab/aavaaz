@@ -28,10 +28,9 @@ import threading
 import time
 from dataclasses import dataclass, field
 from math import ceil
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
-
 from faster_whisper.audio import pad_or_trim
 from faster_whisper.tokenizer import Tokenizer
 from faster_whisper.vad import (
@@ -39,7 +38,6 @@ from faster_whisper.vad import (
     collect_chunks,
     get_speech_timestamps,
 )
-
 from whisper_live.transcriber.transcriber_faster_whisper import (
     Segment,
     TranscriptionInfo,
@@ -69,17 +67,17 @@ class BatchRequest:
         error: Exception instance if processing failed.
     """
     audio: np.ndarray
-    language: Optional[str] = None
+    language: str | None = None
     task: str = "transcribe"
-    initial_prompt: Optional[str] = None
+    initial_prompt: str | None = None
     use_vad: bool = True
-    vad_parameters: Optional[Dict] = None
+    vad_parameters: dict | None = None
     # Signaling
     future: threading.Event = field(default_factory=threading.Event)
     # Results (filled by batch worker)
-    result: Optional[Any] = None
-    info: Optional[Any] = None
-    error: Optional[Exception] = None
+    result: Any | None = None
+    info: Any | None = None
+    error: Exception | None = None
 
 
 class BatchInferenceWorker:
@@ -119,7 +117,7 @@ class BatchInferenceWorker:
         self.batch_window_ms = batch_window_ms
         self._queue: queue.Queue = queue.Queue()
         self._stop_event = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
 
     def start(self):
         """Start the background batch worker thread."""
@@ -153,7 +151,7 @@ class BatchInferenceWorker:
     def _worker_loop(self):
         """Main loop: collect requests into batches and process them."""
         while not self._stop_event.is_set():
-            batch: List[BatchRequest] = []
+            batch: list[BatchRequest] = []
 
             # Block until first request arrives
             try:
@@ -188,7 +186,7 @@ class BatchInferenceWorker:
     # Batch processing
     # -------------------------------------------------------------------------
 
-    def _process_batch(self, batch: List[BatchRequest]):
+    def _process_batch(self, batch: list[BatchRequest]):
         """Dispatch to single or multi-item processing."""
         if len(batch) == 1:
             self._process_single(batch[0])
@@ -220,7 +218,7 @@ class BatchInferenceWorker:
         finally:
             req.future.set()
 
-    def _process_multi(self, batch: List[BatchRequest]):
+    def _process_multi(self, batch: list[BatchRequest]):
         """Batched GPU path: encode + generate for multiple sessions at once.
 
         Pipeline:

@@ -9,16 +9,14 @@ Supports:
 """
 
 import hashlib
-import hmac
 import json
 import logging
 import os
 import secrets
 import threading
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Optional, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -78,9 +76,9 @@ class UserStore:
     def __init__(self, path: str = "users.json"):
         self._path = path
         self._lock = threading.Lock()
-        self._users: Dict[str, User] = {}
-        self._key_index: Dict[str, str] = {}  # key_hash -> user_id
-        self._rate_buckets: Dict[str, list] = {}  # user_id -> list of timestamps
+        self._users: dict[str, User] = {}
+        self._key_index: dict[str, str] = {}  # key_hash -> user_id
+        self._rate_buckets: dict[str, list] = {}  # user_id -> list of timestamps
         self._load()
 
     def _load(self):
@@ -129,7 +127,7 @@ class UserStore:
         logger.info(f"Created user '{name}' ({user_id}) with role {role.value}")
         return user, api_key
 
-    def authenticate(self, api_key: str) -> Optional[User]:
+    def authenticate(self, api_key: str) -> User | None:
         """Authenticate by API key. Returns User or None."""
         key_hash = _hash_key(api_key)
         with self._lock:
@@ -142,15 +140,15 @@ class UserStore:
                 return user
             return None
 
-    def get_user(self, user_id: str) -> Optional[User]:
+    def get_user(self, user_id: str) -> User | None:
         with self._lock:
             return self._users.get(user_id)
 
-    def list_users(self) -> List[dict]:
+    def list_users(self) -> list[dict]:
         with self._lock:
             return [u.to_dict() for u in self._users.values()]
 
-    def update_user(self, user_id: str, **kwargs) -> Optional[User]:
+    def update_user(self, user_id: str, **kwargs) -> User | None:
         with self._lock:
             user = self._users.get(user_id)
             if not user:
@@ -172,7 +170,7 @@ class UserStore:
                 return True
             return False
 
-    def rotate_key(self, user_id: str) -> Optional[str]:
+    def rotate_key(self, user_id: str) -> str | None:
         """Generate a new API key for a user. Returns the new key."""
         with self._lock:
             user = self._users.get(user_id)
@@ -236,10 +234,10 @@ class JWTValidator:
     For RS256, provide the JWKS URL; for HS256, provide the secret.
     """
 
-    def __init__(self, jwks_url: Optional[str] = None,
-                 secret: Optional[str] = None,
-                 audience: Optional[str] = None,
-                 issuer: Optional[str] = None):
+    def __init__(self, jwks_url: str | None = None,
+                 secret: str | None = None,
+                 audience: str | None = None,
+                 issuer: str | None = None):
         self._jwks_url = jwks_url
         self._secret = secret
         self._audience = audience
@@ -247,7 +245,7 @@ class JWTValidator:
         self._jwks_cache = None
         self._jwks_cache_time = 0
 
-    def validate(self, token: str) -> Optional[dict]:
+    def validate(self, token: str) -> dict | None:
         """Validate a JWT token. Returns claims dict or None.
 
         Requires PyJWT: pip install PyJWT[crypto]

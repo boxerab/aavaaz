@@ -23,7 +23,7 @@ Usage:
 """
 
 import logging
-from typing import Callable, Dict, List, Optional
+from collections.abc import Callable
 
 
 class PluginEntry:
@@ -46,7 +46,7 @@ class PluginRegistry:
     """
 
     def __init__(self):
-        self._plugins: Dict[str, PluginEntry] = {}
+        self._plugins: dict[str, PluginEntry] = {}
 
     def add(self, name: str, fn: Callable, priority: int = 50, enabled: bool = True):
         """Register a plugin.
@@ -90,7 +90,7 @@ class PluginRegistry:
         if name in self._plugins:
             self._plugins[name].enabled = False
 
-    def list_plugins(self) -> List[dict]:
+    def list_plugins(self) -> list[dict]:
         """Return list of registered plugins with their metadata."""
         return [
             {"name": p.name, "priority": p.priority, "enabled": p.enabled}

@@ -1,8 +1,8 @@
 """Tests for webhook delivery."""
 
 import json
-from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from aavaaz.api.webhooks import deliver_webhook
 

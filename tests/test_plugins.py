@@ -1,7 +1,11 @@
 """Tests for the plugin registry and built-in plugins."""
 
 from aavaaz.features.plugins import PluginRegistry
-from aavaaz.plugins.builtins import _make_pii_plugin, _make_profanity_plugin, _make_formatting_plugin
+from aavaaz.plugins.builtins import (
+    _make_formatting_plugin,
+    _make_pii_plugin,
+    _make_profanity_plugin,
+)
 
 
 def test_pii_plugin_redacts_email():

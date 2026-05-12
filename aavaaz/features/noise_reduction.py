@@ -8,9 +8,8 @@ step on incoming audio frames.
 Install: pip install noisereduce
 """
 
-import logging
+
 import numpy as np
-from typing import Optional
 
 try:
     import noisereduce as nr
@@ -36,7 +35,7 @@ class NoiseReducer:
         mode: str = "near_field",
         sample_rate: int = 16000,
         prop_decrease: float = 0.8,
-        stationary: Optional[bool] = None,
+        stationary: bool | None = None,
     ):
         if not _HAS_NOISEREDUCE:
             raise ImportError(

@@ -10,9 +10,8 @@ import hmac
 import json
 import logging
 import time
-from typing import Optional
-from urllib.request import Request, urlopen
 from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +23,7 @@ def deliver_webhook(
     url: str,
     event: str,
     payload: dict,
-    secret: Optional[str] = None,
+    secret: str | None = None,
     timeout: int = 10,
 ) -> bool:
     """Deliver a webhook with retry and optional HMAC signing.

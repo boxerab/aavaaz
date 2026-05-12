@@ -4,10 +4,10 @@ Full-text search over stored transcripts.
 Wraps WhisperLive's search module and provides REST API endpoints.
 """
 
-import re
 import logging
-from typing import Optional
-from fastapi import APIRouter, Query
+import re
+
+from fastapi import APIRouter
 
 logger = logging.getLogger(__name__)
 

@@ -10,10 +10,9 @@ transcribed and multiple listeners receive translations in their
 preferred languages simultaneously.
 """
 
-import json
 import logging
 import threading
-from typing import Dict, List, Optional, Set
+from typing import Optional
 
 
 class TranslationRelay:
@@ -25,7 +24,7 @@ class TranslationRelay:
     """
 
     def __init__(self):
-        self._channels: Dict[str, RelayChannel] = {}
+        self._channels: dict[str, RelayChannel] = {}
         self._lock = threading.Lock()
 
     def create_channel(self, channel_id: str, source_language: str = "en"):
@@ -56,7 +55,7 @@ class TranslationRelay:
         with self._lock:
             return self._channels.get(channel_id)
 
-    def list_channels(self) -> List[dict]:
+    def list_channels(self) -> list[dict]:
         """Return list of active channels with subscriber counts."""
         with self._lock:
             return [ch.info() for ch in self._channels.values()]
@@ -111,7 +110,7 @@ class Subscriber:
         self.subscriber_id = subscriber_id
         self.target_language = target_language
         self.callback = callback
-        self.queue: List[dict] = []
+        self.queue: list[dict] = []
 
     def deliver(self, segment: dict):
         """Deliver a segment to this subscriber."""
@@ -123,7 +122,7 @@ class Subscriber:
         else:
             self.queue.append(segment)
 
-    def drain(self) -> List[dict]:
+    def drain(self) -> list[dict]:
         """Return and clear queued segments."""
         items = list(self.queue)
         self.queue.clear()
@@ -143,7 +142,7 @@ class RelayChannel:
         self.channel_id = channel_id
         self.source_language = source_language
         self.translator = translator
-        self._subscribers: Dict[str, Subscriber] = {}
+        self._subscribers: dict[str, Subscriber] = {}
         self._lock = threading.Lock()
 
     def add_subscriber(self, subscriber_id: str, target_language: str,
