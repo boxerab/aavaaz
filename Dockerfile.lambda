@@ -1,0 +1,16 @@
+FROM public.ecr.aws/lambda/python:3.12
+
+# ffmpeg for audio format conversion
+RUN dnf install -y ffmpeg-free && dnf clean all
+
+COPY pyproject.toml README.md LICENSE ./
+COPY aavaaz/ aavaaz/
+
+RUN pip install --no-cache-dir . faster-whisper
+
+# Pre-download the default model during build to avoid cold-start download.
+# Override AAVAAZ_MODEL at runtime to use a different model.
+ARG WHISPER_MODEL=small.en
+RUN python3 -c "from faster_whisper import WhisperModel; WhisperModel('${WHISPER_MODEL}', device='cpu', compute_type='int8')"
+
+CMD ["aavaaz.serverless.lambda_handler.handler"]

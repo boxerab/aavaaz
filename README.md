@@ -14,7 +14,7 @@ core transcription engine open-source.
 | **Intelligence** | Speaker diarization, sentiment analysis, topic detection, entity extraction, summarization |
 | **Post-processing** | Smart formatting, PII redaction, profanity filtering, noise reduction, utterance/paragraph segmentation |
 | **Platform** | Webhook delivery, transcript search & tagging, storage backends (local/S3), ACL/auth, GDPR compliance, Prometheus metrics |
-| **Deployment** | Docker, Helm charts, Terraform (AWS), GPU auto-detection, model caching, SSE streaming |
+| **Deployment** | Docker, Helm charts, Terraform (AWS), **serverless (Lambda)**, GPU auto-detection, model caching, SSE streaming |
 
 ## Quick Start
 
@@ -206,6 +206,31 @@ terraform apply -var="model=large-v3" -var="api_key=my-secret"
 ```
 Provisions VPC, ALB, ECS with GPU instances (g5.xlarge), ECR, and CloudWatch.
 See [deploy/terraform/README.md](deploy/terraform/README.md) for full options.
+
+### AWS Lambda (Serverless)
+
+For batch file transcription without managing servers:
+
+```bash
+# Build and push the Lambda container image
+docker build -f Dockerfile.lambda --build-arg WHISPER_MODEL=small.en -t aavaaz-lambda .
+
+# Deploy infrastructure
+cd deploy/terraform-lambda
+terraform init
+terraform apply
+
+# Upload audio — transcript appears automatically in the output bucket
+aws s3 cp recording.wav s3://$(terraform output -raw audio_input_bucket)/
+
+# Or use the REST API
+curl -X POST $(terraform output -raw api_endpoint) \
+  -H "Content-Type: application/json" \
+  -d '{"audio_url": "s3://my-bucket/recording.wav"}'
+```
+
+See [docs/SERVERLESS.md](docs/SERVERLESS.md) for full configuration, model
+selection, cost estimates, and limitations.
 
 ## Development
 
