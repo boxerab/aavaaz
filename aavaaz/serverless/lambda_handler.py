@@ -218,7 +218,10 @@ def _handle_api(event: dict, context: Any) -> dict:
         if "audio_url" in payload:
             url = payload["audio_url"]
             if not url.startswith("s3://"):
-                return {"statusCode": 400, "body": json.dumps({"error": "Only s3:// URLs supported"})}
+                return {
+                    "statusCode": 400,
+                    "body": json.dumps({"error": "Only s3:// URLs supported"}),
+                }
             parts = url[5:].split("/", 1)
             if len(parts) != 2:
                 return {"statusCode": 400, "body": json.dumps({"error": "Invalid S3 URL"})}
@@ -242,7 +245,8 @@ def _handle_api(event: dict, context: Any) -> dict:
         result = _transcribe(local_path)
 
     output = _format_output(result)
-    content_type = "application/json" if os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json") == "json" else "text/plain"
+    fmt = os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json")
+    content_type = "application/json" if fmt == "json" else "text/plain"
 
     return {
         "statusCode": 200,
