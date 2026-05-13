@@ -30,7 +30,6 @@ from typing import Any
 from urllib.parse import unquote_plus
 
 import boto3
-from faster_whisper import WhisperModel
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -38,13 +37,15 @@ logger.setLevel(logging.INFO)
 # ---------------------------------------------------------------------------
 # Global model cache — survives across warm Lambda invocations.
 # ---------------------------------------------------------------------------
-_model: WhisperModel | None = None
+_model: Any = None
 
 
-def _get_model() -> WhisperModel:
+def _get_model() -> Any:
     """Return a cached WhisperModel, loading on first call."""
     global _model
     if _model is None:
+        from faster_whisper import WhisperModel
+
         name = os.environ.get("AAVAAZ_MODEL", "small.en")
         logger.info("Loading Whisper model %s", name)
         _model = WhisperModel(name, device="cpu", compute_type="int8")

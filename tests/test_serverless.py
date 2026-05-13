@@ -3,9 +3,14 @@
 import base64
 import json
 import os
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+# Mock heavy dependencies that aren't available in CI
+_mock_fw = MagicMock()
+sys.modules.setdefault("faster_whisper", _mock_fw)
 
 
 @pytest.fixture(autouse=True)
@@ -48,7 +53,7 @@ def _fake_info():
 # -- Tests ---------------------------------------------------------------------
 
 
-@patch("aavaaz.serverless.lambda_handler.WhisperModel")
+@patch("faster_whisper.WhisperModel")
 def test_handler_dispatches_s3(mock_whisper, _env, tmp_path):
     """S3 events should be routed to the S3 handler."""
     model = MagicMock()
@@ -85,7 +90,7 @@ def test_handler_dispatches_s3(mock_whisper, _env, tmp_path):
     s3.put_object.assert_called_once()
 
 
-@patch("aavaaz.serverless.lambda_handler.WhisperModel")
+@patch("faster_whisper.WhisperModel")
 def test_handler_api_s3_url(mock_whisper, _env):
     """API Gateway with audio_url should download from S3."""
     model = MagicMock()
@@ -112,7 +117,7 @@ def test_handler_api_s3_url(mock_whisper, _env):
     assert body["segments"][0]["text"] == "Hello world"
 
 
-@patch("aavaaz.serverless.lambda_handler.WhisperModel")
+@patch("faster_whisper.WhisperModel")
 def test_handler_api_base64(mock_whisper, _env):
     """API Gateway with base64-encoded audio."""
     model = MagicMock()
@@ -162,7 +167,7 @@ def test_handler_api_invalid_json(_env):
     assert result["statusCode"] == 400
 
 
-@patch("aavaaz.serverless.lambda_handler.WhisperModel")
+@patch("faster_whisper.WhisperModel")
 def test_model_cached_across_calls(mock_whisper, _env):
     """Model should be loaded once and reused (warm start)."""
     model = MagicMock()
