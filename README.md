@@ -14,7 +14,7 @@ core transcription engine open-source.
 | **Intelligence** | Speaker diarization, sentiment analysis, topic detection, entity extraction, summarization |
 | **Post-processing** | Smart formatting, PII redaction, profanity filtering, noise reduction, utterance/paragraph segmentation |
 | **Platform** | Webhook delivery, transcript search & tagging, storage backends (local/S3), ACL/auth, GDPR compliance, Prometheus metrics |
-| **Deployment** | Docker, Helm charts, Terraform (AWS), **serverless (Lambda)**, GPU auto-detection, model caching, SSE streaming |
+| **Deployment** | Docker, Helm charts, Terraform (AWS), **serverless (Lambda)**, **Cloudflare Workers AI**, GPU auto-detection, model caching, SSE streaming |
 
 ## Quick Start
 
@@ -231,6 +231,23 @@ curl -X POST $(terraform output -raw api_endpoint) \
 
 See [docs/SERVERLESS.md](docs/SERVERLESS.md) for full configuration, model
 selection, cost estimates, and limitations.
+
+### Cloudflare Workers AI
+
+Zero-config transcription on Cloudflare's edge network with free-tier GPU inference:
+
+```bash
+cd deploy/cloudflare
+wrangler deploy
+
+# Transcribe
+curl -X POST https://aavaaz-transcribe.your-subdomain.workers.dev \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @recording.wav
+```
+
+No cold starts, no model management.  See [docs/CLOUDFLARE.md](docs/CLOUDFLARE.md)
+for details.
 
 ## Development
 
