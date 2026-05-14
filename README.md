@@ -14,7 +14,7 @@ core transcription engine open-source.
 | **Intelligence** | Speaker diarization, sentiment analysis, topic detection, entity extraction, summarization |
 | **Post-processing** | Smart formatting, PII redaction, profanity filtering, noise reduction, utterance/paragraph segmentation |
 | **Platform** | Webhook delivery, transcript search & tagging, storage backends (local/S3), ACL/auth, GDPR compliance, Prometheus metrics |
-| **Deployment** | Docker, Helm charts, Terraform (AWS), **serverless (Lambda)**, **Cloudflare Workers AI**, GPU auto-detection, model caching, SSE streaming |
+| **Deployment** | Docker, Helm charts, Terraform (AWS), **serverless (Lambda)**, **Modal (GPU)**, GPU auto-detection, model caching, SSE streaming |
 
 ## Quick Start
 
@@ -232,22 +232,23 @@ curl -X POST $(terraform output -raw api_endpoint) \
 See [docs/SERVERLESS.md](docs/SERVERLESS.md) for full configuration, model
 selection, cost estimates, and limitations.
 
-### Cloudflare Workers AI
+### Modal (GPU Serverless)
 
-Zero-config transcription on Cloudflare's edge network with free-tier GPU inference:
+Deploy on Modal for on-demand GPU transcription with zero infrastructure:
 
 ```bash
-cd deploy/cloudflare
-wrangler deploy
+cd deploy/modal
+pip install modal
+modal setup
+modal deploy app.py
 
 # Transcribe
-curl -X POST https://aavaaz-transcribe.your-subdomain.workers.dev \
-  -H "Content-Type: application/octet-stream" \
-  --data-binary @recording.wav
+curl -X POST https://your-workspace--aavaaz-transcribe.modal.run/v1/audio/transcriptions \
+  -F file=@recording.wav -F model=large-v3
 ```
 
-No cold starts, no model management.  See [docs/CLOUDFLARE.md](docs/CLOUDFLARE.md)
-for details.
+Auto-scales to zero when idle, GPU containers spin up in seconds.
+See [docs/MODAL.md](docs/MODAL.md) for full configuration.
 
 ## Development
 
