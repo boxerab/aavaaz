@@ -1,10 +1,14 @@
 """AWS Lambda handler for batch audio transcription.
 
-Supports two trigger modes:
+Supports three trigger modes:
 
 1. **S3 event** — automatically transcribes files uploaded to a bucket.
-2. **API Gateway** — POST an audio file URL or base64-encoded payload and
+2. **API Gateway (JSON)** — POST an audio file URL or base64-encoded payload and
    receive the transcript in the response.
+3. **API Gateway (multipart)** — POST a file via multipart/form-data (used by
+   the web demo drag-and-drop UI).
+
+The handler also serves the web demo UI on GET /.
 
 Environment variables
 ---------------------
@@ -44,7 +48,10 @@ def _get_model() -> Any:
     """Return a cached WhisperModel, loading on first call."""
     global _model
     if _model is None:
-        from faster_whisper import WhisperModel
+        try:
+            from whisper_live.transcriber.transcriber_faster_whisper import WhisperModel
+        except ImportError:
+            from faster_whisper import WhisperModel
 
         name = os.environ.get("AAVAAZ_MODEL", "small.en")
         logger.info("Loading Whisper model %s", name)
@@ -74,7 +81,7 @@ def _build_pipeline() -> list[Any]:
 
 def _apply_pipeline(segment: dict, pipeline: list[Any]) -> dict:
     for fn in pipeline:
-        segment = fn(segment)
+        segment["text"] = fn(segment["text"])
     return segment
 
 
@@ -160,9 +167,18 @@ def _s3_client():
 
 
 def handler(event: dict, context: Any) -> dict:
-    """Main Lambda entry point — dispatches to S3 or API Gateway handler."""
+    """Main Lambda entry point — dispatches to S3, web UI, or API handler."""
     if "Records" in event:
         return _handle_s3(event, context)
+
+    # API Gateway v2 (HTTP API) uses requestContext.http.method
+    http = event.get("requestContext", {}).get("http", {})
+    method = http.get("method", event.get("httpMethod", "POST"))
+    path = http.get("path", event.get("rawPath", event.get("path", "/")))
+
+    if method == "GET":
+        return _handle_web_ui(event, path)
+
     return _handle_api(event, context)
 
 
@@ -200,13 +216,129 @@ def _handle_s3(event: dict, context: Any) -> dict:
     return {"statusCode": 200, "body": json.dumps({"results": results})}
 
 
+# ---------------------------------------------------------------------------
+# Web UI
+# ---------------------------------------------------------------------------
+
+_WEB_DIR = os.path.join(os.path.dirname(__file__), "..", "web")
+
+
+def _handle_web_ui(event: dict, path: str) -> dict:
+    """Serve the web demo UI static files."""
+    if path.startswith("/static/"):
+        filename = path[len("/static/"):]
+        # Sanitize: only allow known safe filenames
+        safe_names = {"Collabora_Logo.svg": "image/svg+xml"}
+        if filename not in safe_names:
+            return {"statusCode": 404, "body": "Not found"}
+        filepath = os.path.join(_WEB_DIR, filename)
+        with open(filepath) as f:
+            content = f.read()
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": safe_names[filename]},
+            "body": content,
+        }
+
+    # Default: serve index.html
+    filepath = os.path.join(_WEB_DIR, "index.html")
+    with open(filepath) as f:
+        content = f.read()
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "text/html"},
+        "body": content,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Multipart form-data parsing
+# ---------------------------------------------------------------------------
+
+def _parse_multipart(event: dict) -> tuple[bytes | None, str | None, str | None]:
+    """Extract file bytes, filename, and response_format from multipart form-data.
+
+    Returns (file_bytes, filename, response_format) or (None, None, None) on failure.
+    """
+    content_type = ""
+    headers = event.get("headers", {})
+    for k, v in headers.items():
+        if k.lower() == "content-type":
+            content_type = v
+            break
+
+    if "boundary=" not in content_type:
+        return None, None, None
+
+    boundary = content_type.split("boundary=")[-1].strip()
+
+    body = event.get("body", "")
+    if event.get("isBase64Encoded"):
+        body_bytes = base64.b64decode(body)
+    else:
+        body_bytes = body.encode() if isinstance(body, str) else body
+
+    # Parse multipart boundaries
+    boundary_bytes = f"--{boundary}".encode()
+    parts = body_bytes.split(boundary_bytes)
+
+    file_bytes = None
+    filename = None
+    response_format = None
+
+    for part in parts:
+        if b"Content-Disposition:" not in part and b"content-disposition:" not in part:
+            continue
+
+        # Split headers from body at double newline
+        header_end = part.find(b"\r\n\r\n")
+        if header_end == -1:
+            header_end = part.find(b"\n\n")
+            if header_end == -1:
+                continue
+            header_section = part[:header_end].decode(errors="replace")
+            part_body = part[header_end + 2:]
+        else:
+            header_section = part[:header_end].decode(errors="replace")
+            part_body = part[header_end + 4:]
+
+        # Strip trailing \r\n
+        if part_body.endswith(b"\r\n"):
+            part_body = part_body[:-2]
+
+        header_lower = header_section.lower()
+        if 'name="file"' in header_lower or "name=\"file\"" in header_section:
+            file_bytes = part_body
+            # Extract filename
+            for token in header_section.split(";"):
+                token = token.strip()
+                if token.lower().startswith("filename="):
+                    filename = token.split("=", 1)[1].strip('" ')
+        elif 'name="response_format"' in header_lower:
+            response_format = part_body.decode(errors="replace").strip()
+
+    return file_bytes, filename, response_format
+
+
 def _handle_api(event: dict, context: Any) -> dict:
     """Process API Gateway (REST or HTTP API) requests.
 
     Accepts:
+    - multipart/form-data with a ``file`` field (web demo)
     - ``{"audio_url": "s3://bucket/key"}`` — download from S3
     - ``{"audio_base64": "<base64>", "filename": "audio.wav"}`` — inline audio
     """
+    # Check for multipart form-data first
+    headers = event.get("headers", {})
+    content_type = ""
+    for k, v in headers.items():
+        if k.lower() == "content-type":
+            content_type = v
+            break
+
+    if "multipart/form-data" in content_type:
+        return _handle_multipart(event)
+
     try:
         body = event.get("body", "{}")
         if event.get("isBase64Encoded"):
@@ -253,4 +385,31 @@ def _handle_api(event: dict, context: Any) -> dict:
         "statusCode": 200,
         "headers": {"Content-Type": content_type},
         "body": output,
+    }
+
+
+def _handle_multipart(event: dict) -> dict:
+    """Handle multipart/form-data file upload from the web demo."""
+    file_bytes, filename, response_format = _parse_multipart(event)
+    if file_bytes is None:
+        return {"statusCode": 400, "body": json.dumps({"error": "No file found in multipart data"})}
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        safe_name = Path(filename or "audio.wav").name
+        local_path = os.path.join(tmpdir, safe_name)
+        Path(local_path).write_bytes(file_bytes)
+        result = _transcribe(local_path)
+
+    fmt = response_format or os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json")
+    if fmt == "text":
+        text = "\n".join(seg["text"] for seg in result["segments"])
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "text/plain"},
+            "body": text,
+        }
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps(result, indent=2),
     }

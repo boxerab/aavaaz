@@ -44,7 +44,7 @@ variable "whisper_model" {
 variable "lambda_memory_mb" {
   description = "Lambda memory in MB (more memory = more CPU)"
   type        = number
-  default     = 4096
+  default     = 3008
 }
 
 variable "lambda_timeout" {
@@ -171,6 +171,12 @@ resource "aws_lambda_function" "transcribe" {
   }
 }
 
+# Lambda Function URL — no 29s API Gateway timeout limitation
+resource "aws_lambda_function_url" "transcribe" {
+  function_name      = aws_lambda_function.transcribe.function_name
+  authorization_type = "NONE"
+}
+
 # ---------- S3 Event Trigger ----------
 
 resource "aws_lambda_permission" "s3_invoke" {
@@ -240,6 +246,20 @@ resource "aws_apigatewayv2_route" "transcribe" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda[0].id}"
 }
 
+resource "aws_apigatewayv2_route" "web_root" {
+  count     = var.enable_api_gateway ? 1 : 0
+  api_id    = aws_apigatewayv2_api.transcribe[0].id
+  route_key = "GET /"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda[0].id}"
+}
+
+resource "aws_apigatewayv2_route" "web_static" {
+  count     = var.enable_api_gateway ? 1 : 0
+  api_id    = aws_apigatewayv2_api.transcribe[0].id
+  route_key = "GET /static/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda[0].id}"
+}
+
 resource "aws_apigatewayv2_stage" "default" {
   count       = var.enable_api_gateway ? 1 : 0
   api_id      = aws_apigatewayv2_api.transcribe[0].id
@@ -276,4 +296,12 @@ output "lambda_function_name" {
 
 output "api_endpoint" {
   value = var.enable_api_gateway ? "${aws_apigatewayv2_api.transcribe[0].api_endpoint}/v1/audio/transcriptions" : ""
+}
+
+output "web_demo_url" {
+  value = var.enable_api_gateway ? aws_apigatewayv2_api.transcribe[0].api_endpoint : ""
+}
+
+output "function_url" {
+  value = aws_lambda_function_url.transcribe.function_url
 }
