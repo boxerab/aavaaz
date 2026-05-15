@@ -39,6 +39,24 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # ---------------------------------------------------------------------------
+# CORS headers for browser access from GitHub Pages.
+# ---------------------------------------------------------------------------
+_CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+}
+
+
+def _response(status_code: int, body: str, headers: dict | None = None) -> dict:
+    """Build an API Gateway response with CORS headers."""
+    h = {**_CORS_HEADERS}
+    if headers:
+        h.update(headers)
+    return {"statusCode": status_code, "headers": h, "body": body}
+
+
+# ---------------------------------------------------------------------------
 # Global model cache — survives across warm Lambda invocations.
 # ---------------------------------------------------------------------------
 _model: Any = None
@@ -176,6 +194,10 @@ def handler(event: dict, context: Any) -> dict:
     method = http.get("method", event.get("httpMethod", "POST"))
     path = http.get("path", event.get("rawPath", event.get("path", "/")))
 
+    # CORS preflight
+    if method == "OPTIONS":
+        return _response(204, "")
+
     if method == "GET":
         return _handle_web_ui(event, path)
 
@@ -230,25 +252,17 @@ def _handle_web_ui(event: dict, path: str) -> dict:
         # Sanitize: only allow known safe filenames
         safe_names = {"Collabora_Logo.svg": "image/svg+xml"}
         if filename not in safe_names:
-            return {"statusCode": 404, "body": "Not found"}
+            return _response(404, "Not found")
         filepath = os.path.join(_WEB_DIR, filename)
         with open(filepath) as f:
             content = f.read()
-        return {
-            "statusCode": 200,
-            "headers": {"Content-Type": safe_names[filename]},
-            "body": content,
-        }
+        return _response(200, content, {"Content-Type": safe_names[filename]})
 
     # Default: serve index.html
     filepath = os.path.join(_WEB_DIR, "index.html")
     with open(filepath) as f:
         content = f.read()
-    return {
-        "statusCode": 200,
-        "headers": {"Content-Type": "text/html"},
-        "body": content,
-    }
+    return _response(200, content, {"Content-Type": "text/html"})
 
 
 # ---------------------------------------------------------------------------
@@ -345,19 +359,16 @@ def _handle_api(event: dict, context: Any) -> dict:
             body = base64.b64decode(body).decode()
         payload = json.loads(body) if isinstance(body, str) else body
     except (json.JSONDecodeError, ValueError):
-        return {"statusCode": 400, "body": json.dumps({"error": "Invalid JSON body"})}
+        return _response(400, json.dumps({"error": "Invalid JSON body"}))
 
     with tempfile.TemporaryDirectory() as tmpdir:
         if "audio_url" in payload:
             url = payload["audio_url"]
             if not url.startswith("s3://"):
-                return {
-                    "statusCode": 400,
-                    "body": json.dumps({"error": "Only s3:// URLs supported"}),
-                }
+                return _response(400, json.dumps({"error": "Only s3:// URLs supported"}))
             parts = url[5:].split("/", 1)
             if len(parts) != 2:
-                return {"statusCode": 400, "body": json.dumps({"error": "Invalid S3 URL"})}
+                return _response(400, json.dumps({"error": "Invalid S3 URL"}))
             bucket, key = parts
             local_path = os.path.join(tmpdir, os.path.basename(key))
             _s3_client().download_file(bucket, key, local_path)
@@ -370,10 +381,7 @@ def _handle_api(event: dict, context: Any) -> dict:
             Path(local_path).write_bytes(audio_bytes)
 
         else:
-            return {
-                "statusCode": 400,
-                "body": json.dumps({"error": "Provide 'audio_url' or 'audio_base64'"}),
-            }
+            return _response(400, json.dumps({"error": "Provide 'audio_url' or 'audio_base64'"}))
 
         result = _transcribe(local_path)
 
@@ -381,18 +389,14 @@ def _handle_api(event: dict, context: Any) -> dict:
     fmt = os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json")
     content_type = "application/json" if fmt == "json" else "text/plain"
 
-    return {
-        "statusCode": 200,
-        "headers": {"Content-Type": content_type},
-        "body": output,
-    }
+    return _response(200, output, {"Content-Type": content_type})
 
 
 def _handle_multipart(event: dict) -> dict:
     """Handle multipart/form-data file upload from the web demo."""
     file_bytes, filename, response_format = _parse_multipart(event)
     if file_bytes is None:
-        return {"statusCode": 400, "body": json.dumps({"error": "No file found in multipart data"})}
+        return _response(400, json.dumps({"error": "No file found in multipart data"}))
 
     with tempfile.TemporaryDirectory() as tmpdir:
         safe_name = Path(filename or "audio.wav").name
@@ -403,13 +407,5 @@ def _handle_multipart(event: dict) -> dict:
     fmt = response_format or os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json")
     if fmt == "text":
         text = "\n".join(seg["text"] for seg in result["segments"])
-        return {
-            "statusCode": 200,
-            "headers": {"Content-Type": "text/plain"},
-            "body": text,
-        }
-    return {
-        "statusCode": 200,
-        "headers": {"Content-Type": "application/json"},
-        "body": json.dumps(result, indent=2),
-    }
+        return _response(200, text, {"Content-Type": "text/plain"})
+    return _response(200, json.dumps(result, indent=2), {"Content-Type": "application/json"})

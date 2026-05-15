@@ -229,6 +229,13 @@ resource "aws_apigatewayv2_api" "transcribe" {
   count         = var.enable_api_gateway ? 1 : 0
   name          = "aavaaz-transcribe"
   protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_origins = ["*"]
+    allow_methods = ["GET", "POST", "OPTIONS"]
+    allow_headers = ["Content-Type"]
+    max_age       = 86400
+  }
 }
 
 resource "aws_apigatewayv2_integration" "lambda" {
