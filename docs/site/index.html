@@ -640,6 +640,104 @@
             line-height: 1.6;
         }
 
+        /* ── LIVE DEMO ── */
+        #demo { border-bottom: 1px solid var(--border); }
+        .demo-container {
+            max-width: 640px;
+            margin: 0 auto;
+        }
+        .demo-dropzone {
+            border: 2px dashed var(--border);
+            border-radius: 16px;
+            padding: 48px 32px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: var(--bg-secondary);
+        }
+        .demo-dropzone:hover, .demo-dropzone.dragover {
+            border-color: var(--green);
+            background: var(--green-dim);
+        }
+        .demo-dropzone-icon {
+            font-size: 2.5rem;
+            margin-bottom: 16px;
+        }
+        .demo-dropzone h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+        .demo-dropzone p {
+            font-size: 0.85rem;
+            color: var(--text-tertiary);
+        }
+        .demo-status {
+            margin-top: 20px;
+            padding: 16px 20px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            display: none;
+        }
+        .demo-status.loading {
+            display: block;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+        .demo-status.success {
+            display: block;
+            background: rgba(34, 197, 94, 0.08);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #86EFAC;
+        }
+        .demo-status.error {
+            display: block;
+            background: rgba(251, 113, 133, 0.08);
+            border: 1px solid rgba(251, 113, 133, 0.3);
+            color: var(--rose);
+        }
+        .demo-result {
+            margin-top: 16px;
+            display: none;
+        }
+        .demo-result.show {
+            display: block;
+        }
+        .demo-result pre {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            line-height: 1.7;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .demo-meta {
+            margin-top: 12px;
+            font-size: 0.75rem;
+            color: var(--text-tertiary);
+            text-align: right;
+        }
+        .demo-file-input { display: none; }
+        .demo-spinner {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid var(--border);
+            border-top-color: var(--green);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
         /* ── BLOG POSTS ── */
         #blog { border-bottom: 1px solid var(--border); }
         .blog-grid {
@@ -913,6 +1011,7 @@
             <li><a href="#backends">Backends</a></li>
             <li><a href="#features">Features</a></li>
             <li><a href="#capabilities">Capabilities</a></li>
+            <li><a href="#demo">Demo</a></li>
             <li><a href="#sdks">SDKs</a></li>
             <li><a href="#quickstart">Docs</a></li>
             <li><a href="https://github.com/collabora/Aavaaz" class="nav-btn-ghost">GitHub</a></li>
@@ -1531,6 +1630,29 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
     </div>
 </section>
 
+<!-- ═══ LIVE DEMO ═══ -->
+<section id="demo">
+    <div class="section-inner">
+        <span class="section-label">Try It</span>
+        <h2 class="section-title">Live Transcription Demo</h2>
+        <p class="section-desc">Upload an audio file and get a transcription back in seconds. Powered by Aavaaz on AWS Lambda with Whisper small.en.</p>
+
+        <div class="demo-container fade-in">
+            <div class="demo-dropzone" id="demo-dropzone">
+                <div class="demo-dropzone-icon">&#127908;</div>
+                <h3>Drop an audio file here</h3>
+                <p>or click to browse &mdash; WAV, MP3, FLAC, OGG, M4A (max 25 MB)</p>
+                <input type="file" class="demo-file-input" id="demo-file-input" accept="audio/*">
+            </div>
+            <div class="demo-status" id="demo-status"></div>
+            <div class="demo-result" id="demo-result">
+                <pre id="demo-transcript"></pre>
+                <div class="demo-meta" id="demo-meta"></div>
+            </div>
+        </div>
+    </div>
+</section>
+
 <!-- ═══ BLOG POSTS ═══ -->
 <section id="blog">
     <div class="section-inner">
@@ -1659,6 +1781,64 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
     }, { threshold: 0.05, rootMargin: '0px 0px -40px 0px' });
 
     document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+    // ── LIVE DEMO ──
+    (function() {
+        const API = 'https://gh0edmarma.execute-api.us-east-1.amazonaws.com/v1/audio/transcriptions';
+        const dropzone = document.getElementById('demo-dropzone');
+        const fileInput = document.getElementById('demo-file-input');
+        const status = document.getElementById('demo-status');
+        const result = document.getElementById('demo-result');
+        const transcript = document.getElementById('demo-transcript');
+        const meta = document.getElementById('demo-meta');
+
+        function setStatus(msg, cls) {
+            status.className = 'demo-status ' + cls;
+            status.innerHTML = msg;
+        }
+
+        dropzone.addEventListener('click', () => fileInput.click());
+        dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) transcribe(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', () => { if (fileInput.files.length) transcribe(fileInput.files[0]); });
+
+        async function transcribe(file) {
+            if (file.size > 25 * 1024 * 1024) {
+                setStatus('File too large (max 25 MB)', 'error');
+                return;
+            }
+            result.classList.remove('show');
+            setStatus('<span class="demo-spinner"></span>Transcribing <strong>' + file.name + '</strong> (' + (file.size / 1024 / 1024).toFixed(1) + ' MB)&hellip;', 'loading');
+            const t0 = performance.now();
+
+            const form = new FormData();
+            form.append('file', file);
+            form.append('response_format', 'verbose_json');
+
+            try {
+                const resp = await fetch(API, { method: 'POST', body: form });
+                const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+                if (!resp.ok) {
+                    const err = await resp.text();
+                    setStatus('Error: ' + (resp.status === 503 ? 'Service warming up &mdash; try again in 60 seconds' : err), 'error');
+                    return;
+                }
+                const data = await resp.json();
+                const text = data.text || data.segments?.map(s => s.text).join(' ') || JSON.stringify(data, null, 2);
+                transcript.textContent = text.trim();
+                meta.textContent = elapsed + 's \u00b7 model: small.en \u00b7 ' + (data.duration ? data.duration.toFixed(1) + 's audio' : file.name);
+                result.classList.add('show');
+                setStatus('\u2713 Transcription complete', 'success');
+            } catch (e) {
+                setStatus('Network error: ' + e.message, 'error');
+            }
+        }
+    })();
 </script>
 
 </body>
