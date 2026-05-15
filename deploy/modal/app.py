@@ -1,10 +1,13 @@
-"""Aavaaz — Modal GPU serverless transcription.
+"""Aavaaz — Modal GPU serverless transcription with web demo.
 
 Deploy with:
     modal deploy app.py
 
 Develop with live-reload:
     modal serve app.py
+
+Visit the root URL to access the drag-and-drop transcription demo.
+POST to /v1/audio/transcriptions for the OpenAI-compatible API.
 
 Environment variables (set via Modal Secrets):
     AAVAAZ_MODEL          Whisper model name (default: large-v3)
@@ -21,6 +24,9 @@ import modal
 
 WHISPER_MODEL = "large-v3"
 
+# Path to the web UI files inside the container.
+WEB_DIR = "/web"
+
 app = modal.App("aavaaz-transcribe")
 
 image = (
@@ -34,6 +40,10 @@ image = (
     .run_commands(
         f"python -c \"from faster_whisper import WhisperModel; WhisperModel('{WHISPER_MODEL}', device='cpu')\""
     )
+    .add_local_dir("../../aavaaz/web", remote_path=WEB_DIR)
+    .add_local_dir("../../aavaaz/aavaaz", remote_path="/root/aavaaz_pkg/aavaaz")
+    .add_local_file("../../pyproject.toml", remote_path="/root/aavaaz_pkg/pyproject.toml")
+    .run_commands("pip install /root/aavaaz_pkg")
 )
 
 
@@ -57,9 +67,36 @@ class Transcriber:
         self.language = os.environ.get("AAVAAZ_LANGUAGE") or None
         self.api_key = os.environ.get("AAVAAZ_API_KEY")
 
-    @modal.fastapi_endpoint(method="POST", path="/v1/audio/transcriptions")
-    async def transcribe(self, request: "fastapi.Request"):
-        import json
+    @modal.asgi_app()
+    def web(self):
+        import os
+
+        import fastapi
+        from fastapi.responses import HTMLResponse
+        from fastapi.staticfiles import StaticFiles
+
+        web_app = fastapi.FastAPI(title="Aavaaz Transcription Demo")
+
+        # Serve static assets (logo, etc.)
+        web_app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
+
+        @web_app.get("/", response_class=HTMLResponse)
+        async def index():
+            index_path = os.path.join(WEB_DIR, "index.html")
+            with open(index_path) as f:
+                return f.read()
+
+        @web_app.post("/v1/audio/transcriptions")
+        async def transcribe(request: fastapi.Request):
+            return await self._handle_transcription(request)
+
+        @web_app.get("/health")
+        async def health():
+            return {"status": "ok"}
+
+        return web_app
+
+    async def _handle_transcription(self, request):
         import os
         import tempfile
         import uuid

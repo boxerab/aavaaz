@@ -38,27 +38,40 @@ cd deploy/modal
 modal deploy app.py
 ```
 
-Your endpoint is live at `https://<workspace>--aavaaz-transcribe-transcriber-transcribe.modal.run`.
+Your endpoint is live at `https://<workspace>--aavaaz-transcribe-transcriber-web.modal.run`.
 
-### 3. Transcribe
+### 3. Web Demo
+
+Visit the root URL in your browser to access the drag-and-drop transcription demo:
+
+```
+https://<workspace>--aavaaz-transcribe-transcriber-web.modal.run
+```
+
+Drop or select an audio file (WAV, MP3, OGG, etc.) and the transcript appears in seconds.
+You can also choose a language or let the model auto-detect.
+
+### 4. API (programmatic)
+
+### 4. API (programmatic)
 
 ```bash
 # Multipart file upload (OpenAI-compatible)
-curl -X POST https://<workspace>--aavaaz-transcribe-transcriber-transcribe.modal.run/v1/audio/transcriptions \
+curl -X POST https://<workspace>--aavaaz-transcribe-transcriber-web.modal.run/v1/audio/transcriptions \
   -F file=@recording.wav
 
 # Raw binary
-curl -X POST https://<workspace>--aavaaz-transcribe-transcriber-transcribe.modal.run/v1/audio/transcriptions \
+curl -X POST https://<workspace>--aavaaz-transcribe-transcriber-web.modal.run/v1/audio/transcriptions \
   -H "Content-Type: application/octet-stream" \
   --data-binary @recording.wav
 
 # Base64 JSON
-curl -X POST https://<workspace>--aavaaz-transcribe-transcriber-transcribe.modal.run/v1/audio/transcriptions \
+curl -X POST https://<workspace>--aavaaz-transcribe-transcriber-web.modal.run/v1/audio/transcriptions \
   -H "Content-Type: application/json" \
   -d "{\"audio_base64\": \"$(base64 -w0 recording.wav)\"}"
 ```
 
-### 4. Develop with live-reload
+### 5. Develop with live-reload
 
 ```bash
 modal serve app.py
@@ -121,6 +134,9 @@ curl -X POST .../v1/audio/transcriptions \
   -H "Authorization: Bearer my-secret-key" \
   -F file=@recording.wav
 ```
+
+Note: The web demo does not send an Authorization header.  When `AAVAAZ_API_KEY`
+is set, the demo UI will receive 401 errors. Leave the key empty for public demos.
 
 ## Limitations
 
