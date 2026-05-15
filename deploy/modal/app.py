@@ -1,5 +1,7 @@
 """Aavaaz — Modal GPU serverless transcription with web demo.
 
+Uses WhisperLive batch inference for GPU-accelerated transcription.
+
 Deploy with:
     modal deploy app.py
 
@@ -18,52 +20,74 @@ Environment variables (set via Modal Secrets):
     AAVAAZ_API_KEY        Optional API key for authentication
 """
 
-from __future__ import annotations
-
+import fastapi
 import modal
 
 WHISPER_MODEL = "large-v3"
 
 # Path to the web UI files inside the container.
 WEB_DIR = "/web"
+# Path where WhisperLive source is mounted.
+WHISPERLIVE_DIR = "/opt/whisper_live"
 
 app = modal.App("aavaaz-transcribe")
 
 image = (
-    modal.Image.debian_slim(python_version="3.12")
+    modal.Image.from_registry(
+        "nvidia/cuda:12.4.1-runtime-ubuntu22.04", add_python="3.12"
+    )
     .apt_install("ffmpeg")
     .pip_install(
         "faster-whisper>=1.0",
         "fastapi[standard]",
         "python-multipart",
+        "tokenizers",
+        "tqdm",
     )
     .run_commands(
         f"python -c \"from faster_whisper import WhisperModel; WhisperModel('{WHISPER_MODEL}', device='cpu')\""
     )
-    .add_local_dir("../../aavaaz/web", remote_path=WEB_DIR)
-    .add_local_dir("../../aavaaz/aavaaz", remote_path="/root/aavaaz_pkg/aavaaz")
-    .add_local_file("../../pyproject.toml", remote_path="/root/aavaaz_pkg/pyproject.toml")
+    .add_local_dir("../../aavaaz", remote_path="/root/aavaaz_pkg/aavaaz", copy=True)
+    .add_local_file("../../pyproject.toml", remote_path="/root/aavaaz_pkg/pyproject.toml", copy=True)
     .run_commands("pip install /root/aavaaz_pkg")
+    .add_local_dir(
+        "/home/aaron/src/WhisperLive/whisper_live",
+        remote_path=f"{WHISPERLIVE_DIR}/whisper_live",
+    )
+    .add_local_dir("../../aavaaz/web", remote_path=WEB_DIR)
 )
+
+
+# Optional: create this secret with `modal secret create aavaaz-config KEY=VALUE ...`
+_aavaaz_secret = modal.Secret.from_name("aavaaz-config")
 
 
 @app.cls(
     image=image,
     gpu="T4",
     timeout=600,
-    secrets=[modal.Secret.from_name("aavaaz-config", required_hint=False)],
-    container_idle_timeout=120,
+    secrets=[_aavaaz_secret],
+    scaledown_window=120,
 )
 @modal.concurrent(max_inputs=4)
 class Transcriber:
     @modal.enter()
     def load_model(self):
         import os
+        import sys
 
-        from faster_whisper import WhisperModel
+        # Add WhisperLive to Python path
+        sys.path.insert(0, WHISPERLIVE_DIR)
+
+        from whisper_live.batch_inference import BatchInferenceWorker
+        from whisper_live.transcriber.transcriber_faster_whisper import WhisperModel
 
         model_name = os.environ.get("AAVAAZ_MODEL", WHISPER_MODEL)
         self.model = WhisperModel(model_name, device="cuda", compute_type="float16")
+        self.batch_worker = BatchInferenceWorker(
+            self.model, max_batch_size=4, batch_window_ms=100
+        )
+        self.batch_worker.start()
         self.language = os.environ.get("AAVAAZ_LANGUAGE") or None
         self.api_key = os.environ.get("AAVAAZ_API_KEY")
 
@@ -111,6 +135,7 @@ class Transcriber:
                 raise fastapi.HTTPException(status_code=401, detail="Unauthorized")
 
         content_type = request.headers.get("content-type", "")
+        response_format = None
 
         with tempfile.TemporaryDirectory() as tmpdir:
             if "multipart/form-data" in content_type:
@@ -118,6 +143,7 @@ class Transcriber:
                 upload = form.get("file")
                 if upload is None:
                     raise fastapi.HTTPException(status_code=400, detail="No 'file' field")
+                response_format = form.get("response_format")
                 filename = getattr(upload, "filename", None) or f"{uuid.uuid4().hex}.wav"
                 local_path = os.path.join(tmpdir, Path(filename).name)
                 content = await upload.read()
@@ -147,7 +173,7 @@ class Transcriber:
 
             result = self._transcribe(local_path)
 
-        fmt = os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json")
+        fmt = response_format or os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json")
         if fmt == "text":
             text = "\n".join(seg["text"] for seg in result["segments"])
             return fastapi.Response(content=text, media_type="text/plain")
@@ -156,10 +182,23 @@ class Transcriber:
     def _transcribe(self, audio_path: str) -> dict:
         import os
 
-        segments, info = self.model.transcribe(
-            audio_path, language=self.language, word_timestamps=True
-        )
-        segments = list(segments)
+        import numpy as np
+        from faster_whisper.audio import decode_audio
+        from whisper_live.batch_inference import BatchRequest
+
+        # Decode audio to raw float32 samples at 16kHz
+        audio = decode_audio(audio_path)
+
+        # Submit to WhisperLive batch inference worker
+        req = BatchRequest(audio=audio, language=self.language)
+        self.batch_worker.submit(req)
+        req.future.wait(timeout=300)
+
+        if req.error:
+            raise req.error
+
+        segments = req.result or []
+        info = req.info
 
         pipeline = self._build_pipeline()
         results = []
@@ -169,19 +208,19 @@ class Transcriber:
                 "end": seg.end,
                 "text": seg.text.strip(),
             }
-            if seg.words:
+            if hasattr(seg, "words") and seg.words:
                 entry["words"] = [
                     {"word": w.word, "start": w.start, "end": w.end, "probability": w.probability}
                     for w in seg.words
                 ]
             for fn in pipeline:
-                entry = fn(entry)
+                entry["text"] = fn(entry["text"])
             results.append(entry)
 
         return {
-            "language": info.language,
-            "language_probability": info.language_probability,
-            "duration": info.duration,
+            "language": info.language if info else "unknown",
+            "language_probability": info.language_probability if info else 0.0,
+            "duration": info.duration if info else 0.0,
             "segments": results,
         }
 
