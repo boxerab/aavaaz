@@ -1810,6 +1810,7 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
         async function transcribe(file) {
             if (file.size > 25 * 1024 * 1024) {
                 setStatus('File too large (max 25 MB)', 'error');
+                fileInput.value = '';
                 return;
             }
             result.classList.remove('show');
@@ -1836,6 +1837,8 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
                 setStatus('\u2713 Transcription complete', 'success');
             } catch (e) {
                 setStatus('Network error: ' + e.message, 'error');
+            } finally {
+                fileInput.value = '';
             }
         }
     })();
