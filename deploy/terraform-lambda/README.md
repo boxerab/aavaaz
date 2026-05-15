@@ -121,7 +121,31 @@ curl -X POST "$API_ENDPOINT" \
 | S3 | 5GB storage | Audio + transcript storage |
 | ECR | 500MB storage | Container image |
 
-With `tiny.en` at 3GB RAM on CPU, transcription runs at roughly 6x realtime (10s audio ≈ 1.5s processing), so free tier gives you approximately **37 hours of Lambda compute per month**.
+With `small.en` at 3GB RAM on CPU, transcription runs at roughly 1.5x realtime (5-min audio ≈ 200s processing), so free tier gives you approximately **37 hours of Lambda compute per month**.
+
+## Model Selection
+
+| Model | Params | Cold Start | Speed (warm) | 5-min clip | Accuracy | Cost/clip |
+|-------|--------|-----------|--------------|-----------|----------|-----------|
+| `tiny.en` | 39M | ~47s | ~7x realtime | ~43s | Good for clear English | ~$0.002 |
+| `base.en` | 74M | ~60s | ~4x realtime | ~75s | Better | ~$0.004 |
+| `small.en` | 244M | ~90s | ~1.5x realtime | ~200s | Much better (accents, noise) | ~$0.01 |
+| `medium.en` | 769M | ❌ | - | - | - | Won't fit in 3GB |
+
+**Recommendations:**
+- `tiny.en` — fastest, cheapest, fine for clean speech in quiet environments
+- `small.en` — best quality that fits on Lambda free tier; handles accents, background noise, proper nouns well
+- `medium.en` and larger — won't fit in Lambda's 3008 MB free-tier limit
+
+**To switch models:**
+```bash
+cd deploy/terraform-lambda
+WHISPER_MODEL=small.en ./deploy.sh
+```
+
+This rebuilds the container with the new model baked in (~5 min for small.en download + build).
+
+**Note:** Cold starts always exceed API Gateway's 29s timeout regardless of model. Always pre-warm after idle periods.
 
 ## Configuration
 
