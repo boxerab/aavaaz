@@ -1,33 +1,32 @@
 """Integration tests for the batch inference module (mocked transcriber)."""
 
 import sys
+import types
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 
-# We need to mock faster_whisper/whisper_live at import time but must not
-# leave the mocks in sys.modules for other test files. Use a subprocess
-# isolation approach via pytest-forked if available, or just guard with
-# try/except.
-_need_mock = "faster_whisper" not in sys.modules
-if _need_mock:
-    _mocks = {}
-    for mod in [
-        "faster_whisper", "faster_whisper.audio", "faster_whisper.tokenizer",
-        "faster_whisper.vad", "whisper_live", "whisper_live.transcriber",
-        "whisper_live.transcriber.transcriber_faster_whisper",
-    ]:
-        _mocks[mod] = sys.modules[mod] = MagicMock()
+# Mock faster_whisper and whisper_live before import (if not already present).
+# These mocks persist for the session — test_serverless.py also needs them.
+_mock_fw = MagicMock()
+_mock_fw.__spec__ = None
+sys.modules.setdefault("faster_whisper", _mock_fw)
+sys.modules.setdefault("faster_whisper.audio", MagicMock())
+sys.modules.setdefault("faster_whisper.tokenizer", MagicMock())
+sys.modules.setdefault("faster_whisper.vad", MagicMock())
+sys.modules.setdefault("whisper_live", MagicMock())
+sys.modules.setdefault("whisper_live.transcriber", MagicMock())
+# Use a real ModuleType for this submodule so it does NOT auto-create a
+# WhisperModel attribute (which would confuse lambda_handler's fallback import).
+_wl_tfw = types.ModuleType("whisper_live.transcriber.transcriber_faster_whisper")
+_wl_tfw.Segment = MagicMock()
+_wl_tfw.TranscriptionInfo = MagicMock()
+_wl_tfw.get_compression_ratio = MagicMock()
+_wl_tfw.get_suppressed_tokens = MagicMock()
+sys.modules.setdefault("whisper_live.transcriber.transcriber_faster_whisper", _wl_tfw)
 
-try:
-    from aavaaz.features.batch_inference import BatchInferenceWorker, BatchRequest
-except ImportError:
-    pytest.skip("Cannot import batch_inference", allow_module_level=True)
-finally:
-    if _need_mock:
-        for mod in _mocks:
-            sys.modules.pop(mod, None)
+from aavaaz.features.batch_inference import BatchInferenceWorker, BatchRequest  # noqa: E402
 
 
 class TestBatchRequest:

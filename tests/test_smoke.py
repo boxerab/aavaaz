@@ -14,23 +14,24 @@ from pathlib import Path
 
 import pytest
 
-# Ensure the real faster_whisper is available (other test files may have
-# inserted a MagicMock via sys.modules.setdefault). Remove any mock first.
-if "faster_whisper" in sys.modules:
-    _mod = sys.modules["faster_whisper"]
-    if not hasattr(_mod, "__file__"):
-        # It's a mock — remove it so the real import can proceed
-        for key in list(sys.modules):
-            if key == "faster_whisper" or key.startswith("faster_whisper."):
-                del sys.modules[key]
-
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
 AUDIO_FILE = FIXTURE_DIR / "smoke_test.wav"
+
+
+def _remove_mock_faster_whisper():
+    """Remove any MagicMock-based faster_whisper from sys.modules."""
+    if "faster_whisper" in sys.modules:
+        _mod = sys.modules["faster_whisper"]
+        if not hasattr(_mod, "__file__"):
+            for key in list(sys.modules):
+                if key == "faster_whisper" or key.startswith("faster_whisper."):
+                    del sys.modules[key]
 
 
 @pytest.mark.smoke
 def test_faster_whisper_transcribe():
     """Load tiny.en model and transcribe a short WAV file end-to-end."""
+    _remove_mock_faster_whisper()
     pytest.importorskip("faster_whisper")
     from faster_whisper import WhisperModel
 
