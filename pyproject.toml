@@ -67,3 +67,6 @@ per-file-ignores = {"aavaaz/features/*" = ["E501", "F841"]}
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "smoke: end-to-end tests requiring model download (deselect with -m 'not smoke')",
+]
