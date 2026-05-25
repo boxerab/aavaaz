@@ -733,6 +733,58 @@
             cursor: pointer;
         }
         .demo-dropzone { position: relative; }
+        .demo-record-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .demo-record-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .demo-record-btn:hover {
+            border-color: var(--rose);
+            background: rgba(251, 113, 133, 0.1);
+        }
+        .demo-record-btn.recording {
+            border-color: var(--rose);
+            background: rgba(251, 113, 133, 0.15);
+            animation: pulse-record 1.5s infinite;
+        }
+        @keyframes pulse-record {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(251, 113, 133, 0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(251, 113, 133, 0); }
+        }
+        .demo-record-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: var(--rose);
+        }
+        .demo-record-btn.recording .demo-record-dot {
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .demo-record-timer {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-tertiary);
+            min-width: 40px;
+        }
         .demo-spinner {
             display: inline-block;
             width: 14px; height: 14px;
@@ -1651,6 +1703,13 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
                 <p>or click to browse &mdash; WAV, MP3, FLAC, OGG, M4A (max 25 MB)</p>
                 <input type="file" class="demo-file-input" id="demo-file-input">
             </div>
+            <div class="demo-record-row">
+                <button class="demo-record-btn" id="demo-record-btn">
+                    <span class="demo-record-dot" id="demo-record-dot"></span>
+                    <span id="demo-record-label">Record</span>
+                </button>
+                <span class="demo-record-timer" id="demo-record-timer"></span>
+            </div>
             <div class="demo-status" id="demo-status"></div>
             <div class="demo-result" id="demo-result">
                 <pre id="demo-transcript"></pre>
@@ -1846,6 +1905,56 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
             } finally {
                 fileInput.value = '';
             }
+        }
+
+        // ── RECORD BUTTON ──
+        const recordBtn = document.getElementById('demo-record-btn');
+        const recordLabel = document.getElementById('demo-record-label');
+        const recordTimer = document.getElementById('demo-record-timer');
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let recordStart = 0;
+        let timerInterval = null;
+
+        recordBtn.addEventListener('click', async () => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                return;
+            }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioChunks = [];
+                mediaRecorder = new MediaRecorder(stream, { mimeType: getMimeType() });
+                mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+                mediaRecorder.onstop = () => {
+                    stream.getTracks().forEach(t => t.stop());
+                    clearInterval(timerInterval);
+                    recordBtn.classList.remove('recording');
+                    recordLabel.textContent = 'Record';
+                    recordTimer.textContent = '';
+                    const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+                    const ext = mediaRecorder.mimeType.includes('webm') ? 'webm' : mediaRecorder.mimeType.includes('mp4') ? 'm4a' : 'ogg';
+                    const file = new File([blob], 'recording.' + ext, { type: mediaRecorder.mimeType });
+                    transcribe(file);
+                };
+                mediaRecorder.start();
+                recordStart = Date.now();
+                recordBtn.classList.add('recording');
+                recordLabel.textContent = 'Stop';
+                timerInterval = setInterval(() => {
+                    const sec = Math.floor((Date.now() - recordStart) / 1000);
+                    recordTimer.textContent = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+                }, 500);
+            } catch (e) {
+                setStatus('Microphone access denied: ' + e.message, 'error');
+            }
+        });
+
+        function getMimeType() {
+            if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) return 'audio/webm;codecs=opus';
+            if (MediaRecorder.isTypeSupported('audio/mp4')) return 'audio/mp4';
+            if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) return 'audio/ogg;codecs=opus';
+            return '';
         }
     })();
 </script>
