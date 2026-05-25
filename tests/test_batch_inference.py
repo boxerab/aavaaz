@@ -5,7 +5,6 @@ import types
 from unittest.mock import MagicMock
 
 import numpy as np
-import pytest
 
 # Mock faster_whisper and whisper_live before import (if not already present).
 # These mocks persist for the session — test_serverless.py also needs them.
