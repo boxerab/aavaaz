@@ -132,3 +132,65 @@ Use `int8` compute type (default in the Lambda image) to halve memory usage.
 | `medium.en` | 8 GB | ~30 sec | ~$0.004 |
 
 At 1,000 files/day with `small.en`: approximately **$1/day** + S3 storage.
+
+## Logging & Monitoring
+
+### Lambda (CloudWatch)
+
+All Lambda logs go to **AWS CloudWatch Logs** automatically (via the
+`AWSLambdaBasicExecutionRole` policy). Logs are structured at INFO level and
+include:
+
+| Event | Fields |
+|-------|--------|
+| Request start | `request_id` |
+| S3 file received | bucket, key, `size_bytes` |
+| Multipart upload | filename, `size_bytes` |
+| Transcription start | filename, `size_bytes`, model |
+| Transcription complete | audio `duration`, `segments` count, `language`, `elapsed` time |
+| Errors | full traceback with `request_id` |
+
+View logs in the AWS Console under **CloudWatch → Log groups → /aws/lambda/aavaaz-transcribe**, or via CLI:
+
+```bash
+aws logs tail /aws/lambda/aavaaz-transcribe --follow
+```
+
+### Modal (Dashboard)
+
+Modal captures all stdout/stderr in the **Modal dashboard** (app → logs tab).
+The app uses Python's `logging` module (`aavaaz.modal` logger) with the same
+structured fields as Lambda.
+
+## Audio Storage (Optional)
+
+By default, uploaded audio is **not stored** — it is processed in memory and
+immediately discarded. To enable audio retention for debugging or compliance:
+
+### Lambda
+
+Set `store_audio = true` in Terraform (or `AAVAAZ_STORE_AUDIO=1` on the Lambda):
+
+```bash
+terraform apply -var="store_audio=true"
+```
+
+Audio files are saved to `s3://<output-bucket>/audio/<uuid>_<filename>` and
+subject to whatever lifecycle rules you configure on that bucket.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AAVAAZ_STORE_AUDIO` | `0` | Set to `1` to store uploaded audio |
+| `AAVAAZ_AUDIO_BUCKET` | *(output bucket)* | S3 bucket for audio storage |
+| `AAVAAZ_AUDIO_PREFIX` | `audio/` | Key prefix for stored audio |
+
+### Modal
+
+Set `AAVAAZ_STORE_AUDIO=1` in the Modal secret:
+
+```bash
+modal secret create aavaaz-config AAVAAZ_STORE_AUDIO=1
+```
+
+Audio files are stored in a Modal Volume (`aavaaz-audio-store`), accessible via
+`modal volume ls aavaaz-audio-store`.

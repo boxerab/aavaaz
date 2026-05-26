@@ -1109,8 +1109,8 @@
             <div class="demo-body">
 <span class="c"># Start with all features enabled</span>
 <span class="p">$</span> <span class="w">aavaaz serve</span> <span class="f">--port</span> <span class="v">9090</span> <span class="f">--backend</span> <span class="v">faster_whisper</span> \
-    <span class="f">--enable_rest</span> <span class="f">--api_key</span> <span class="v">"sk-..."</span> <span class="f">--noise_reduction</span> <span class="v">near_field</span> \
-    <span class="f">--batch_inference</span> <span class="f">--metrics_port</span> <span class="v">9091</span>
+    <span class="f">--api-key</span> <span class="v">"sk-..."</span> \
+    <span class="f">--batch-inference</span> <span class="f">--metrics-port</span> <span class="v">9091</span>
 
 <span class="o">INFO  Aavaaz v0.8.0 starting...</span>
 <span class="o">INFO  Backend: faster_whisper | Model: small</span>
@@ -1563,7 +1563,7 @@
 pip install aavaaz
 
 <span class="cmt"># Start server</span>
-aavaaz serve <span class="kw">--port</span> <span class="num">9090</span> <span class="kw">--backend</span> <span class="str">faster_whisper</span> <span class="kw">--enable_rest</span>
+aavaaz serve <span class="kw">--port</span> <span class="num">9090</span> <span class="kw">--backend</span> <span class="str">faster_whisper</span>
 
 <span class="cmt"># Transcribe from Python</span>
 <span class="kw">from</span> whisper_live.client <span class="kw">import</span> TranscriptionClient
