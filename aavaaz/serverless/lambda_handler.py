@@ -19,6 +19,9 @@ AAVAAZ_OUTPUT_BUCKET  S3 bucket for transcript output (S3 trigger mode)
 AAVAAZ_OUTPUT_PREFIX  Key prefix inside output bucket (default: ``transcripts/``)
 AAVAAZ_ENABLE_PII     ``1`` to enable PII redaction (default: ``0``)
 AAVAAZ_ENABLE_FORMAT  ``1`` to enable smart formatting (default: ``1``)
+AAVAAZ_STORE_AUDIO    ``1`` to store uploaded audio in S3 (default: ``0``)
+AAVAAZ_AUDIO_BUCKET   S3 bucket for stored audio (defaults to output bucket)
+AAVAAZ_AUDIO_PREFIX   Key prefix for stored audio (default: ``audio/``)
 """
 
 from __future__ import annotations
@@ -28,6 +31,8 @@ import json
 import logging
 import os
 import tempfile
+import time
+import traceback
 import uuid
 from pathlib import Path
 from typing import Any
@@ -107,8 +112,40 @@ def _apply_pipeline(segment: dict, pipeline: list[Any]) -> dict:
 # Core transcription
 # ---------------------------------------------------------------------------
 
+def _store_audio(audio_path: str, filename: str | None = None) -> str | None:
+    """Optionally store audio to S3. Returns the S3 key or None if disabled."""
+    if os.environ.get("AAVAAZ_STORE_AUDIO", "0") != "1":
+        return None
+
+    bucket = os.environ.get("AAVAAZ_AUDIO_BUCKET") or os.environ.get("AAVAAZ_OUTPUT_BUCKET", "")
+    if not bucket:
+        logger.warning("AAVAAZ_STORE_AUDIO=1 but no bucket configured")
+        return None
+
+    prefix = os.environ.get("AAVAAZ_AUDIO_PREFIX", "audio/")
+    name = filename or os.path.basename(audio_path)
+    key = f"{prefix}{uuid.uuid4().hex}_{name}"
+
+    try:
+        _s3_client().upload_file(audio_path, bucket, key)
+        logger.info("Stored audio: s3://%s/%s", bucket, key)
+        return key
+    except Exception:
+        logger.exception("Failed to store audio to s3://%s/%s", bucket, key)
+        return None
+
+
 def _transcribe(audio_path: str) -> dict:
     """Transcribe a local audio file and return a result dict."""
+    file_size = os.path.getsize(audio_path)
+    logger.info(
+        "Starting transcription: file=%s size_bytes=%d model=%s",
+        os.path.basename(audio_path),
+        file_size,
+        os.environ.get("AAVAAZ_MODEL", "small.en"),
+    )
+    t0 = time.time()
+
     model = _get_model()
     language = os.environ.get("AAVAAZ_LANGUAGE") or None
     segments, info = model.transcribe(audio_path, language=language, word_timestamps=True)
@@ -129,6 +166,15 @@ def _transcribe(audio_path: str) -> dict:
             ]
         entry = _apply_pipeline(entry, pipeline)
         results.append(entry)
+
+    elapsed = time.time() - t0
+    logger.info(
+        "Transcription complete: duration=%.1fs segments=%d language=%s elapsed=%.2fs",
+        info.duration,
+        len(results),
+        info.language,
+        elapsed,
+    )
 
     return {
         "language": info.language,
@@ -186,22 +232,29 @@ def _s3_client():
 
 def handler(event: dict, context: Any) -> dict:
     """Main Lambda entry point — dispatches to S3, web UI, or API handler."""
-    if "Records" in event:
-        return _handle_s3(event, context)
+    request_id = getattr(context, "aws_request_id", uuid.uuid4().hex) if context else uuid.uuid4().hex
+    logger.info("Request started: request_id=%s", request_id)
 
-    # API Gateway v2 (HTTP API) uses requestContext.http.method
-    http = event.get("requestContext", {}).get("http", {})
-    method = http.get("method", event.get("httpMethod", "POST"))
-    path = http.get("path", event.get("rawPath", event.get("path", "/")))
+    try:
+        if "Records" in event:
+            return _handle_s3(event, context)
 
-    # CORS preflight
-    if method == "OPTIONS":
-        return _response(204, "")
+        # API Gateway v2 (HTTP API) uses requestContext.http.method
+        http = event.get("requestContext", {}).get("http", {})
+        method = http.get("method", event.get("httpMethod", "POST"))
+        path = http.get("path", event.get("rawPath", event.get("path", "/")))
 
-    if method == "GET":
-        return _handle_web_ui(event, path)
+        # CORS preflight
+        if method == "OPTIONS":
+            return _response(204, "")
 
-    return _handle_api(event, context)
+        if method == "GET":
+            return _handle_web_ui(event, path)
+
+        return _handle_api(event, context)
+    except Exception:
+        logger.exception("Unhandled error: request_id=%s", request_id)
+        return _response(500, json.dumps({"error": "Internal server error"}))
 
 
 def _handle_s3(event: dict, context: Any) -> dict:
@@ -214,11 +267,13 @@ def _handle_s3(event: dict, context: Any) -> dict:
     for record in event.get("Records", []):
         bucket = record["s3"]["bucket"]["name"]
         key = unquote_plus(record["s3"]["object"]["key"])
-        logger.info("Processing s3://%s/%s", bucket, key)
+        obj_size = record["s3"]["object"].get("size", 0)
+        logger.info("Processing s3://%s/%s size_bytes=%d", bucket, key, obj_size)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             local_path = os.path.join(tmpdir, os.path.basename(key))
             s3.download_file(bucket, key, local_path)
+            _store_audio(local_path, os.path.basename(key))
             result = _transcribe(local_path)
 
         output = _format_output(result)
@@ -359,6 +414,7 @@ def _handle_api(event: dict, context: Any) -> dict:
             body = base64.b64decode(body).decode()
         payload = json.loads(body) if isinstance(body, str) else body
     except (json.JSONDecodeError, ValueError):
+        logger.warning("Invalid JSON body received")
         return _response(400, json.dumps({"error": "Invalid JSON body"}))
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -383,6 +439,7 @@ def _handle_api(event: dict, context: Any) -> dict:
         else:
             return _response(400, json.dumps({"error": "Provide 'audio_url' or 'audio_base64'"}))
 
+        _store_audio(local_path)
         result = _transcribe(local_path)
 
     output = _format_output(result)
@@ -402,6 +459,8 @@ def _handle_multipart(event: dict) -> dict:
         safe_name = Path(filename or "audio.wav").name
         local_path = os.path.join(tmpdir, safe_name)
         Path(local_path).write_bytes(file_bytes)
+        logger.info("Multipart upload: filename=%s size_bytes=%d", safe_name, len(file_bytes))
+        _store_audio(local_path, safe_name)
         result = _transcribe(local_path)
 
     fmt = response_format or os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json")

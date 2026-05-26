@@ -71,6 +71,12 @@ variable "enable_api_gateway" {
   default     = true
 }
 
+variable "store_audio" {
+  description = "Store uploaded audio files in S3 (disabled by default)"
+  type        = bool
+  default     = false
+}
+
 # ---------- ECR ----------
 
 resource "aws_ecr_repository" "aavaaz_lambda" {
@@ -116,8 +122,8 @@ resource "aws_iam_role" "lambda_exec" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
       Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
@@ -131,14 +137,17 @@ resource "aws_iam_role_policy" "lambda_s3" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = ["s3:GetObject"]
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
         Resource = "${aws_s3_bucket.audio_input.arn}/*"
       },
       {
         Effect = "Allow"
         Action = ["s3:PutObject"]
-        Resource = "${aws_s3_bucket.transcript_output.arn}/*"
+        Resource = [
+          "${aws_s3_bucket.transcript_output.arn}/transcripts/*",
+          "${aws_s3_bucket.transcript_output.arn}/audio/*",
+        ]
       },
     ]
   })
@@ -167,6 +176,9 @@ resource "aws_lambda_function" "transcribe" {
       AAVAAZ_OUTPUT_PREFIX = "transcripts/"
       AAVAAZ_ENABLE_PII    = var.enable_pii_redaction ? "1" : "0"
       AAVAAZ_ENABLE_FORMAT = "1"
+      AAVAAZ_STORE_AUDIO   = var.store_audio ? "1" : "0"
+      AAVAAZ_AUDIO_BUCKET  = var.store_audio ? aws_s3_bucket.transcript_output.id : ""
+      AAVAAZ_AUDIO_PREFIX  = "audio/"
     }
   }
 }
@@ -239,10 +251,10 @@ resource "aws_apigatewayv2_api" "transcribe" {
 }
 
 resource "aws_apigatewayv2_integration" "lambda" {
-  count              = var.enable_api_gateway ? 1 : 0
-  api_id             = aws_apigatewayv2_api.transcribe[0].id
-  integration_type   = "AWS_PROXY"
-  integration_uri    = aws_lambda_function.transcribe.invoke_arn
+  count                  = var.enable_api_gateway ? 1 : 0
+  api_id                 = aws_apigatewayv2_api.transcribe[0].id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.transcribe.invoke_arn
   payload_format_version = "2.0"
 }
 

@@ -18,10 +18,16 @@ Environment variables (set via Modal Secrets):
     AAVAAZ_ENABLE_PII     1 to enable PII redaction (default: 0)
     AAVAAZ_ENABLE_FORMAT  1 to enable smart formatting (default: 1)
     AAVAAZ_API_KEY        Optional API key for authentication
+    AAVAAZ_STORE_AUDIO    1 to store uploaded audio to a Modal Volume (default: 0)
 """
+
+import logging
 
 import fastapi
 import modal
+
+logger = logging.getLogger("aavaaz.modal")
+logger.setLevel(logging.INFO)
 
 WHISPER_MODEL = "large-v3"
 
@@ -61,6 +67,10 @@ image = (
 # Optional: create this secret with `modal secret create aavaaz-config KEY=VALUE ...`
 _aavaaz_secret = modal.Secret.from_name("aavaaz-config")
 
+# Optional volume for storing audio uploads (only used when AAVAAZ_STORE_AUDIO=1).
+_audio_volume = modal.Volume.from_name("aavaaz-audio-store", create_if_missing=True)
+AUDIO_VOLUME_PATH = "/audio_store"
+
 
 @app.cls(
     image=image,
@@ -68,6 +78,7 @@ _aavaaz_secret = modal.Secret.from_name("aavaaz-config")
     timeout=600,
     secrets=[_aavaaz_secret],
     scaledown_window=120,
+    volumes={AUDIO_VOLUME_PATH: _audio_volume},
 )
 @modal.concurrent(max_inputs=4)
 class Transcriber:
@@ -83,6 +94,7 @@ class Transcriber:
         from whisper_live.transcriber.transcriber_faster_whisper import WhisperModel
 
         model_name = os.environ.get("AAVAAZ_MODEL", WHISPER_MODEL)
+        logger.info("Loading Whisper model: %s", model_name)
         self.model = WhisperModel(model_name, device="cuda", compute_type="float16")
         self.batch_worker = BatchInferenceWorker(
             self.model, max_batch_size=4, batch_window_ms=100
@@ -90,6 +102,8 @@ class Transcriber:
         self.batch_worker.start()
         self.language = os.environ.get("AAVAAZ_LANGUAGE") or None
         self.api_key = os.environ.get("AAVAAZ_API_KEY")
+        self.store_audio = os.environ.get("AAVAAZ_STORE_AUDIO", "0") == "1"
+        logger.info("Model loaded. store_audio=%s", self.store_audio)
 
     @modal.asgi_app()
     def web(self):
@@ -122,56 +136,87 @@ class Transcriber:
 
     async def _handle_transcription(self, request):
         import os
+        import shutil
         import tempfile
+        import time
         import uuid
         from pathlib import Path
 
         import fastapi
 
+        request_id = uuid.uuid4().hex[:12]
+        logger.info("Request received: request_id=%s", request_id)
+
         # Auth check
         if self.api_key:
             auth = request.headers.get("Authorization")
             if not auth or auth != f"Bearer {self.api_key}":
+                logger.warning("Unauthorized request: request_id=%s", request_id)
                 raise fastapi.HTTPException(status_code=401, detail="Unauthorized")
 
         content_type = request.headers.get("content-type", "")
         response_format = None
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            if "multipart/form-data" in content_type:
-                form = await request.form()
-                upload = form.get("file")
-                if upload is None:
-                    raise fastapi.HTTPException(status_code=400, detail="No 'file' field")
-                response_format = form.get("response_format")
-                filename = getattr(upload, "filename", None) or f"{uuid.uuid4().hex}.wav"
-                local_path = os.path.join(tmpdir, Path(filename).name)
-                content = await upload.read()
-                Path(local_path).write_bytes(content)
-            elif "application/json" in content_type:
-                import base64
-
-                payload = await request.json()
-                if "audio_base64" in payload:
-                    filename = payload.get("filename", f"{uuid.uuid4().hex}.wav")
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                if "multipart/form-data" in content_type:
+                    form = await request.form()
+                    upload = form.get("file")
+                    if upload is None:
+                        raise fastapi.HTTPException(status_code=400, detail="No 'file' field")
+                    response_format = form.get("response_format")
+                    filename = getattr(upload, "filename", None) or f"{uuid.uuid4().hex}.wav"
                     local_path = os.path.join(tmpdir, Path(filename).name)
-                    audio_bytes = base64.b64decode(payload["audio_base64"])
-                    Path(local_path).write_bytes(audio_bytes)
+                    content = await upload.read()
+                    Path(local_path).write_bytes(content)
+                    logger.info("Multipart upload: request_id=%s filename=%s size_bytes=%d", request_id, filename, len(content))
+                elif "application/json" in content_type:
+                    import base64
+
+                    payload = await request.json()
+                    if "audio_base64" in payload:
+                        filename = payload.get("filename", f"{uuid.uuid4().hex}.wav")
+                        local_path = os.path.join(tmpdir, Path(filename).name)
+                        audio_bytes = base64.b64decode(payload["audio_base64"])
+                        Path(local_path).write_bytes(audio_bytes)
+                        logger.info("JSON upload: request_id=%s filename=%s size_bytes=%d", request_id, filename, len(audio_bytes))
+                    else:
+                        raise fastapi.HTTPException(
+                            status_code=400, detail="Provide 'file' (multipart) or 'audio_base64' (JSON)"
+                        )
+                elif "application/octet-stream" in content_type:
+                    local_path = os.path.join(tmpdir, "audio.wav")
+                    body = await request.body()
+                    Path(local_path).write_bytes(body)
+                    logger.info("Octet-stream upload: request_id=%s size_bytes=%d", request_id, len(body))
                 else:
                     raise fastapi.HTTPException(
-                        status_code=400, detail="Provide 'file' (multipart) or 'audio_base64' (JSON)"
+                        status_code=400,
+                        detail="Unsupported Content-Type. Use multipart/form-data, application/json, or application/octet-stream",
                     )
-            elif "application/octet-stream" in content_type:
-                local_path = os.path.join(tmpdir, "audio.wav")
-                body = await request.body()
-                Path(local_path).write_bytes(body)
-            else:
-                raise fastapi.HTTPException(
-                    status_code=400,
-                    detail="Unsupported Content-Type. Use multipart/form-data, application/json, or application/octet-stream",
-                )
 
-            result = self._transcribe(local_path)
+                # Optional audio storage
+                if self.store_audio:
+                    store_name = f"{uuid.uuid4().hex}_{os.path.basename(local_path)}"
+                    store_path = os.path.join(AUDIO_VOLUME_PATH, store_name)
+                    shutil.copy2(local_path, store_path)
+                    logger.info("Stored audio: request_id=%s path=%s", request_id, store_path)
+
+                t0 = time.time()
+                result = self._transcribe(local_path)
+                elapsed = time.time() - t0
+                logger.info(
+                    "Transcription complete: request_id=%s duration=%.1fs segments=%d elapsed=%.2fs",
+                    request_id,
+                    result.get("duration", 0),
+                    len(result.get("segments", [])),
+                    elapsed,
+                )
+        except fastapi.HTTPException:
+            raise
+        except Exception:
+            logger.exception("Unhandled error: request_id=%s", request_id)
+            raise fastapi.HTTPException(status_code=500, detail="Internal server error")
 
         fmt = response_format or os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json")
         if fmt == "text":
@@ -186,6 +231,9 @@ class Transcriber:
         from faster_whisper.audio import decode_audio
         from whisper_live.batch_inference import BatchRequest
 
+        file_size = os.path.getsize(audio_path)
+        logger.info("Starting transcription: file=%s size_bytes=%d", os.path.basename(audio_path), file_size)
+
         # Decode audio to raw float32 samples at 16kHz
         audio = decode_audio(audio_path)
 
@@ -195,6 +243,7 @@ class Transcriber:
         req.future.wait(timeout=300)
 
         if req.error:
+            logger.error("Transcription failed: %s", req.error)
             raise req.error
 
         segments = req.result or []
