@@ -23,8 +23,11 @@ with enterprise features that compete with Deepgram, ElevenLabs, and AssemblyAI.
 # Install uv: https://docs.astral.sh/uv/
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Create venv and sync dependencies
-uv venv .venv
+# Clone WhisperLive alongside aavaaz (required — aavaaz uses a patched fork)
+git clone https://github.com/collabora/WhisperLive.git ../WhisperLive
+
+# Create venv with Python 3.12 (required; 3.14 not yet supported by ML deps)
+uv venv .venv --python python3.12
 source .venv/bin/activate
 
 # Install aavaaz with ML stack (whisper-live, torch, etc)
@@ -37,11 +40,19 @@ aavaaz serve --model large-v3
 aavaaz transcribe audio.wav
 ```
 
+> **Fedora 43+ / Python 3.14 note:** The ML stack (PyTorch, faster-whisper) does
+> not yet publish wheels for Python 3.14. Use `python3.12` explicitly when
+> creating the virtualenv. On Fedora: `sudo dnf install python3.12`
+
 ### Option 2: Using `pip` with Requirements Files
 
 ```bash
-# Create a virtualenv (Python 3.12+ recommended)
+# Create a virtualenv (Python 3.12 required)
 python3.12 -m venv .venv && source .venv/bin/activate
+
+# Clone WhisperLive (patched fork required by aavaaz)
+git clone https://github.com/collabora/WhisperLive.git ../WhisperLive
+pip install -e ../WhisperLive
 
 # Install base + ML stack (large ~20GB download for torch/onnx)
 pip install -r requirements/whisper.txt
@@ -63,7 +74,11 @@ curl -X POST http://localhost:8000/v1/audio/transcriptions \
 ### Option 3: Using `pyproject.toml` Extras
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3.12 -m venv .venv && source .venv/bin/activate
+
+# Clone WhisperLive (patched fork required by aavaaz)
+git clone https://github.com/collabora/WhisperLive.git ../WhisperLive
+pip install -e ../WhisperLive
 
 # Install base only
 pip install -e .

@@ -53,6 +53,9 @@ Homepage = "https://github.com/collabora/aavaaz"
 Repository = "https://github.com/collabora/aavaaz"
 Issues = "https://github.com/collabora/aavaaz/issues"
 
+[tool.uv.sources]
+whisper-live = { path = "../WhisperLive", editable = true }
+
 [tool.setuptools.packages.find]
 include = ["aavaaz*"]
 

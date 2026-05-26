@@ -1559,9 +1559,14 @@
             </div>
             <div class="tab-body">
                 <div class="tab-panel active" id="tab-python">
-<pre><span class="cmt"># Install (virtualenv recommended)</span>
-python -m venv .venv && source .venv/bin/activate
-pip install aavaaz whisper-live
+<pre><span class="cmt"># Clone repos (aavaaz uses a patched WhisperLive fork)</span>
+git clone https://github.com/collabora/aavaaz.git && cd aavaaz
+git clone https://github.com/collabora/WhisperLive.git ../WhisperLive
+
+<span class="cmt"># Install with uv (Python 3.12 required; 3.14 not yet supported)</span>
+uv venv .venv --python python3.12
+source .venv/bin/activate
+uv sync --extra whisper
 
 <span class="cmt"># Start server</span>
 aavaaz serve <span class="kw">--port</span> <span class="num">9090</span> <span class="kw">--backend</span> <span class="str">faster_whisper</span>
@@ -1581,7 +1586,8 @@ client(<span class="str">"audio.wav"</span>)   <span class="cmt"># transcribe a 
 client()              <span class="cmt"># transcribe from microphone</span></pre>
                 </div>
                 <div class="tab-panel" id="tab-javascript">
-<pre><span class="kw">import</span> { AavaazClient } <span class="kw">from</span> <span class="str">'./aavaaz'</span>;
+<pre><span class="cmt">// Requires a running aavaaz server (see Python tab to start one)</span>
+<span class="kw">import</span> { AavaazClient } <span class="kw">from</span> <span class="str">'./aavaaz'</span>;
 
 <span class="kw">const</span> client = <span class="kw">new</span> <span class="fn">AavaazClient</span>(<span class="str">'http://localhost:8000'</span>, {
     apiKey: <span class="str">'your-key'</span>,
@@ -1597,7 +1603,8 @@ console.<span class="fn">log</span>(result.text);
 }</pre>
                 </div>
                 <div class="tab-panel" id="tab-go">
-<pre><span class="kw">import</span> wl <span class="str">"github.com/collabora/Aavaaz/sdks/go"</span>
+<pre><span class="cmt">// Requires a running aavaaz server (see Python tab to start one)</span>
+<span class="kw">import</span> wl <span class="str">"github.com/collabora/Aavaaz/sdks/go"</span>
 
 client := wl.<span class="fn">NewClient</span>(<span class="str">"http://localhost:8000"</span>, &amp;wl.Config{
     APIKey: <span class="str">"your-key"</span>,
@@ -1630,7 +1637,9 @@ docker build -f docker/Dockerfile.jetson -t aavaaz-jetson .
 docker run --runtime nvidia -p <span class="num">9090</span>:<span class="num">9090</span> aavaaz-jetson</pre>
                 </div>
                 <div class="tab-panel" id="tab-rest">
-<pre><span class="cmt"># Transcribe a file</span>
+<pre><span class="cmt"># Requires a running aavaaz server (see Python tab to start one)</span>
+
+<span class="cmt"># Transcribe a file</span>
 curl -X POST http://localhost:<span class="num">8000</span>/v1/transcriptions \
   -H <span class="str">"Authorization: Bearer sk-..."</span> \
   -F <span class="str">"file=@audio.wav"</span> \
