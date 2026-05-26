@@ -25,9 +25,7 @@ _wl_tfw.get_compression_ratio = MagicMock()
 _wl_tfw.get_suppressed_tokens = MagicMock()
 sys.modules.setdefault("whisper_live.transcriber.transcriber_faster_whisper", _wl_tfw)
 
-# noqa: E402
-
-from aavaaz.features.batch_inference import (
+from aavaaz.features.batch_inference import (  # noqa: E402
     BatchInferenceWorker,
     BatchRequest,
 )

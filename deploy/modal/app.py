@@ -51,7 +51,8 @@ image = (
         "tqdm",
     )
     .run_commands(
-        f"python -c \"from faster_whisper import WhisperModel; WhisperModel('{WHISPER_MODEL}', device='cpu')\""
+        f"python -c \"from faster_whisper import WhisperModel; "
+        f"WhisperModel('{WHISPER_MODEL}', device='cpu')\""
     )
     .add_local_dir("../../aavaaz", remote_path="/root/aavaaz_pkg/aavaaz", copy=True)
     .add_local_file(
@@ -211,7 +212,10 @@ class Transcriber:
                 else:
                     raise fastapi.HTTPException(
                         status_code=400,
-                        detail="Unsupported Content-Type. Use multipart/form-data, application/json, or application/octet-stream",
+                        detail=(
+                            "Unsupported Content-Type. Use multipart/form-data, "
+                            "application/json, or application/octet-stream"
+                        ),
                     )
 
                 # Optional audio storage
@@ -227,7 +231,8 @@ class Transcriber:
                 result = self._transcribe(local_path)
                 elapsed = time.time() - t0
                 logger.info(
-                    "Transcription complete: request_id=%s duration=%.1fs segments=%d elapsed=%.2fs",
+                    "Transcription complete: request_id=%s duration=%.1fs "
+                    "segments=%d elapsed=%.2fs",
                     request_id,
                     result.get("duration", 0),
                     len(result.get("segments", [])),
