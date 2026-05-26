@@ -33,6 +33,7 @@ def _env(monkeypatch):
 
 # -- Mock transcription result ------------------------------------------------
 
+
 def _fake_segments():
     seg = MagicMock()
     seg.start = 0.0
@@ -128,10 +129,12 @@ def test_handler_api_base64(mock_whisper, _env):
 
     audio_bytes = b"\x00" * 100  # dummy
     event = {
-        "body": json.dumps({
-            "audio_base64": base64.b64encode(audio_bytes).decode(),
-            "filename": "test.wav",
-        }),
+        "body": json.dumps(
+            {
+                "audio_base64": base64.b64encode(audio_bytes).decode(),
+                "filename": "test.wav",
+            }
+        ),
     }
 
     result = handler(event, None)

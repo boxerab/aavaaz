@@ -63,7 +63,10 @@ class LocalStorage:
         now = time.time()
         for fname in os.listdir(self.base_dir):
             fpath = os.path.join(self.base_dir, fname)
-            if os.path.isfile(fpath) and (now - os.path.getmtime(fpath)) > max_age_seconds:
+            if (
+                os.path.isfile(fpath)
+                and (now - os.path.getmtime(fpath)) > max_age_seconds
+            ):
                 os.unlink(fpath)
                 count += 1
         return count
@@ -72,11 +75,15 @@ class LocalStorage:
 class S3Storage:
     """Store files in AWS S3 for production deployments."""
 
-    def __init__(self, bucket: str, prefix: str = "whisperlive/", region: str | None = None):
+    def __init__(
+        self, bucket: str, prefix: str = "whisperlive/", region: str | None = None
+    ):
         try:
             import boto3
         except ImportError:
-            raise ImportError("boto3 is required for S3 storage. Install with: pip install boto3")
+            raise ImportError(
+                "boto3 is required for S3 storage. Install with: pip install boto3"
+            )
         self.bucket = bucket
         self.prefix = prefix
         kwargs = {}
@@ -87,14 +94,20 @@ class S3Storage:
         if endpoint_url:
             kwargs["endpoint_url"] = endpoint_url
             # For MinIO with self-signed certs, disable SSL verification
-            if endpoint_url.startswith("https://") and os.environ.get("PYTHONHTTPSVERIFY") == "0":
+            if (
+                endpoint_url.startswith("https://")
+                and os.environ.get("PYTHONHTTPSVERIFY") == "0"
+            ):
                 kwargs["verify"] = False
                 # Suppress InsecureRequestWarning for self-signed certs
                 import urllib3
+
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         self._s3 = boto3.client("s3", **kwargs)
-        logger.info(f"S3 storage initialized: s3://{bucket}/{prefix}"
-                    + (f" (endpoint: {endpoint_url})" if endpoint_url else ""))
+        logger.info(
+            f"S3 storage initialized: s3://{bucket}/{prefix}"
+            + (f" (endpoint: {endpoint_url})" if endpoint_url else "")
+        )
 
     def _key(self, filename: str) -> str:
         return f"{self.prefix}{filename}"

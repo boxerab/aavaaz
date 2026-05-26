@@ -37,9 +37,11 @@ def search_segments(
         matches = list(pattern.finditer(text))
         if matches:
             highlighted = pattern.sub(f"**{query}**", text)
-            results.append({
-                **seg,
-                "highlighted": highlighted,
-                "match_count": len(matches),
-            })
+            results.append(
+                {
+                    **seg,
+                    "highlighted": highlighted,
+                    "match_count": len(matches),
+                }
+            )
     return results

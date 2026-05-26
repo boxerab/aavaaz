@@ -55,7 +55,9 @@ class TestTranslationRelay:
 
         # Set a translator on the channel
         channel = relay.get_channel("ch1")
-        channel.translator = lambda text, source_lang, target_lang: f"[{target_lang}]{text}"
+        channel.translator = (
+            lambda text, source_lang, target_lang: f"[{target_lang}]{text}"
+        )
 
         received = []
         relay.subscribe("ch1", "fr", "sub1", callback=lambda seg: received.append(seg))

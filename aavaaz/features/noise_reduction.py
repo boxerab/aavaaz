@@ -8,11 +8,11 @@ step on incoming audio frames.
 Install: pip install noisereduce
 """
 
-
 import numpy as np
 
 try:
     import noisereduce as nr
+
     _HAS_NOISEREDUCE = True
 except ImportError:
     _HAS_NOISEREDUCE = False
@@ -53,7 +53,7 @@ class NoiseReducer:
         if stationary is not None:
             self._stationary = stationary
         else:
-            self._stationary = (mode == "near_field")
+            self._stationary = mode == "near_field"
 
     def reduce(self, audio: np.ndarray) -> np.ndarray:
         """Apply noise reduction to an audio array.

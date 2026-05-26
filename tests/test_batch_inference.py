@@ -25,7 +25,10 @@ _wl_tfw.get_compression_ratio = MagicMock()
 _wl_tfw.get_suppressed_tokens = MagicMock()
 sys.modules.setdefault("whisper_live.transcriber.transcriber_faster_whisper", _wl_tfw)
 
-from aavaaz.features.batch_inference import BatchInferenceWorker, BatchRequest  # noqa: E402
+from aavaaz.features.batch_inference import (
+    BatchInferenceWorker,
+    BatchRequest,
+)  # noqa: E402
 
 
 class TestBatchRequest:
@@ -47,7 +50,9 @@ class TestBatchRequest:
 class TestBatchInferenceWorker:
     def test_start_and_stop(self):
         mock_transcriber = MagicMock()
-        worker = BatchInferenceWorker(mock_transcriber, max_batch_size=4, batch_window_ms=10)
+        worker = BatchInferenceWorker(
+            mock_transcriber, max_batch_size=4, batch_window_ms=10
+        )
         worker.start()
         assert worker._thread is not None
         assert worker._thread.is_alive()
@@ -63,7 +68,9 @@ class TestBatchInferenceWorker:
         mock_info = MagicMock()
         mock_transcriber.transcribe.return_value = (mock_segments, mock_info)
 
-        worker = BatchInferenceWorker(mock_transcriber, max_batch_size=4, batch_window_ms=10)
+        worker = BatchInferenceWorker(
+            mock_transcriber, max_batch_size=4, batch_window_ms=10
+        )
         worker.start()
 
         try:
@@ -83,13 +90,17 @@ class TestBatchInferenceWorker:
         mock_transcriber = MagicMock()
         mock_transcriber.transcribe.return_value = ([MagicMock()], MagicMock())
 
-        worker = BatchInferenceWorker(mock_transcriber, max_batch_size=4, batch_window_ms=100)
+        worker = BatchInferenceWorker(
+            mock_transcriber, max_batch_size=4, batch_window_ms=100
+        )
         worker.start()
 
         try:
             requests = []
             for _ in range(3):
-                req = BatchRequest(audio=np.zeros(16000, dtype=np.float32), language="en")
+                req = BatchRequest(
+                    audio=np.zeros(16000, dtype=np.float32), language="en"
+                )
                 worker.submit(req)
                 requests.append(req)
 

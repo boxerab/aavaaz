@@ -59,7 +59,9 @@ class TestMergeChannelSegments:
     def test_custom_labels(self):
         ch0 = [{"text": "hi", "start": 0.0, "end": 1.0}]
         ch1 = [{"text": "hey", "start": 0.5, "end": 1.5}]
-        merged = merge_channel_segments([ch0, ch1], channel_labels=["agent", "customer"])
+        merged = merge_channel_segments(
+            [ch0, ch1], channel_labels=["agent", "customer"]
+        )
         assert merged[0]["channel"] == "agent"
         assert merged[1]["channel"] == "customer"
 

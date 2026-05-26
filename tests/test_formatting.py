@@ -61,7 +61,9 @@ class TestCollapseWhitespace:
 
 class TestFormatTranscript:
     def test_all_options(self):
-        result = format_transcript("  hello world.  how  are you  ", capitalize=True, numbers=False)
+        result = format_transcript(
+            "  hello world.  how  are you  ", capitalize=True, numbers=False
+        )
         assert result.startswith("Hello")
         assert "  " not in result
 

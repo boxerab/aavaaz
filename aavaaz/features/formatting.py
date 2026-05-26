@@ -13,15 +13,36 @@ import re
 
 # Spoken-number word values
 _ONES = {
-    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4,
-    "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
-    "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13,
-    "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
-    "eighteen": 18, "nineteen": 19,
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
 }
 _TENS = {
-    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
-    "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "fifty": 50,
+    "sixty": 60,
+    "seventy": 70,
+    "eighty": 80,
+    "ninety": 90,
 }
 _SCALES = {
     "hundred": 100,
@@ -70,7 +91,7 @@ def _replace_spoken_numbers(text):
     i = 0
     while i < len(words):
         lower = words[i].lower().rstrip(".,!?;:")
-        trailing_punct = words[i][len(lower):]
+        trailing_punct = words[i][len(lower) :]
         if lower in _NUMBER_WORDS and lower != "and":
             # Collect consecutive number words
             num_words = []
@@ -85,7 +106,7 @@ def _replace_spoken_numbers(text):
             # Grab trailing punctuation from last number word
             last_raw = words[j - 1]
             last_clean = last_raw.lower().rstrip(".,!?;:")
-            end_punct = last_raw[len(last_clean):]
+            end_punct = last_raw[len(last_clean) :]
 
             val = _words_to_number(num_words)
             if val is not None:
@@ -106,13 +127,15 @@ def _capitalize_sentences(text):
     if text:
         text = text[0].upper() + text[1:]
     # Capitalize after . ! ?
-    text = re.sub(r'([.!?])\s+([a-z])', lambda m: m.group(1) + " " + m.group(2).upper(), text)
+    text = re.sub(
+        r"([.!?])\s+([a-z])", lambda m: m.group(1) + " " + m.group(2).upper(), text
+    )
     return text
 
 
 def _collapse_whitespace(text):
     """Collapse multiple spaces into one and strip."""
-    return re.sub(r' {2,}', ' ', text).strip()
+    return re.sub(r" {2,}", " ", text).strip()
 
 
 def format_transcript(text, capitalize=True, numbers=True, smart=False):
@@ -144,25 +167,52 @@ def format_transcript(text, capitalize=True, numbers=True, smart=False):
 # ---------------------------------------------------------------------------
 
 _MONTHS = {
-    "january": "January", "february": "February", "march": "March",
-    "april": "April", "may": "May", "june": "June", "july": "July",
-    "august": "August", "september": "September", "october": "October",
-    "november": "November", "december": "December",
+    "january": "January",
+    "february": "February",
+    "march": "March",
+    "april": "April",
+    "may": "May",
+    "june": "June",
+    "july": "July",
+    "august": "August",
+    "september": "September",
+    "october": "October",
+    "november": "November",
+    "december": "December",
 }
 
 _ORDINAL_MAP = {
-    "first": "1st", "second": "2nd", "third": "3rd", "fourth": "4th",
-    "fifth": "5th", "sixth": "6th", "seventh": "7th", "eighth": "8th",
-    "ninth": "9th", "tenth": "10th", "eleventh": "11th", "twelfth": "12th",
-    "thirteenth": "13th", "fourteenth": "14th", "fifteenth": "15th",
-    "sixteenth": "16th", "seventeenth": "17th", "eighteenth": "18th",
-    "nineteenth": "19th", "twentieth": "20th", "thirtieth": "30th",
+    "first": "1st",
+    "second": "2nd",
+    "third": "3rd",
+    "fourth": "4th",
+    "fifth": "5th",
+    "sixth": "6th",
+    "seventh": "7th",
+    "eighth": "8th",
+    "ninth": "9th",
+    "tenth": "10th",
+    "eleventh": "11th",
+    "twelfth": "12th",
+    "thirteenth": "13th",
+    "fourteenth": "14th",
+    "fifteenth": "15th",
+    "sixteenth": "16th",
+    "seventeenth": "17th",
+    "eighteenth": "18th",
+    "nineteenth": "19th",
+    "twentieth": "20th",
+    "thirtieth": "30th",
 }
 
 _CURRENCY_MAP = {
-    "dollars": "$", "dollar": "$", "bucks": "$",
-    "euros": "€", "euro": "€",
-    "pounds": "£", "pound": "£",
+    "dollars": "$",
+    "dollar": "$",
+    "bucks": "$",
+    "euros": "€",
+    "euro": "€",
+    "pounds": "£",
+    "pound": "£",
     "yen": "¥",
 }
 
@@ -170,7 +220,7 @@ _CURRENCY_MAP = {
 def _format_currency(text):
     """Convert 'fifty dollars' → '$50', 'twenty euros' → '€20'."""
     pattern = re.compile(
-        r'\b(\d+)\s+(' + '|'.join(_CURRENCY_MAP.keys()) + r')\b',
+        r"\b(\d+)\s+(" + "|".join(_CURRENCY_MAP.keys()) + r")\b",
         re.IGNORECASE,
     )
 
@@ -184,7 +234,7 @@ def _format_currency(text):
 
 def _format_percentages(text):
     """Convert 'fifty percent' or '50 percent' → '50%'."""
-    text = re.sub(r'\b(\d+)\s+percent\b', r'\1%', text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(\d+)\s+percent\b", r"\1%", text, flags=re.IGNORECASE)
     return text
 
 
@@ -192,11 +242,16 @@ def _format_times(text):
     """Convert spoken times: 'three thirty p m' → '3:30 PM'."""
     # "X thirty/fifteen/forty-five AM/PM"
     time_pattern = re.compile(
-        r'\b(\d{1,2})\s+(o\'?clock|(?:fifteen|thirty|forty[\s-]?five))\s*(a\s*m|p\s*m)?\b',
+        r"\b(\d{1,2})\s+(o\'?clock|(?:fifteen|thirty|forty[\s-]?five))\s*(a\s*m|p\s*m)?\b",
         re.IGNORECASE,
     )
-    minute_map = {"fifteen": "15", "thirty": "30", "forty five": "45",
-                  "forty-five": "45", "fortyfive": "45"}
+    minute_map = {
+        "fifteen": "15",
+        "thirty": "30",
+        "forty five": "45",
+        "forty-five": "45",
+        "fortyfive": "45",
+    }
 
     def _replace_time(m):
         hour = m.group(1)
@@ -217,16 +272,16 @@ def _format_times(text):
 def _format_ordinals(text):
     """Convert spoken ordinals to numeric: 'twenty first' → '21st'."""
     for word, num in _ORDINAL_MAP.items():
-        text = re.sub(r'\b' + word + r'\b', num, text, flags=re.IGNORECASE)
+        text = re.sub(r"\b" + word + r"\b", num, text, flags=re.IGNORECASE)
     return text
 
 
 def _format_dates(text):
     """Convert 'January fifteenth twenty twenty three' patterns."""
-    month_pattern = '|'.join(_MONTHS.keys())
+    month_pattern = "|".join(_MONTHS.keys())
     # "Month Day" pattern (month + number)
     text = re.sub(
-        r'\b(' + month_pattern + r')\s+(\d{1,2}(?:st|nd|rd|th)?)\b',
+        r"\b(" + month_pattern + r")\s+(\d{1,2}(?:st|nd|rd|th)?)\b",
         lambda m: _MONTHS[m.group(1).lower()] + " " + m.group(2),
         text,
         flags=re.IGNORECASE,

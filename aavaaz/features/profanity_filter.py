@@ -10,16 +10,33 @@ import re
 
 # Common English profanity word list (kept minimal and non-exhaustive)
 _DEFAULT_PROFANITY = {
-    "ass", "asshole", "bastard", "bitch", "bullshit", "cock", "crap",
-    "damn", "dick", "fuck", "fucking", "fucker", "goddamn", "hell",
-    "motherfucker", "motherfucking", "piss", "shit", "shitty", "whore",
+    "ass",
+    "asshole",
+    "bastard",
+    "bitch",
+    "bullshit",
+    "cock",
+    "crap",
+    "damn",
+    "dick",
+    "fuck",
+    "fucking",
+    "fucker",
+    "goddamn",
+    "hell",
+    "motherfucker",
+    "motherfucking",
+    "piss",
+    "shit",
+    "shitty",
+    "whore",
 }
 
 
 def _build_pattern(words: set[str]) -> re.Pattern:
     """Build a compiled regex that matches any of the given words (case-insensitive)."""
     escaped = sorted((re.escape(w) for w in words), key=len, reverse=True)
-    return re.compile(r'\b(' + '|'.join(escaped) + r')\b', re.IGNORECASE)
+    return re.compile(r"\b(" + "|".join(escaped) + r")\b", re.IGNORECASE)
 
 
 _DEFAULT_PATTERN = _build_pattern(_DEFAULT_PROFANITY)
@@ -73,7 +90,7 @@ def filter_profanity(
     if mode == "remove":
         # Remove the word and collapse extra spaces
         result = pattern.sub("", text)
-        return re.sub(r' {2,}', ' ', result).strip()
+        return re.sub(r" {2,}", " ", result).strip()
 
     def _replacer(match):
         return _mask_word(match.group(0), mask_char=mask_char, mode=mode)

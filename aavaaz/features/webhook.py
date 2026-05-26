@@ -51,10 +51,14 @@ def send_webhook(
             status = response.getcode()
 
             if 200 <= status < 300:
-                logger.info(f"Webhook delivered to {url} (attempt {attempt + 1}, status {status})")
+                logger.info(
+                    f"Webhook delivered to {url} (attempt {attempt + 1}, status {status})"
+                )
                 return True
             else:
-                logger.warning(f"Webhook to {url} returned {status} (attempt {attempt + 1})")
+                logger.warning(
+                    f"Webhook to {url} returned {status} (attempt {attempt + 1})"
+                )
 
         except urllib.error.HTTPError as e:
             status = e.code
@@ -62,10 +66,14 @@ def send_webhook(
             if 400 <= status < 500 and status != 429:
                 logger.error(f"Webhook to {url} failed with {status} (not retrying)")
                 return False
-            logger.warning(f"Webhook to {url} failed with {status} (attempt {attempt + 1})")
+            logger.warning(
+                f"Webhook to {url} failed with {status} (attempt {attempt + 1})"
+            )
 
         except urllib.error.URLError as e:
-            logger.warning(f"Webhook to {url} connection failed: {e.reason} (attempt {attempt + 1})")
+            logger.warning(
+                f"Webhook to {url} connection failed: {e.reason} (attempt {attempt + 1})"
+            )
 
         except Exception as e:
             logger.warning(f"Webhook to {url} error: {e} (attempt {attempt + 1})")

@@ -47,7 +47,10 @@ def _make_formatting_plugin():
     def formatting_plugin(segment):
         if "text" in segment:
             segment["text"] = format_transcript(
-                segment["text"], capitalize=True, numbers=True, smart=True,
+                segment["text"],
+                capitalize=True,
+                numbers=True,
+                smart=True,
             )
         return segment
 
@@ -80,6 +83,8 @@ registry.add("profanity_filter", _make_profanity_plugin(), priority=30)
 
 # Intelligence plugin is heavier — disabled by default
 try:
-    registry.add("audio_intelligence", _make_intelligence_plugin(), priority=90, enabled=False)
+    registry.add(
+        "audio_intelligence", _make_intelligence_plugin(), priority=90, enabled=False
+    )
 except ImportError:
     logger.debug("Audio intelligence module not available")

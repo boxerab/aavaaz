@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Segment:
     """A transcription segment from a single model."""
+
     start: float
     end: float
     text: str
@@ -26,6 +27,7 @@ class Segment:
 @dataclass
 class EnsembleResult:
     """Merged result from multiple models."""
+
     segments: list = field(default_factory=list)
     text: str = ""
     model_results: dict = field(default_factory=dict)
@@ -215,19 +217,23 @@ def create_faster_whisper_model_fn(model_size, device="cpu", compute_type="int8"
     Returns:
         Callable that takes audio → list[Segment]
     """
+
     def transcribe_fn(audio):
         from faster_whisper import WhisperModel
+
         model = WhisperModel(model_size, device=device, compute_type=compute_type)
         raw_segments, info = model.transcribe(audio)
         segments = []
         for s in raw_segments:
-            segments.append(Segment(
-                start=s.start,
-                end=s.end,
-                text=s.text,
-                confidence=getattr(s, "avg_logprob", 0.0),
-                model_name=model_size,
-            ))
+            segments.append(
+                Segment(
+                    start=s.start,
+                    end=s.end,
+                    text=s.text,
+                    confidence=getattr(s, "avg_logprob", 0.0),
+                    model_name=model_size,
+                )
+            )
         return segments
 
     return transcribe_fn

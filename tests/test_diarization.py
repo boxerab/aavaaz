@@ -21,6 +21,7 @@ class TestSpeakerDiarizer:
 
         def fake_compute(audio_np, sample_rate=16000):
             return norm
+
         diarizer._compute_embedding = fake_compute
 
     def test_new_speaker_created(self):

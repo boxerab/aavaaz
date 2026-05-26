@@ -26,8 +26,12 @@ class ModelCache:
         self._cache: OrderedDict = OrderedDict()
         self._lock = threading.Lock()
 
-    def get(self, model_name: str | None = None, device: str = "cpu",
-            compute_type: str = "int8"):
+    def get(
+        self,
+        model_name: str | None = None,
+        device: str = "cpu",
+        compute_type: str = "int8",
+    ):
         """Get or load a WhisperModel, returning it from cache if available.
 
         Args:
@@ -69,6 +73,7 @@ class ModelCache:
     def _load_model(self, model_name, device, compute_type):
         """Load a WhisperModel instance."""
         from faster_whisper import WhisperModel
+
         logging.info(f"Loading model: {model_name} ({device}/{compute_type})")
         return WhisperModel(model_name, device=device, compute_type=compute_type)
 

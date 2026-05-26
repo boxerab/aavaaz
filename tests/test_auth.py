@@ -18,12 +18,14 @@ class TestJWT:
 
     def test_expired_token(self):
         import jwt as pyjwt
+
         token = create_token("user1", expires_in=-1)
         with pytest.raises(pyjwt.ExpiredSignatureError):
             verify_token(token)
 
     def test_invalid_token(self):
         import jwt as pyjwt
+
         with pytest.raises(pyjwt.InvalidTokenError):
             verify_token("not.a.valid.token")
 
@@ -52,6 +54,7 @@ class TestRequireAuth:
     @pytest.mark.asyncio
     async def test_bearer_token_auth(self):
         from fastapi.security import HTTPAuthorizationCredentials
+
         token = create_token("testuser")
         request = MagicMock()
         request.headers = {}
@@ -62,6 +65,7 @@ class TestRequireAuth:
     @pytest.mark.asyncio
     async def test_no_credentials_raises_401(self):
         from fastapi import HTTPException
+
         request = MagicMock()
         request.headers = {}
         with pytest.raises(HTTPException) as exc_info:

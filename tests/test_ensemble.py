@@ -26,15 +26,26 @@ class TestEnsembleTranscriber:
         et = self._make_transcriber(strategy="longest")
 
         def short_model(audio):
-            return [Segment(start=0, end=1, text="hi", confidence=0.9, model_name="short")]
+            return [
+                Segment(start=0, end=1, text="hi", confidence=0.9, model_name="short")
+            ]
 
         def long_model(audio):
-            return [Segment(start=0, end=2, text="hello world", confidence=0.8, model_name="long")]
+            return [
+                Segment(
+                    start=0,
+                    end=2,
+                    text="hello world",
+                    confidence=0.8,
+                    model_name="long",
+                )
+            ]
 
         et.add_model("short", short_model)
         et.add_model("long", long_model)
 
         import numpy as np
+
         result = et.transcribe(np.zeros(16000, dtype=np.float32))
         assert "hello world" in result.text
 
@@ -42,21 +53,27 @@ class TestEnsembleTranscriber:
         et = self._make_transcriber(strategy="confidence")
 
         def low_conf(audio):
-            return [Segment(start=0, end=1, text="lo", confidence=0.3, model_name="low")]
+            return [
+                Segment(start=0, end=1, text="lo", confidence=0.3, model_name="low")
+            ]
 
         def high_conf(audio):
-            return [Segment(start=0, end=1, text="hi", confidence=0.95, model_name="high")]
+            return [
+                Segment(start=0, end=1, text="hi", confidence=0.95, model_name="high")
+            ]
 
         et.add_model("low", low_conf)
         et.add_model("high", high_conf)
 
         import numpy as np
+
         result = et.transcribe(np.zeros(16000, dtype=np.float32))
         assert "hi" in result.text
 
     def test_empty_models(self):
         et = self._make_transcriber()
         import numpy as np
+
         result = et.transcribe(np.zeros(16000, dtype=np.float32))
         assert result.text == ""
 

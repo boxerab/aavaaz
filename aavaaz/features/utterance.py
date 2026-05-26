@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 @dataclass
 class Utterance:
     """A single utterance (a complete thought or sentence)."""
+
     text: str
     start: float  # seconds
     end: float  # seconds
@@ -27,8 +28,12 @@ class Utterance:
         return self.end - self.start
 
     def to_dict(self) -> dict:
-        d = {"text": self.text, "start": self.start, "end": self.end,
-             "is_final": self.is_final}
+        d = {
+            "text": self.text,
+            "start": self.start,
+            "end": self.end,
+            "is_final": self.is_final,
+        }
         if self.speaker:
             d["speaker"] = self.speaker
         return d
@@ -37,6 +42,7 @@ class Utterance:
 @dataclass
 class Paragraph:
     """A paragraph is a group of related utterances."""
+
     utterances: list[Utterance] = field(default_factory=list)
     speaker: str | None = None
 
@@ -66,7 +72,7 @@ class Paragraph:
 
 
 # Sentence-ending punctuation
-_SENTENCE_END = re.compile(r'[.!?]\s*$')
+_SENTENCE_END = re.compile(r"[.!?]\s*$")
 
 
 class UtteranceDetector:
@@ -158,13 +164,15 @@ class UtteranceDetector:
 
         if should_break:
             # Emit the buffered utterance
-            completed.append(Utterance(
-                text=self._buffer_text,
-                start=self._buffer_start,
-                end=self._buffer_end,
-                speaker=self._buffer_speaker,
-                is_final=True,
-            ))
+            completed.append(
+                Utterance(
+                    text=self._buffer_text,
+                    start=self._buffer_start,
+                    end=self._buffer_end,
+                    speaker=self._buffer_speaker,
+                    is_final=True,
+                )
+            )
             # Start new buffer
             self._buffer_text = text.strip()
             self._buffer_start = start
@@ -252,8 +260,12 @@ class ParagraphSegmenter:
                 should_break = True
 
             # Speaker change
-            if (self.split_on_speaker and utt.speaker and prev.speaker
-                    and utt.speaker != prev.speaker):
+            if (
+                self.split_on_speaker
+                and utt.speaker
+                and prev.speaker
+                and utt.speaker != prev.speaker
+            ):
                 should_break = True
 
             # Max sentences

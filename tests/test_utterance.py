@@ -89,7 +89,9 @@ class TestParagraphSegmenter:
         assert len(paras) == 2
 
     def test_speaker_change_splits(self):
-        seg = ParagraphSegmenter(paragraph_pause_seconds=10.0, split_on_speaker_change=True)
+        seg = ParagraphSegmenter(
+            paragraph_pause_seconds=10.0, split_on_speaker_change=True
+        )
         utts = [
             Utterance(text="hi", start=0.0, end=1.0, speaker="A"),
             Utterance(text="hey", start=1.1, end=2.0, speaker="B"),
@@ -98,7 +100,9 @@ class TestParagraphSegmenter:
         assert len(paras) == 2
 
     def test_max_sentences(self):
-        seg = ParagraphSegmenter(paragraph_pause_seconds=100.0, max_sentences_per_paragraph=2)
+        seg = ParagraphSegmenter(
+            paragraph_pause_seconds=100.0, max_sentences_per_paragraph=2
+        )
         utts = [
             Utterance(text="one", start=0.0, end=1.0),
             Utterance(text="two", start=1.1, end=2.0),
@@ -140,15 +144,19 @@ class TestUtteranceDataclass:
 
 class TestParagraphDataclass:
     def test_text_property(self):
-        p = Paragraph(utterances=[
-            Utterance(text="hello", start=0.0, end=1.0),
-            Utterance(text="world", start=1.1, end=2.0),
-        ])
+        p = Paragraph(
+            utterances=[
+                Utterance(text="hello", start=0.0, end=1.0),
+                Utterance(text="world", start=1.1, end=2.0),
+            ]
+        )
         assert p.text == "hello world"
 
     def test_to_dict(self):
-        p = Paragraph(utterances=[
-            Utterance(text="hello", start=0.0, end=1.0),
-        ])
+        p = Paragraph(
+            utterances=[
+                Utterance(text="hello", start=0.0, end=1.0),
+            ]
+        )
         d = p.to_dict()
         assert d["num_sentences"] == 1

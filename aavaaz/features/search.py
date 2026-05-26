@@ -15,6 +15,7 @@ from dataclasses import asdict, dataclass, field
 @dataclass
 class TranscriptMetadata:
     """Metadata for a stored transcription job."""
+
     job_id: str
     user_id: str = ""
     created_at: float = field(default_factory=time.time)
@@ -149,7 +150,7 @@ class TranscriptIndex:
 
             # Sort by creation time, newest first
             results.sort(key=lambda m: m.created_at, reverse=True)
-            return results[offset:offset + limit]
+            return results[offset : offset + limit]
 
     def count(self, user_id: str | None = None) -> int:
         """Count total transcripts, optionally filtered by user."""
@@ -166,6 +167,7 @@ class TranscriptIndex:
 @dataclass
 class UsagePeriod:
     """Usage statistics for a time period."""
+
     user_id: str
     period_start: float
     period_end: float

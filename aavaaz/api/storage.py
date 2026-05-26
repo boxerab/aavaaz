@@ -103,6 +103,6 @@ class S3Storage:
             for obj in page.get("Contents", []):
                 key = obj["Key"]
                 if key.endswith(".json"):
-                    name = key[len(self.prefix):-5]
+                    name = key[len(self.prefix) : -5]
                     ids.append(name)
         return ids

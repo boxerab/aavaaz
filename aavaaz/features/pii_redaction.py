@@ -24,20 +24,14 @@ _REDACTION_MAP = {
 
 # Regex patterns for PII detection
 _PATTERNS = {
-    "ssn": re.compile(
-        r'\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b'
-    ),
-    "credit_card": re.compile(
-        r'\b(?:\d{4}[-\s]?){3}\d{4}\b'
-    ),
+    "ssn": re.compile(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b"),
+    "credit_card": re.compile(r"\b(?:\d{4}[-\s]?){3}\d{4}\b"),
     "phone": re.compile(
-        r'\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}\b'
+        r"\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}\b"
     ),
-    "email": re.compile(
-        r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b'
-    ),
+    "email": re.compile(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b"),
     "ip_address": re.compile(
-        r'\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b'
+        r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b"
     ),
 }
 

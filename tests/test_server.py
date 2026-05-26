@@ -100,23 +100,37 @@ def test_server_run_wires_plugin_pipeline():
 def test_cli_parse_all_flags():
     """Verify CLI parses all serve flags correctly."""
     test_args = [
-        "aavaaz", "serve",
-        "--host", "0.0.0.0",
-        "--port", "9090",
-        "--model", "large-v3",
-        "--api-key", "mykey",
-        "--rate-limit-rpm", "120",
-        "--metrics-port", "9091",
+        "aavaaz",
+        "serve",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "9090",
+        "--model",
+        "large-v3",
+        "--api-key",
+        "mykey",
+        "--rate-limit-rpm",
+        "120",
+        "--metrics-port",
+        "9091",
         "--batch-inference",
-        "--batch-max-size", "16",
-        "--batch-window-ms", "100",
+        "--batch-max-size",
+        "16",
+        "--batch-window-ms",
+        "100",
         "--word-timestamps",
-        "--hotwords", "foo,bar",
+        "--hotwords",
+        "foo,bar",
         "--enable-diarization",
-        "--max-speakers", "8",
+        "--max-speakers",
+        "8",
     ]
 
-    with patch.object(sys, "argv", test_args), patch("aavaaz.server.AavaazServer") as mock_cls:
+    with (
+        patch.object(sys, "argv", test_args),
+        patch("aavaaz.server.AavaazServer") as mock_cls,
+    ):
         mock_cls.return_value.run = MagicMock()
         from aavaaz.cli import main
 

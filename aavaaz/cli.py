@@ -14,14 +14,18 @@ def main():
 
     # --- serve ---
     serve_parser = subparsers.add_parser("serve", help="Start the Aavaaz server")
-    serve_parser.add_argument("--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
+    serve_parser.add_argument(
+        "--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)"
+    )
     serve_parser.add_argument(
         "--port", type=int, default=9090, help="WebSocket port (default: 9090)"
     )
     serve_parser.add_argument(
         "--rest-port", type=int, default=8000, help="REST API port (default: 8000)"
     )
-    serve_parser.add_argument("--model", default="large-v3", help="Whisper model name or path")
+    serve_parser.add_argument(
+        "--model", default="large-v3", help="Whisper model name or path"
+    )
     serve_parser.add_argument(
         "--backend",
         default="faster_whisper",
@@ -29,7 +33,9 @@ def main():
         help="Transcription backend",
     )
     serve_parser.add_argument("--no-rest", action="store_true", help="Disable REST API")
-    serve_parser.add_argument("--api-key", default=None, help="API key for auth (REST + WebSocket)")
+    serve_parser.add_argument(
+        "--api-key", default=None, help="API key for auth (REST + WebSocket)"
+    )
     serve_parser.add_argument(
         "--rate-limit-rpm",
         type=int,
@@ -37,13 +43,21 @@ def main():
         help="Max REST requests per minute per IP (0=unlimited)",
     )
     serve_parser.add_argument(
-        "--metrics-port", type=int, default=0, help="Prometheus metrics port (0=disabled)"
+        "--metrics-port",
+        type=int,
+        default=0,
+        help="Prometheus metrics port (0=disabled)",
     )
     serve_parser.add_argument(
-        "--batch-inference", action="store_true", help="Enable cross-client GPU batching"
+        "--batch-inference",
+        action="store_true",
+        help="Enable cross-client GPU batching",
     )
     serve_parser.add_argument(
-        "--batch-max-size", type=int, default=8, help="Max requests per GPU batch (default: 8)"
+        "--batch-max-size",
+        type=int,
+        default=8,
+        help="Max requests per GPU batch (default: 8)",
     )
     serve_parser.add_argument(
         "--batch-window-ms",
@@ -57,21 +71,34 @@ def main():
         help="Enable word-level timestamps and confidence scores",
     )
     serve_parser.add_argument(
-        "--hotwords", default=None, help="Comma-separated list of terms to boost recognition"
+        "--hotwords",
+        default=None,
+        help="Comma-separated list of terms to boost recognition",
     )
     serve_parser.add_argument(
         "--enable-diarization", action="store_true", help="Enable speaker diarization"
     )
     serve_parser.add_argument(
-        "--max-speakers", type=int, default=10, help="Max speakers for diarization (default: 10)"
+        "--max-speakers",
+        type=int,
+        default=10,
+        help="Max speakers for diarization (default: 10)",
     )
-    serve_parser.add_argument("--log-json", action="store_true", help="Use JSON structured logging")
-    serve_parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging")
+    serve_parser.add_argument(
+        "--log-json", action="store_true", help="Use JSON structured logging"
+    )
+    serve_parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Debug logging"
+    )
 
     # --- transcribe ---
-    transcribe_parser = subparsers.add_parser("transcribe", help="Transcribe an audio file")
+    transcribe_parser = subparsers.add_parser(
+        "transcribe", help="Transcribe an audio file"
+    )
     transcribe_parser.add_argument("file", help="Path to audio file")
-    transcribe_parser.add_argument("--model", default="large-v3", help="Whisper model name or path")
+    transcribe_parser.add_argument(
+        "--model", default="large-v3", help="Whisper model name or path"
+    )
     transcribe_parser.add_argument(
         "--format",
         default="text",

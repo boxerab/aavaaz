@@ -52,7 +52,9 @@ def merge_channel_segments(
 
     merged = []
     for ch_idx, segments in enumerate(channel_segments):
-        label = channel_labels[ch_idx] if ch_idx < len(channel_labels) else f"ch{ch_idx}"
+        label = (
+            channel_labels[ch_idx] if ch_idx < len(channel_labels) else f"ch{ch_idx}"
+        )
         for seg in segments:
             seg_copy = dict(seg)
             seg_copy["channel"] = label
@@ -74,6 +76,7 @@ def detect_channels_from_wav(file_path: str) -> int:
     """
     try:
         import wave
+
         with wave.open(file_path, "rb") as wf:
             return wf.getnchannels()
     except Exception as e:

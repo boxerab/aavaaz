@@ -129,7 +129,9 @@ class SpeakerDiarizer:
 
         if len(self.speakers) >= self.max_speakers:
             # Assign to closest speaker
-            return best_speaker if best_speaker else f"SPEAKER_{self._speaker_count:02d}"
+            return (
+                best_speaker if best_speaker else f"SPEAKER_{self._speaker_count:02d}"
+            )
 
         # Create a new speaker
         speaker_id = f"SPEAKER_{self._speaker_count:02d}"
@@ -187,6 +189,7 @@ class SpeakerDiarizer:
                 # Load from file path
                 try:
                     import soundfile as sf
+
                     data, sr = sf.read(audio, dtype="float32")
                     if data.ndim > 1:
                         data = data[:, 0]  # Take first channel
@@ -197,7 +200,9 @@ class SpeakerDiarizer:
             elif isinstance(audio, np.ndarray):
                 results[name] = self.enroll_speaker(name, audio, sample_rate)
             else:
-                logging.error(f"Unsupported audio type for speaker '{name}': {type(audio)}")
+                logging.error(
+                    f"Unsupported audio type for speaker '{name}': {type(audio)}"
+                )
                 results[name] = False
         return results
 

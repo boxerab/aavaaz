@@ -38,7 +38,9 @@ def deliver_webhook(
     Returns:
         True if delivery succeeded, False after all retries exhausted.
     """
-    body = json.dumps({"event": event, "data": payload, "timestamp": time.time()}).encode()
+    body = json.dumps(
+        {"event": event, "data": payload, "timestamp": time.time()}
+    ).encode()
     headers = {"Content-Type": "application/json"}
 
     if secret:
@@ -50,7 +52,12 @@ def deliver_webhook(
             req = Request(url, data=body, headers=headers, method="POST")
             with urlopen(req, timeout=timeout) as resp:
                 if 200 <= resp.status < 300:
-                    logger.info("Webhook delivered: %s -> %s (attempt %d)", event, url, attempt + 1)
+                    logger.info(
+                        "Webhook delivered: %s -> %s (attempt %d)",
+                        event,
+                        url,
+                        attempt + 1,
+                    )
                     return True
                 logger.warning("Webhook %s returned %d", url, resp.status)
         except URLError as e:

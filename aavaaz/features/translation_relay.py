@@ -41,7 +41,9 @@ class TranslationRelay:
             if channel_id in self._channels:
                 raise ValueError(f"Channel '{channel_id}' already exists")
             self._channels[channel_id] = RelayChannel(channel_id, source_language)
-            logging.info(f"Translation relay channel created: {channel_id} ({source_language})")
+            logging.info(
+                f"Translation relay channel created: {channel_id} ({source_language})"
+            )
 
     def remove_channel(self, channel_id: str):
         """Remove a relay channel and disconnect all subscribers."""
@@ -72,8 +74,9 @@ class TranslationRelay:
         if channel:
             channel.broadcast(segment)
 
-    def subscribe(self, channel_id: str, target_language: str, subscriber_id: str,
-                  callback=None):
+    def subscribe(
+        self, channel_id: str, target_language: str, subscriber_id: str, callback=None
+    ):
         """Subscribe to a channel for a specific target language.
 
         Args:
@@ -137,16 +140,14 @@ class RelayChannel:
     function.
     """
 
-    def __init__(self, channel_id: str, source_language: str = "en",
-                 translator=None):
+    def __init__(self, channel_id: str, source_language: str = "en", translator=None):
         self.channel_id = channel_id
         self.source_language = source_language
         self.translator = translator
         self._subscribers: dict[str, Subscriber] = {}
         self._lock = threading.Lock()
 
-    def add_subscriber(self, subscriber_id: str, target_language: str,
-                       callback=None):
+    def add_subscriber(self, subscriber_id: str, target_language: str, callback=None):
         """Add a subscriber to this channel."""
         with self._lock:
             self._subscribers[subscriber_id] = Subscriber(
@@ -183,7 +184,9 @@ class RelayChannel:
                     translated_segment["original_text"] = segment["text"]
                     translated_segment["target_language"] = sub.target_language
                 except Exception as e:
-                    logging.error(f"Translation error for subscriber '{sub.subscriber_id}': {e}")
+                    logging.error(
+                        f"Translation error for subscriber '{sub.subscriber_id}': {e}"
+                    )
                     translated_segment["translation_error"] = str(e)
             sub.deliver(translated_segment)
 
@@ -194,9 +197,9 @@ class RelayChannel:
                 "channel_id": self.channel_id,
                 "source_language": self.source_language,
                 "subscribers": len(self._subscribers),
-                "target_languages": list({
-                    s.target_language for s in self._subscribers.values()
-                }),
+                "target_languages": list(
+                    {s.target_language for s in self._subscribers.values()}
+                ),
             }
 
     def close_all(self):

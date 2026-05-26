@@ -66,6 +66,7 @@ class BatchRequest:
         info: ``TranscriptionInfo`` metadata (filled by worker).
         error: Exception instance if processing failed.
     """
+
     audio: np.ndarray
     language: str | None = None
     task: str = "transcribe"
@@ -237,11 +238,19 @@ class BatchInferenceWorker:
 
                 if req.use_vad:
                     vad_params = req.vad_parameters or {}
-                    vad_opts = VadOptions(**vad_params) if isinstance(vad_params, dict) else vad_params
+                    vad_opts = (
+                        VadOptions(**vad_params)
+                        if isinstance(vad_params, dict)
+                        else vad_params
+                    )
                     speech_chunks = get_speech_timestamps(audio, vad_opts)
                     if speech_chunks:
                         audio_chunks, _ = collect_chunks(audio, speech_chunks)
-                        audio = np.concatenate(audio_chunks, axis=0) if audio_chunks else audio
+                        audio = (
+                            np.concatenate(audio_chunks, axis=0)
+                            if audio_chunks
+                            else audio
+                        )
 
                 if audio.shape[0] == 0:
                     # No speech detected — return empty result immediately
@@ -250,7 +259,9 @@ class BatchInferenceWorker:
                     req.future.set()
                     continue
 
-                duration = audio.shape[0] / self.transcriber.feature_extractor.sampling_rate
+                duration = (
+                    audio.shape[0] / self.transcriber.feature_extractor.sampling_rate
+                )
                 features = self.transcriber.feature_extractor(audio)
                 features = pad_or_trim(features)  # -> [n_mels, 3000]
                 preprocessed.append((req, features, audio, duration, speech_chunks))
@@ -271,12 +282,16 @@ class BatchInferenceWorker:
             prompts = []
             resolved_languages = []
 
-            for i, (req, features, audio, duration, speech_chunks) in enumerate(preprocessed):
+            for i, (req, features, audio, duration, speech_chunks) in enumerate(
+                preprocessed
+            ):
                 lang = req.language
                 # If language unknown, detect from encoder output
                 if lang is None:
                     try:
-                        lang_results = self.transcriber.model.detect_language(encoder_output)
+                        lang_results = self.transcriber.model.detect_language(
+                            encoder_output
+                        )
                         if lang_results and len(lang_results) > i:
                             detected = lang_results[i]
                             if detected:
@@ -325,7 +340,9 @@ class BatchInferenceWorker:
             )
 
             # Step 5: Per-item segment parsing and result dispatch
-            for i, (req, features, audio, duration, speech_chunks) in enumerate(preprocessed):
+            for i, (req, features, audio, duration, speech_chunks) in enumerate(
+                preprocessed
+            ):
                 try:
                     tokenizer = tokenizers_list[i]
                     gen_result = results[i]
@@ -335,7 +352,9 @@ class BatchInferenceWorker:
                     cum_logprob = gen_result.scores[0] * seq_len
                     avg_logprob = cum_logprob / (seq_len + 1) if seq_len > 0 else 0.0
 
-                    segment_size = int(ceil(duration) * self.transcriber.frames_per_second)
+                    segment_size = int(
+                        ceil(duration) * self.transcriber.frames_per_second
+                    )
 
                     subsegments, _, _ = self.transcriber._split_segments_by_timestamps(
                         tokenizer=tokenizer,
@@ -351,23 +370,27 @@ class BatchInferenceWorker:
                         text = tokenizer.decode(subseg["tokens"]).strip()
                         if not text:
                             continue
-                        segments.append(Segment(
-                            id=seg_idx,
-                            seek=subseg.get("seek", 0),
-                            start=subseg["start"],
-                            end=subseg["end"],
-                            text=text,
-                            tokens=subseg["tokens"],
-                            avg_logprob=avg_logprob,
-                            compression_ratio=get_compression_ratio(text),
-                            no_speech_prob=gen_result.no_speech_prob,
-                            words=None,
-                            temperature=0.0,
-                        ))
+                        segments.append(
+                            Segment(
+                                id=seg_idx,
+                                seek=subseg.get("seek", 0),
+                                start=subseg["start"],
+                                end=subseg["end"],
+                                text=text,
+                                tokens=subseg["tokens"],
+                                avg_logprob=avg_logprob,
+                                compression_ratio=get_compression_ratio(text),
+                                no_speech_prob=gen_result.no_speech_prob,
+                                words=None,
+                                temperature=0.0,
+                            )
+                        )
 
                     req.result = segments
                     req.info = self._make_info(
-                        req, duration, duration,
+                        req,
+                        duration,
+                        duration,
                         language=resolved_languages[i],
                     )
                 except Exception as e:

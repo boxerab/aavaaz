@@ -54,7 +54,9 @@ image = (
         f"python -c \"from faster_whisper import WhisperModel; WhisperModel('{WHISPER_MODEL}', device='cpu')\""
     )
     .add_local_dir("../../aavaaz", remote_path="/root/aavaaz_pkg/aavaaz", copy=True)
-    .add_local_file("../../pyproject.toml", remote_path="/root/aavaaz_pkg/pyproject.toml", copy=True)
+    .add_local_file(
+        "../../pyproject.toml", remote_path="/root/aavaaz_pkg/pyproject.toml", copy=True
+    )
     .run_commands("pip install /root/aavaaz_pkg")
     .add_local_dir(
         "/home/aaron/src/WhisperLive/whisper_live",
@@ -163,13 +165,22 @@ class Transcriber:
                     form = await request.form()
                     upload = form.get("file")
                     if upload is None:
-                        raise fastapi.HTTPException(status_code=400, detail="No 'file' field")
+                        raise fastapi.HTTPException(
+                            status_code=400, detail="No 'file' field"
+                        )
                     response_format = form.get("response_format")
-                    filename = getattr(upload, "filename", None) or f"{uuid.uuid4().hex}.wav"
+                    filename = (
+                        getattr(upload, "filename", None) or f"{uuid.uuid4().hex}.wav"
+                    )
                     local_path = os.path.join(tmpdir, Path(filename).name)
                     content = await upload.read()
                     Path(local_path).write_bytes(content)
-                    logger.info("Multipart upload: request_id=%s filename=%s size_bytes=%d", request_id, filename, len(content))
+                    logger.info(
+                        "Multipart upload: request_id=%s filename=%s size_bytes=%d",
+                        request_id,
+                        filename,
+                        len(content),
+                    )
                 elif "application/json" in content_type:
                     import base64
 
@@ -179,16 +190,26 @@ class Transcriber:
                         local_path = os.path.join(tmpdir, Path(filename).name)
                         audio_bytes = base64.b64decode(payload["audio_base64"])
                         Path(local_path).write_bytes(audio_bytes)
-                        logger.info("JSON upload: request_id=%s filename=%s size_bytes=%d", request_id, filename, len(audio_bytes))
+                        logger.info(
+                            "JSON upload: request_id=%s filename=%s size_bytes=%d",
+                            request_id,
+                            filename,
+                            len(audio_bytes),
+                        )
                     else:
                         raise fastapi.HTTPException(
-                            status_code=400, detail="Provide 'file' (multipart) or 'audio_base64' (JSON)"
+                            status_code=400,
+                            detail="Provide 'file' (multipart) or 'audio_base64' (JSON)",
                         )
                 elif "application/octet-stream" in content_type:
                     local_path = os.path.join(tmpdir, "audio.wav")
                     body = await request.body()
                     Path(local_path).write_bytes(body)
-                    logger.info("Octet-stream upload: request_id=%s size_bytes=%d", request_id, len(body))
+                    logger.info(
+                        "Octet-stream upload: request_id=%s size_bytes=%d",
+                        request_id,
+                        len(body),
+                    )
                 else:
                     raise fastapi.HTTPException(
                         status_code=400,
@@ -200,7 +221,9 @@ class Transcriber:
                     store_name = f"{uuid.uuid4().hex}_{os.path.basename(local_path)}"
                     store_path = os.path.join(AUDIO_VOLUME_PATH, store_name)
                     shutil.copy2(local_path, store_path)
-                    logger.info("Stored audio: request_id=%s path=%s", request_id, store_path)
+                    logger.info(
+                        "Stored audio: request_id=%s path=%s", request_id, store_path
+                    )
 
                 t0 = time.time()
                 result = self._transcribe(local_path)
@@ -232,7 +255,11 @@ class Transcriber:
         from whisper_live.batch_inference import BatchRequest
 
         file_size = os.path.getsize(audio_path)
-        logger.info("Starting transcription: file=%s size_bytes=%d", os.path.basename(audio_path), file_size)
+        logger.info(
+            "Starting transcription: file=%s size_bytes=%d",
+            os.path.basename(audio_path),
+            file_size,
+        )
 
         # Decode audio to raw float32 samples at 16kHz
         audio = decode_audio(audio_path)
@@ -259,7 +286,12 @@ class Transcriber:
             }
             if hasattr(seg, "words") and seg.words:
                 entry["words"] = [
-                    {"word": w.word, "start": w.start, "end": w.end, "probability": w.probability}
+                    {
+                        "word": w.word,
+                        "start": w.start,
+                        "end": w.end,
+                        "probability": w.probability,
+                    }
                     for w in seg.words
                 ]
             for fn in pipeline:

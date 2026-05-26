@@ -87,16 +87,19 @@ def _get_model() -> Any:
 # Post-processing pipeline (optional)
 # ---------------------------------------------------------------------------
 
+
 def _build_pipeline() -> list[Any]:
     """Return a list of segment transform functions based on env config."""
     fns: list[Any] = []
 
     if os.environ.get("AAVAAZ_ENABLE_FORMAT", "1") == "1":
         from aavaaz.features.formatting import smart_format
+
         fns.append(smart_format)
 
     if os.environ.get("AAVAAZ_ENABLE_PII", "0") == "1":
         from aavaaz.features.pii_redaction import redact_pii
+
         fns.append(redact_pii)
 
     return fns
@@ -112,12 +115,15 @@ def _apply_pipeline(segment: dict, pipeline: list[Any]) -> dict:
 # Core transcription
 # ---------------------------------------------------------------------------
 
+
 def _store_audio(audio_path: str, filename: str | None = None) -> str | None:
     """Optionally store audio to S3. Returns the S3 key or None if disabled."""
     if os.environ.get("AAVAAZ_STORE_AUDIO", "0") != "1":
         return None
 
-    bucket = os.environ.get("AAVAAZ_AUDIO_BUCKET") or os.environ.get("AAVAAZ_OUTPUT_BUCKET", "")
+    bucket = os.environ.get("AAVAAZ_AUDIO_BUCKET") or os.environ.get(
+        "AAVAAZ_OUTPUT_BUCKET", ""
+    )
     if not bucket:
         logger.warning("AAVAAZ_STORE_AUDIO=1 but no bucket configured")
         return None
@@ -148,7 +154,9 @@ def _transcribe(audio_path: str) -> dict:
 
     model = _get_model()
     language = os.environ.get("AAVAAZ_LANGUAGE") or None
-    segments, info = model.transcribe(audio_path, language=language, word_timestamps=True)
+    segments, info = model.transcribe(
+        audio_path, language=language, word_timestamps=True
+    )
     segments = list(segments)
 
     pipeline = _build_pipeline()
@@ -161,7 +169,12 @@ def _transcribe(audio_path: str) -> dict:
         }
         if seg.words:
             entry["words"] = [
-                {"word": w.word, "start": w.start, "end": w.end, "probability": w.probability}
+                {
+                    "word": w.word,
+                    "start": w.start,
+                    "end": w.end,
+                    "probability": w.probability,
+                }
                 for w in seg.words
             ]
         entry = _apply_pipeline(entry, pipeline)
@@ -232,7 +245,11 @@ def _s3_client():
 
 def handler(event: dict, context: Any) -> dict:
     """Main Lambda entry point — dispatches to S3, web UI, or API handler."""
-    request_id = getattr(context, "aws_request_id", uuid.uuid4().hex) if context else uuid.uuid4().hex
+    request_id = (
+        getattr(context, "aws_request_id", uuid.uuid4().hex)
+        if context
+        else uuid.uuid4().hex
+    )
     logger.info("Request started: request_id=%s", request_id)
 
     try:
@@ -278,17 +295,28 @@ def _handle_s3(event: dict, context: Any) -> dict:
 
         output = _format_output(result)
         stem = Path(key).stem
-        ext = "json" if os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json") == "json" else "txt"
+        ext = (
+            "json"
+            if os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json") == "json"
+            else "txt"
+        )
         out_key = f"{output_prefix}{stem}.{ext}"
 
         if output_bucket:
             s3.put_object(Bucket=output_bucket, Key=out_key, Body=output.encode())
             logger.info("Wrote s3://%s/%s", output_bucket, out_key)
-            results.append({"input": f"s3://{bucket}/{key}", "output": f"s3://{output_bucket}/{out_key}"})
+            results.append(
+                {
+                    "input": f"s3://{bucket}/{key}",
+                    "output": f"s3://{output_bucket}/{out_key}",
+                }
+            )
         else:
             # Same bucket
             s3.put_object(Bucket=bucket, Key=out_key, Body=output.encode())
-            results.append({"input": f"s3://{bucket}/{key}", "output": f"s3://{bucket}/{out_key}"})
+            results.append(
+                {"input": f"s3://{bucket}/{key}", "output": f"s3://{bucket}/{out_key}"}
+            )
 
     return {"statusCode": 200, "body": json.dumps({"results": results})}
 
@@ -303,7 +331,7 @@ _WEB_DIR = os.path.join(os.path.dirname(__file__), "..", "web")
 def _handle_web_ui(event: dict, path: str) -> dict:
     """Serve the web demo UI static files."""
     if path.startswith("/static/"):
-        filename = path[len("/static/"):]
+        filename = path[len("/static/") :]
         # Sanitize: only allow known safe filenames
         safe_names = {"Collabora_Logo.svg": "image/svg+xml"}
         if filename not in safe_names:
@@ -323,6 +351,7 @@ def _handle_web_ui(event: dict, path: str) -> dict:
 # ---------------------------------------------------------------------------
 # Multipart form-data parsing
 # ---------------------------------------------------------------------------
+
 
 def _parse_multipart(event: dict) -> tuple[bytes | None, str | None, str | None]:
     """Extract file bytes, filename, and response_format from multipart form-data.
@@ -366,17 +395,17 @@ def _parse_multipart(event: dict) -> tuple[bytes | None, str | None, str | None]
             if header_end == -1:
                 continue
             header_section = part[:header_end].decode(errors="replace")
-            part_body = part[header_end + 2:]
+            part_body = part[header_end + 2 :]
         else:
             header_section = part[:header_end].decode(errors="replace")
-            part_body = part[header_end + 4:]
+            part_body = part[header_end + 4 :]
 
         # Strip trailing \r\n
         if part_body.endswith(b"\r\n"):
             part_body = part_body[:-2]
 
         header_lower = header_section.lower()
-        if 'name="file"' in header_lower or "name=\"file\"" in header_section:
+        if 'name="file"' in header_lower or 'name="file"' in header_section:
             file_bytes = part_body
             # Extract filename
             for token in header_section.split(";"):
@@ -421,7 +450,9 @@ def _handle_api(event: dict, context: Any) -> dict:
         if "audio_url" in payload:
             url = payload["audio_url"]
             if not url.startswith("s3://"):
-                return _response(400, json.dumps({"error": "Only s3:// URLs supported"}))
+                return _response(
+                    400, json.dumps({"error": "Only s3:// URLs supported"})
+                )
             parts = url[5:].split("/", 1)
             if len(parts) != 2:
                 return _response(400, json.dumps({"error": "Invalid S3 URL"}))
@@ -437,7 +468,9 @@ def _handle_api(event: dict, context: Any) -> dict:
             Path(local_path).write_bytes(audio_bytes)
 
         else:
-            return _response(400, json.dumps({"error": "Provide 'audio_url' or 'audio_base64'"}))
+            return _response(
+                400, json.dumps({"error": "Provide 'audio_url' or 'audio_base64'"})
+            )
 
         _store_audio(local_path)
         result = _transcribe(local_path)
@@ -459,7 +492,9 @@ def _handle_multipart(event: dict) -> dict:
         safe_name = Path(filename or "audio.wav").name
         local_path = os.path.join(tmpdir, safe_name)
         Path(local_path).write_bytes(file_bytes)
-        logger.info("Multipart upload: filename=%s size_bytes=%d", safe_name, len(file_bytes))
+        logger.info(
+            "Multipart upload: filename=%s size_bytes=%d", safe_name, len(file_bytes)
+        )
         _store_audio(local_path, safe_name)
         result = _transcribe(local_path)
 
@@ -467,4 +502,6 @@ def _handle_multipart(event: dict) -> dict:
     if fmt == "text":
         text = "\n".join(seg["text"] for seg in result["segments"])
         return _response(200, text, {"Content-Type": "text/plain"})
-    return _response(200, json.dumps(result, indent=2), {"Content-Type": "application/json"})
+    return _response(
+        200, json.dumps(result, indent=2), {"Content-Type": "application/json"}
+    )

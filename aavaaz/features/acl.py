@@ -102,9 +102,13 @@ class UserStore:
         except Exception as e:
             logger.error(f"Failed to save user store: {e}")
 
-    def create_user(self, name: str, role: Role = Role.USER,
-                    rate_limit_rpm: int = 60,
-                    quota_minutes: int = 0) -> tuple:
+    def create_user(
+        self,
+        name: str,
+        role: Role = Role.USER,
+        rate_limit_rpm: int = 60,
+        quota_minutes: int = 0,
+    ) -> tuple:
         """Create a new user. Returns (user, api_key)."""
         user_id = secrets.token_hex(8)
         api_key = generate_api_key()
@@ -156,7 +160,11 @@ class UserStore:
             for key, value in kwargs.items():
                 if key == "role":
                     value = Role(value)
-                if hasattr(user, key) and key not in ("user_id", "api_key_hash", "created_at"):
+                if hasattr(user, key) and key not in (
+                    "user_id",
+                    "api_key_hash",
+                    "created_at",
+                ):
                     setattr(user, key, value)
             self._save()
             return user
@@ -234,10 +242,13 @@ class JWTValidator:
     For RS256, provide the JWKS URL; for HS256, provide the secret.
     """
 
-    def __init__(self, jwks_url: str | None = None,
-                 secret: str | None = None,
-                 audience: str | None = None,
-                 issuer: str | None = None):
+    def __init__(
+        self,
+        jwks_url: str | None = None,
+        secret: str | None = None,
+        audience: str | None = None,
+        issuer: str | None = None,
+    ):
         self._jwks_url = jwks_url
         self._secret = secret
         self._audience = audience

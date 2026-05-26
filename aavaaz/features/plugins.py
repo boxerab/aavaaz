@@ -31,7 +31,9 @@ class PluginEntry:
 
     __slots__ = ("name", "fn", "priority", "enabled")
 
-    def __init__(self, name: str, fn: Callable, priority: int = 50, enabled: bool = True):
+    def __init__(
+        self, name: str, fn: Callable, priority: int = 50, enabled: bool = True
+    ):
         self.name = name
         self.fn = fn
         self.priority = priority
@@ -71,9 +73,11 @@ class PluginRegistry:
             name: Unique plugin name.
             priority: Execution order (lower = earlier). Default 50.
         """
+
         def decorator(fn):
             self.add(name, fn, priority)
             return fn
+
         return decorator
 
     def remove(self, name: str):
