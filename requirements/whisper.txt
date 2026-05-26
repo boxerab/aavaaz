@@ -1,0 +1,12 @@
+# Whisper Live dependencies (ML stack - large download ~20GB)
+# Install: pip install -r requirements/whisper.txt
+# Requires PyTorch (10-15GB) and other ML dependencies
+
+-r base.txt
+
+whisper-live>=0.8.0
+torch
+torchaudio
+faster-whisper>=1.2
+websockets
+scipy

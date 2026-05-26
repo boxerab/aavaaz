@@ -1,0 +1,9 @@
+# Core aavaaz dependencies (no ML stack)
+# Install: pip install -r requirements/base.txt
+
+fastapi>=0.115
+uvicorn>=0.30
+python-multipart
+PyJWT[crypto]
+boto3
+prometheus_client

@@ -1,0 +1,16 @@
+# uv dependency management
+# https://docs.astral.sh/uv/
+#
+# Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh
+#
+# Usage:
+#   uv sync                    # Install from pyproject.toml + uv.lock
+#   uv sync --extra whisper    # Include whisper group (ML stack)
+#   uv pip compile requirements/whisper.txt  # Generate locked versions
+#
+
+# To use with uv, run:
+# uv venv .venv && source .venv/bin/activate && uv sync
+#
+# Or with whisper-live (large download):
+# uv venv .venv && source .venv/bin/activate && uv sync --extra whisper

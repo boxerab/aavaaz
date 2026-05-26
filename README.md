@@ -17,13 +17,39 @@ with enterprise features that compete with Deepgram, ElevenLabs, and AssemblyAI.
 
 ## Quick Start
 
-```bash
-# Create a virtualenv (recommended, Python 3.12 for full ML stack)
-python -m venv .venv && source .venv/bin/activate
+### Option 1: Using `uv` (Fast & Reproducible) 
 
-pip install aavaaz whisper-live
+```bash
+# Install uv: https://docs.astral.sh/uv/
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create venv and sync dependencies
+uv venv .venv
+source .venv/bin/activate
+
+# Install aavaaz with ML stack (whisper-live, torch, etc)
+uv sync --extra whisper
 
 # Start the server
+aavaaz serve --model large-v3
+
+# Transcribe a file
+aavaaz transcribe audio.wav
+```
+
+### Option 2: Using `pip` with Requirements Files
+
+```bash
+# Create a virtualenv (Python 3.12+ recommended)
+python3.12 -m venv .venv && source .venv/bin/activate
+
+# Install base + ML stack (large ~20GB download for torch/onnx)
+pip install -r requirements/whisper.txt
+
+# Or install just base (fast, no ML):
+# pip install -r requirements/base.txt
+
+# Start the server (requires ML stack)
 aavaaz serve --model large-v3
 
 # Transcribe a file
@@ -33,6 +59,32 @@ aavaaz transcribe audio.wav
 curl -X POST http://localhost:8000/v1/audio/transcriptions \
   -F file=@audio.wav -F model=large-v3
 ```
+
+### Option 3: Using `pyproject.toml` Extras
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+
+# Install base only
+pip install -e .
+
+# Or install with whisper-live + dev tools
+pip install -e ".[whisper,dev]"
+```
+
+### Note on Storage
+
+The full ML stack (torch, onnxruntime, torchaudio) requires **~20GB** disk space. 
+If you hit disk quota errors, consider:
+- Using `uv` which is faster and handles large downloads better
+- Installing on a machine with more space
+- Using serverless deployments (AWS Lambda / Modal) instead of local
+
+### Requirements Files
+
+- `requirements/base.txt` — Core dependencies only (fastapi, uvicorn, boto3)
+- `requirements/whisper.txt` — Full ML stack (torch, whisper-live, etc)
+- `requirements/dev.txt` — Development tools (pytest, ruff, etc)
 
 ## Architecture
 

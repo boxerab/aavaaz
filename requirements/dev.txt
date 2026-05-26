@@ -1,0 +1,10 @@
+# Development dependencies (testing, linting, local dev)
+# Install: pip install -r requirements/dev.txt
+
+-r base.txt
+
+pytest>=8.0
+pytest-asyncio
+httpx
+numpy
+ruff
