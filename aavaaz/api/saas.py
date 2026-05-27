@@ -12,10 +12,9 @@ import hashlib
 import logging
 import os
 import secrets
-import time
 import uuid
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -145,7 +144,7 @@ async def create_api_key(body: CreateKeyRequest, claims: dict = Depends(require_
         name=body.name,
         key_hash=key_hash,
         prefix=raw_key[:12],
-        created_at=datetime.now(timezone.utc).isoformat(),
+        created_at=datetime.now(UTC).isoformat(),
     )
 
     _api_keys[key_id] = api_key
@@ -328,7 +327,7 @@ async def stripe_webhook(request: Request):
                 sub.status = subscription["status"]
                 sub.cancel_at_period_end = subscription["cancel_at_period_end"]
                 sub.current_period_end = datetime.fromtimestamp(
-                    subscription["current_period_end"], tz=timezone.utc
+                    subscription["current_period_end"], tz=UTC
                 ).isoformat()
                 break
 
@@ -370,7 +369,7 @@ async def get_transcript(transcript_id: str, claims: dict = Depends(require_auth
 
 def record_usage(user_id: str, audio_minutes: float):
     """Record audio usage for a user. Called after each transcription."""
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
     entries = _usage.setdefault(user_id, [])
 
     # Find or create today's entry
@@ -402,5 +401,5 @@ def validate_api_key(raw_key: str) -> str | None:
         return None
 
     # Update last_used timestamp
-    api_key.last_used = datetime.now(timezone.utc).isoformat()
+    api_key.last_used = datetime.now(UTC).isoformat()
     return api_key.user_id

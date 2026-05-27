@@ -15,12 +15,9 @@ Environment variables:
     AAVAAZ_COGNITO_POOL_ID  — Cognito User Pool ID
 """
 
-import hashlib
 import logging
 import os
-import secrets
-import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -309,7 +306,7 @@ async def stripe_webhook(request: Request):
                     "status": subscription["status"],
                     "cancel_at_period_end": subscription["cancel_at_period_end"],
                     "current_period_end": datetime.fromtimestamp(
-                        subscription["current_period_end"], tz=timezone.utc
+                        subscription["current_period_end"], tz=UTC
                     ).isoformat(),
                 },
             )

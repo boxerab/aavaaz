@@ -16,8 +16,7 @@ import logging
 import os
 import secrets
 import uuid
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -43,7 +42,7 @@ def create_api_key(user_id: str, name: str) -> tuple[dict, str]:
     raw_key = f"aavaaz_{secrets.token_urlsafe(32)}"
     key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
     key_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     item = {
         "user_id": user_id,
@@ -117,7 +116,7 @@ def validate_api_key(raw_key: str) -> str | None:
         _table_api_keys.update_item(
             Key={"user_id": item["user_id"], "key_id": item["key_id"]},
             UpdateExpression="SET last_used = :now",
-            ExpressionAttributeValues={":now": datetime.now(timezone.utc).isoformat()},
+            ExpressionAttributeValues={":now": datetime.now(UTC).isoformat()},
         )
     except Exception:
         pass
@@ -130,7 +129,7 @@ def validate_api_key(raw_key: str) -> str | None:
 
 def record_usage(user_id: str, audio_minutes: float):
     """Record usage for the current day. Atomic increment."""
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
 
     _table_usage.update_item(
         Key={"user_id": user_id, "date": today},
@@ -146,7 +145,7 @@ def get_usage(user_id: str, days: int = 30) -> list[dict]:
     """Get daily usage records for a user (last N days)."""
     from datetime import timedelta
 
-    start_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime(
+    start_date = (datetime.now(UTC) - timedelta(days=days)).strftime(
         "%Y-%m-%d"
     )
 
@@ -219,7 +218,7 @@ def save_transcript(user_id: str, job: dict):
     """Save a transcript job record."""
     job["user_id"] = user_id
     if "created_at" not in job:
-        job["created_at"] = datetime.now(timezone.utc).isoformat()
+        job["created_at"] = datetime.now(UTC).isoformat()
     _table_transcripts.put_item(Item=job)
 
 
