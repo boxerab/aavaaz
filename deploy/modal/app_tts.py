@@ -44,9 +44,12 @@ image = (
     .pip_install(
         "torch==2.4.1",
         "torchaudio==2.4.1",
-        "transformers>=4.36",
+        "transformers>=4.36,<4.46",
         "tokenizers>=0.15",
         "sentencepiece",
+        "safetensors",
+        "regex",
+        "protobuf",
         "huggingface_hub",
         "soundfile",
         "numpy",
@@ -72,6 +75,8 @@ image = (
         "from huggingface_hub import snapshot_download; "
         f"snapshot_download('{MODEL_REPO}', local_dir='/models/fish-speech-1.5')"
         '"',
+        # Verify transformers + tokenizers work
+        'python -c "from transformers import AutoTokenizer; print(AutoTokenizer)"',
     )
 )
 
@@ -204,7 +209,7 @@ class TTSServer:
                 cwd="/opt/fish-speech",
             )
             if r.returncode != 0:
-                raise RuntimeError(f"Semantic stage failed: {r.stderr[-500:]}")
+                raise RuntimeError(f"Semantic stage failed: {r.stderr[-2000:]}")
 
             # Find generated codes file
             codes_files = sorted(glob.glob(os.path.join(tmpdir, "codes*.npy")))
