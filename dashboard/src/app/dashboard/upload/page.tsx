@@ -148,46 +148,66 @@ export default function UploadPage() {
       xhr.send(file);
     });
 
-    // Step 3: Trigger transcription with S3 key
+    // Step 3: Poll for transcription result (S3 trigger handles processing)
     setProgress(55);
     setProgressStage("Transcribing audio...");
 
-    // Simulate progress during Lambda processing
-    let pct = 55;
-    const interval = setInterval(() => {
-      pct = Math.min(pct + 1, 90);
-      setProgress(pct);
-    }, 2000);
+    // Encode the upload key as URL-safe base64 for the status endpoint
+    const keyBase64 = btoa(key).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-    const body: Record<string, unknown> = {
-      audio_url: `s3://${bucket}/${key}`,
-      response_format: format,
-    };
-    if (features) body.features = features;
+    const headers2: Record<string, string> = {};
+    if (apiKey) headers2["Authorization"] = `Bearer ${apiKey}`;
 
-    const transcribeHeaders: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (apiKey) transcribeHeaders["Authorization"] = `Bearer ${apiKey}`;
+    // Poll until transcription completes
+    const maxWait = 300000; // 5 minutes
+    const pollInterval = 3000; // 3 seconds
+    const startPoll = Date.now();
+    let data: TranscriptionResult | null = null;
 
-    let res: Response;
-    try {
-      res = await fetch(BATCH_URL, {
-        method: "POST",
-        headers: transcribeHeaders,
-        body: JSON.stringify(body),
-      });
-    } finally {
-      clearInterval(interval);
+    while (Date.now() - startPoll < maxWait) {
+      await new Promise((r) => setTimeout(r, pollInterval));
+
+      const statusRes = await fetch(
+        `${API_BASE}/v1/transcription/${keyBase64}`,
+        { headers: headers2 }
+      );
+
+      if (!statusRes.ok) {
+        // Keep polling on transient errors
+        continue;
+      }
+
+      const statusData = await statusRes.json();
+
+      if (statusData.status === "completed") {
+        // Parse the transcript (it's stored as a JSON string)
+        try {
+          data = typeof statusData.transcript === "string"
+            ? JSON.parse(statusData.transcript)
+            : statusData.transcript;
+        } catch {
+          data = { segments: [], text: statusData.transcript };
+        }
+        break;
+      }
+
+      // Update progress from server
+      if (statusData.progress) {
+        const serverPct = Math.min(90, 55 + Math.round(statusData.progress * 0.35));
+        setProgress(serverPct);
+      } else {
+        // Simulate slow progress
+        const elapsed = (Date.now() - startPoll) / 1000;
+        setProgress(Math.min(88, 55 + Math.round(elapsed / 3)));
+      }
     }
 
-    if (!res.ok) {
-      throw new Error(`Transcription failed: ${await res.text()}`);
+    if (!data) {
+      throw new Error("Transcription timed out — file may still be processing");
     }
 
     setProgress(95);
     setProgressStage("Processing result...");
-    const data = await res.json();
     setResult(data);
     setProgress(100);
     setProgressStage("Done!");
