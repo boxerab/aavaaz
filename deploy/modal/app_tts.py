@@ -15,7 +15,6 @@ Environment variables (set via Modal Secrets):
 
 import logging
 import os
-import subprocess
 import time
 
 import fastapi
@@ -109,6 +108,7 @@ class TTSServer:
         sys.path.insert(0, "/opt/fish-speech")
 
         import numpy as np
+        import soundfile as sf
         import torch
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -116,8 +116,9 @@ class TTSServer:
         self.model_path = "/models/fish-speech-1.5"
         self.torch = torch
         self.np = np
+        self.sf = sf
 
-        # Load the model for Python API inference
+        # Load the LLM for semantic code generation
         from fish_speech.models.text2semantic.inference import load_model
         from fish_speech.text import split_text
 
@@ -132,6 +133,38 @@ class TTSServer:
                 max_seq_len=self.model.config.max_seq_len,
                 dtype=next(self.model.parameters()).dtype,
             )
+
+        # Load the VQGAN decoder for codes → audio
+        from hydra import compose, initialize_config_dir
+        from hydra.core.global_hydra import GlobalHydra
+        from hydra.utils import instantiate
+
+        GlobalHydra.instance().clear()
+
+        with initialize_config_dir(
+            version_base="1.3",
+            config_dir="/opt/fish-speech/fish_speech/configs",
+        ):
+            cfg = compose(config_name="firefly_gan_vq")
+
+        self.vqgan = instantiate(cfg)
+        vqgan_ckpt = os.path.join(
+            self.model_path, "firefly-gan-vq-fsq-8x1024-21hz-generator.pth"
+        )
+        state_dict = torch.load(
+            vqgan_ckpt, map_location=self.device, mmap=True, weights_only=True
+        )
+        if "state_dict" in state_dict:
+            state_dict = state_dict["state_dict"]
+        if any("generator" in k for k in state_dict):
+            state_dict = {
+                k.replace("generator.", ""): v
+                for k, v in state_dict.items()
+                if "generator." in k
+            }
+        self.vqgan.load_state_dict(state_dict, strict=False, assign=True)
+        self.vqgan.eval()
+        self.vqgan.to(self.device)
 
         logger.info("Fish Speech TTS server ready (device=%s)", self.device)
 
@@ -304,12 +337,13 @@ class TTSServer:
 
     def _synthesize_tracked(self, text, total_segments, state) -> bytes:
         """Run Fish Speech inference with progress tracking via shared state."""
-        import glob
-        import tempfile
+        import gc
+        import io
 
         import numpy as np
         import torch
         from fish_speech.models.text2semantic.inference import generate_long
+        from fish_speech.utils import autocast_exclude_mps
 
         torch.manual_seed(42)
         if torch.cuda.is_available():
@@ -336,11 +370,11 @@ class TTSServer:
             prompt_tokens=None,
         )
 
-        codes_list = []
+        # Decode each segment individually (matches official inference engine)
+        audio_segments = []
         segment_idx = 0
         for response in generator:
             if response.action == "sample":
-                codes_list.append(response.codes)
                 segment_idx += 1
                 # Progress: 10% to 80% during code generation
                 pct = 10 + int((segment_idx / max(total_segments, 1)) * 70)
@@ -349,61 +383,41 @@ class TTSServer:
                     f"Generating speech ({segment_idx}/{total_segments} segments)..."
                 )
                 logger.info("Segment %d/%d generated", segment_idx, total_segments)
+
+                # Decode this segment's codes to audio immediately
+                with (
+                    torch.no_grad(),
+                    autocast_exclude_mps(device_type=self.device, dtype=torch.bfloat16),
+                ):
+                    codes = response.codes
+                    feature_lengths = torch.tensor([codes.shape[1]], device=self.device)
+                    audio = self.vqgan.decode(
+                        indices=codes[None], feature_lengths=feature_lengths
+                    )[0].squeeze()
+                    audio_segments.append(audio.float().cpu().numpy())
+
             elif response.action == "next":
                 pass
 
-        if not codes_list:
-            raise RuntimeError("No codes generated")
+        if not audio_segments:
+            raise RuntimeError("No audio generated")
 
-        # Concatenate all codes
-        all_codes = torch.cat(codes_list, dim=1)
-        state["progress"] = 85
-        state["stage"] = "Decoding audio..."
+        state["progress"] = 90
+        state["stage"] = "Finalizing..."
 
-        # Decode codes → audio using vqgan CLI
-        with tempfile.TemporaryDirectory() as tmpdir:
-            codes_path = os.path.join(tmpdir, "codes.npy")
-            np.save(codes_path, all_codes.cpu().numpy())
+        # Concatenate audio segments
+        audio_np = np.concatenate(audio_segments, axis=0)
 
-            output_wav = os.path.join(tmpdir, "output.wav")
-            cmd_audio = [
-                "python",
-                "/opt/fish-speech/fish_speech/models/vqgan/inference.py",
-                "-i",
-                codes_path,
-                "--checkpoint-path",
-                os.path.join(
-                    self.model_path,
-                    "firefly-gan-vq-fsq-8x1024-21hz-generator.pth",
-                ),
-                "--output-path",
-                output_wav,
-            ]
-            r = subprocess.run(
-                cmd_audio,
-                capture_output=True,
-                text=True,
-                timeout=60,
-                cwd="/opt/fish-speech",
-            )
-            if r.returncode != 0:
-                raise RuntimeError(f"Audio decode failed: {r.stderr[-1000:]}")
+        # Clean up GPU memory
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            gc.collect()
 
-            state["progress"] = 95
-            state["stage"] = "Finalizing..."
+        state["progress"] = 95
+        state["stage"] = "Encoding WAV..."
 
-            if not os.path.exists(output_wav):
-                alt = os.path.join(tmpdir, "fake.wav")
-                if os.path.exists(alt):
-                    output_wav = alt
-                else:
-                    wavs = glob.glob(os.path.join(tmpdir, "*.wav")) + glob.glob(
-                        "fake.wav"
-                    )
-                    if wavs:
-                        output_wav = wavs[0]
-                    else:
-                        raise RuntimeError("No audio output produced")
-
-            with open(output_wav, "rb") as f:
-                return f.read()
+        # Convert to WAV bytes
+        sample_rate = self.vqgan.spec_transform.sample_rate
+        buf = io.BytesIO()
+        self.sf.write(buf, audio_np, sample_rate, format="WAV")
+        return buf.getvalue()
