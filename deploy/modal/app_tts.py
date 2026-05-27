@@ -45,6 +45,8 @@ image = (
         "torch==2.4.1",
         "torchaudio==2.4.1",
         "transformers>=4.36",
+        "tokenizers>=0.15",
+        "sentencepiece",
         "huggingface_hub",
         "soundfile",
         "numpy",
