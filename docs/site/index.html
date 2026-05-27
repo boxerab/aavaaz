@@ -2020,6 +2020,7 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
         let audioContext = null;
         let processor = null;
         let stream = null;
+        let intentionalStop = false;
 
         function setLiveStatus(msg, cls) {
             statusEl.className = 'demo-status ' + (cls || '');
@@ -2040,6 +2041,7 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
             stopBtn.style.display = 'inline-block';
             transcriptEl.textContent = '';
             resultEl.style.display = 'block';
+            intentionalStop = false;
             setLiveStatus('<span class="demo-spinner"></span>Connecting to GPU...', 'loading');
 
             ws = new WebSocket(WS_URL);
@@ -2074,7 +2076,9 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
                 } catch (e) { /* non-JSON, ignore */ }
             };
 
-            ws.onerror = () => setLiveStatus('Connection error &mdash; the GPU may be starting up, try again in 15s', 'error');
+            ws.onerror = () => {
+                if (!intentionalStop) setLiveStatus('Connection error &mdash; the GPU may be starting up, try again in 15s', 'error');
+            };
             ws.onclose = () => {
                 startBtn.style.display = 'inline-block';
                 stopBtn.style.display = 'none';
@@ -2097,6 +2101,7 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
         });
 
         function stopLive() {
+            intentionalStop = true;
             if (processor) { processor.disconnect(); processor = null; }
             if (audioContext) { audioContext.close(); audioContext = null; }
             if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
