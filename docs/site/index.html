@@ -1763,7 +1763,8 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
                 </div>
                 <div id="demo-progress-text" style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 6px; text-align: right;"></div>
             </div>
-            <div class="demo-result" id="demo-result">
+            <div class="demo-result" id="demo-result" style="position: relative;">
+                <button id="demo-copy-btn" title="Copy transcription" style="position: absolute; top: 8px; right: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-secondary); border-radius: 4px; padding: 5px 6px; cursor: pointer; opacity: 0.5; transition: opacity 0.2s; line-height: 1;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11V3a1.5 1.5 0 0 1 1.5-1.5H11"/></svg></button>
                 <pre id="demo-transcript"></pre>
                 <div class="demo-meta" id="demo-meta"></div>
             </div>
@@ -1983,7 +1984,7 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
 
                     // Poll for transcription result with progress bar
                     setStatus('<span class="demo-spinner"></span>Transcribing (this may take some time)&hellip;', 'loading');
-                    // Estimate: ~10 seconds per MB for transcription on Lambda CPU
+                    // Start estimated progress (will be overridden by real progress from Lambda)
                     const estimatedSec = Math.max(30, (file.size / (1024 * 1024)) * 10);
                     startProgress(estimatedSec);
                     const encodedKey = btoa(key).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -2025,14 +2026,23 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
 
         async function pollForResult(encodedKey) {
             const maxAttempts = 120;
+            let usingRealProgress = false;
             for (let i = 0; i < maxAttempts; i++) {
                 await new Promise(r => setTimeout(r, 5000));
                 const resp = await fetch(API_BASE + '/v1/transcription/' + encodedKey);
-                if (resp.status === 200) {
-                    const data = await resp.json();
-                    if (data.status === 'completed') {
-                        try { return JSON.parse(data.transcript); } catch (e) { return { text: data.transcript }; }
+                const data = await resp.json();
+                if (resp.status === 200 && data.status === 'completed') {
+                    try { return JSON.parse(data.transcript); } catch (e) { return { text: data.transcript }; }
+                }
+                // Use real progress from Lambda when available
+                if (data.progress > 0) {
+                    if (!usingRealProgress) {
+                        // Stop estimated progress, switch to real
+                        if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
+                        usingRealProgress = true;
                     }
+                    progressBar.style.width = data.progress + '%';
+                    progressText.textContent = data.progress + '%';
                 }
             }
             throw new Error('Transcription timed out');
@@ -2087,6 +2097,18 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
             if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) return 'audio/ogg;codecs=opus';
             return '';
         }
+
+        document.getElementById('demo-copy-btn').addEventListener('click', () => {
+            const text = document.getElementById('demo-transcript').textContent;
+            if (!text) return;
+            const btn = document.getElementById('demo-copy-btn');
+            const originalHTML = btn.innerHTML;
+            navigator.clipboard.writeText(text).then(() => {
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8.5l3.5 3.5 7-7"/></svg>';
+                btn.style.color = '#4ade80';
+                setTimeout(() => { btn.innerHTML = originalHTML; btn.style.color = ''; }, 1500);
+            });
+        });
     })();
 
     // ── LIVE STREAMING DEMO ──

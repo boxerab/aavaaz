@@ -140,8 +140,13 @@ def _store_audio(audio_path: str, filename: str | None = None) -> str | None:
         return None
 
 
-def _transcribe(audio_path: str) -> dict:
-    """Transcribe a local audio file and return a result dict."""
+def _transcribe(audio_path: str, progress_callback=None) -> dict:
+    """Transcribe a local audio file and return a result dict.
+
+    Args:
+        audio_path: Path to the audio file.
+        progress_callback: Optional callable(percent: int) called as segments complete.
+    """
     file_size = os.path.getsize(audio_path)
     logger.info(
         "Starting transcription: file=%s size_bytes=%d model=%s",
@@ -156,10 +161,10 @@ def _transcribe(audio_path: str) -> dict:
     segments, info = model.transcribe(
         audio_path, language=language, word_timestamps=True
     )
-    segments = list(segments)
 
     pipeline = _build_pipeline()
     results = []
+    last_progress_pct = 0
     for seg in segments:
         entry = {
             "start": seg.start,
@@ -178,6 +183,13 @@ def _transcribe(audio_path: str) -> dict:
             ]
         entry = _apply_pipeline(entry, pipeline)
         results.append(entry)
+
+        # Report progress based on audio position
+        if progress_callback and info.duration > 0:
+            pct = min(95, int((seg.end / info.duration) * 100))
+            if pct >= last_progress_pct + 5:  # Report every 5%
+                last_progress_pct = pct
+                progress_callback(pct)
 
     elapsed = time.time() - t0
     logger.info(
@@ -347,27 +359,41 @@ def _handle_transcription_status(event: dict, path: str) -> dict:
     fmt = os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json")
     ext = "json" if fmt == "json" else "txt"
     out_key = f"{output_prefix}{stem}.{ext}"
+    progress_key = f"{output_prefix}{stem}.progress.json"
 
     s3 = _s3_client()
     try:
         obj = s3.get_object(Bucket=output_bucket, Key=out_key)
         body = obj["Body"].read().decode()
+        # Clean up progress file
+        try:
+            s3.delete_object(Bucket=output_bucket, Key=progress_key)
+        except Exception:
+            pass
         return _response(
             200,
             json.dumps({"status": "completed", "transcript": body}),
             {"Content-Type": "application/json"},
         )
     except s3.exceptions.NoSuchKey:
+        # Check for progress file
+        progress = 0
+        try:
+            prog_obj = s3.get_object(Bucket=output_bucket, Key=progress_key)
+            prog_data = json.loads(prog_obj["Body"].read().decode())
+            progress = prog_data.get("progress", 0)
+        except Exception:
+            pass
         return _response(
             202,
-            json.dumps({"status": "processing"}),
+            json.dumps({"status": "processing", "progress": progress}),
             {"Content-Type": "application/json"},
         )
     except Exception:
         logger.exception("Error checking transcription status for key=%s", upload_key)
         return _response(
             202,
-            json.dumps({"status": "processing"}),
+            json.dumps({"status": "processing", "progress": 0}),
             {"Content-Type": "application/json"},
         )
 
@@ -385,14 +411,31 @@ def _handle_s3(event: dict, context: Any) -> dict:
         obj_size = record["s3"]["object"].get("size", 0)
         logger.info("Processing s3://%s/%s size_bytes=%d", bucket, key, obj_size)
 
+        stem = Path(key).stem
+        progress_key = f"{output_prefix}{stem}.progress.json"
+
+        def _report_progress(pct: int) -> None:
+            """Write progress update to S3 for client polling."""
+            try:
+                s3.put_object(
+                    Bucket=output_bucket,
+                    Key=progress_key,
+                    Body=json.dumps({"status": "processing", "progress": pct}).encode(),
+                    ContentType="application/json",
+                )
+            except Exception:
+                pass  # Non-critical — don't fail transcription on progress write
+
         with tempfile.TemporaryDirectory() as tmpdir:
             local_path = os.path.join(tmpdir, os.path.basename(key))
             s3.download_file(bucket, key, local_path)
             _store_audio(local_path, os.path.basename(key))
-            result = _transcribe(local_path)
+            result = _transcribe(
+                local_path,
+                progress_callback=_report_progress if output_bucket else None,
+            )
 
         output = _format_output(result)
-        stem = Path(key).stem
         ext = (
             "json"
             if os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json") == "json"
