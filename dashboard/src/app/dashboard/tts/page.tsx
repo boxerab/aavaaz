@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { Volume2, Download, Loader2, Play, Pause } from "lucide-react";
 
 const TTS_ENDPOINT = "https://boxerab--aavaaz-tts.modal.run/v1/tts";
+const TTS_STREAM_ENDPOINT = "https://boxerab--aavaaz-tts.modal.run/v1/tts/stream";
 
 const EXAMPLE_TEXTS = [
   "Welcome to Aavaaz, the open-source speech AI platform. We provide state-of-the-art transcription and text-to-speech services.",
@@ -24,19 +25,8 @@ export default function TTSPage() {
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   function startProgress() {
-    setProgress(5);
+    setProgress(2);
     setProgressStage("Connecting to GPU...");
-    let pct = 5;
-    // Estimate: ~0.5s per 10 chars, cold start adds ~30s
-    const estimatedMs = Math.max(5000, text.length * 50);
-    const increment = 85 / (estimatedMs / 500); // reach ~90% by estimated time
-
-    progressRef.current = setInterval(() => {
-      pct = Math.min(pct + increment, 92);
-      setProgress(Math.round(pct));
-      if (pct > 15) setProgressStage("Generating speech...");
-      if (pct > 70) setProgressStage("Encoding audio...");
-    }, 500);
   }
 
   function stopProgress() {
@@ -55,7 +45,8 @@ export default function TTSPage() {
     startProgress();
 
     try {
-      const res = await fetch(TTS_ENDPOINT, {
+      // Use streaming endpoint for real progress
+      const res = await fetch(TTS_STREAM_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: text.trim() }),
@@ -66,17 +57,66 @@ export default function TTSPage() {
         throw new Error(err || `HTTP ${res.status}`);
       }
 
-      setProgress(95);
-      setProgressStage("Downloading audio...");
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
 
-      const pt = res.headers.get("X-Processing-Time");
-      if (pt) setProcessingTime(pt);
+      const decoder = new TextDecoder();
+      let buffer = "";
 
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      setAudioUrl(url);
-      setProgress(100);
-      setProgressStage("Done!");
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr) continue;
+
+          try {
+            const event = JSON.parse(jsonStr);
+
+            if (event.error) {
+              throw new Error(event.error);
+            }
+
+            if (event.progress !== undefined) {
+              setProgress(event.progress);
+            }
+            if (event.stage) {
+              setProgressStage(event.stage);
+            }
+
+            if (event.audio) {
+              // Final event with audio
+              const binaryStr = atob(event.audio);
+              const bytes = new Uint8Array(binaryStr.length);
+              for (let i = 0; i < binaryStr.length; i++) {
+                bytes[i] = binaryStr.charCodeAt(i);
+              }
+              const blob = new Blob([bytes], { type: "audio/wav" });
+              const url = URL.createObjectURL(blob);
+              setAudioUrl(url);
+              if (event.processing_time) {
+                setProcessingTime(event.processing_time);
+              }
+            }
+          } catch (parseErr) {
+            if (parseErr instanceof Error && parseErr.message !== jsonStr) {
+              throw parseErr;
+            }
+          }
+        }
+      }
+
+      if (!audioUrl) {
+        // Fallback: check if we got audio in the last buffer
+        setProgress(100);
+        setProgressStage("Done!");
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Synthesis failed");
       setProgress(0);
