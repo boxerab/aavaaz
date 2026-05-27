@@ -1728,7 +1728,7 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
             </div>
             <div id="live-status" class="demo-status"></div>
             <div id="live-result" class="demo-result" style="display: none; position: relative;">
-                <button id="live-copy-btn" title="Copy transcription" style="position: absolute; top: 8px; right: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-secondary); border-radius: 4px; padding: 4px 8px; font-size: 0.75rem; cursor: pointer; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">&#128203; Copy</button>
+                <button id="live-copy-btn" title="Copy transcription" style="position: absolute; top: 8px; right: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-secondary); border-radius: 4px; padding: 5px 6px; cursor: pointer; opacity: 0.5; transition: opacity 0.2s; line-height: 1;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11V3a1.5 1.5 0 0 1 1.5-1.5H11"/></svg></button>
                 <pre id="live-transcript" style="min-height: 120px; max-height: 300px; overflow-y: auto;"></pre>
             </div>
             <p style="margin-top: 20px; font-size: 0.75rem; color: var(--text-tertiary); text-align: center;">&#128274; <strong>Privacy:</strong> Audio is streamed directly to the GPU, transcribed in memory, and immediately discarded. Nothing is stored.</p>
@@ -2093,10 +2093,12 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
         document.getElementById('live-copy-btn').addEventListener('click', () => {
             const text = transcriptEl.textContent;
             if (!text) return;
+            const btn = document.getElementById('live-copy-btn');
+            const originalHTML = btn.innerHTML;
             navigator.clipboard.writeText(text).then(() => {
-                const btn = document.getElementById('live-copy-btn');
-                btn.innerHTML = '&#10003; Copied';
-                setTimeout(() => { btn.innerHTML = '&#128203; Copy'; }, 2000);
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8.5l3.5 3.5 7-7"/></svg>';
+                btn.style.color = '#4ade80';
+                setTimeout(() => { btn.innerHTML = originalHTML; btn.style.color = ''; }, 1500);
             });
         });
 
