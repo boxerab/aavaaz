@@ -1757,6 +1757,12 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
                 <span class="demo-record-timer" id="demo-record-timer"></span>
             </div>
             <div class="demo-status" id="demo-status"></div>
+            <div id="demo-progress-wrap" style="display:none; margin-top: 12px;">
+                <div style="background: var(--bg-tertiary); border-radius: 8px; height: 6px; overflow: hidden; border: 1px solid var(--border);">
+                    <div id="demo-progress-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, var(--green), var(--blue)); border-radius: 8px; transition: width 0.5s ease;"></div>
+                </div>
+                <div id="demo-progress-text" style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 6px; text-align: right;"></div>
+            </div>
             <div class="demo-result" id="demo-result">
                 <pre id="demo-transcript"></pre>
                 <div class="demo-meta" id="demo-meta"></div>
@@ -1905,10 +1911,40 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
         const result = document.getElementById('demo-result');
         const transcript = document.getElementById('demo-transcript');
         const meta = document.getElementById('demo-meta');
+        const progressWrap = document.getElementById('demo-progress-wrap');
+        const progressBar = document.getElementById('demo-progress-bar');
+        const progressText = document.getElementById('demo-progress-text');
+        let progressInterval = null;
 
         function setStatus(msg, cls) {
             status.className = 'demo-status ' + cls;
             status.innerHTML = msg;
+        }
+
+        function startProgress(estimatedSeconds) {
+            progressWrap.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressText.textContent = '0%';
+            let startTime = Date.now();
+            progressInterval = setInterval(() => {
+                const elapsed = (Date.now() - startTime) / 1000;
+                // Asymptotic curve: approaches 90% but never reaches it
+                const pct = Math.min(90, (elapsed / estimatedSeconds) * 80);
+                progressBar.style.width = pct.toFixed(1) + '%';
+                progressText.textContent = Math.round(pct) + '%';
+            }, 500);
+        }
+
+        function finishProgress() {
+            if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
+            progressBar.style.width = '100%';
+            progressText.textContent = '100%';
+            setTimeout(() => { progressWrap.style.display = 'none'; }, 1500);
+        }
+
+        function hideProgress() {
+            if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
+            progressWrap.style.display = 'none';
         }
 
         dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
@@ -1927,6 +1963,7 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
                 return;
             }
             result.classList.remove('show');
+            hideProgress();
             setStatus('<span class="demo-spinner"></span>Transcribing <strong>' + file.name + '</strong> (' + (file.size / 1024 / 1024).toFixed(1) + ' MB)&hellip;', 'loading');
             const t0 = performance.now();
 
@@ -1944,23 +1981,32 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
                     const putResp = await fetch(upload_url, { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
                     if (!putResp.ok) throw new Error('Upload failed: ' + putResp.status);
 
-                    // Poll for transcription result
+                    // Poll for transcription result with progress bar
                     setStatus('<span class="demo-spinner"></span>Transcribing (this may take some time)&hellip;', 'loading');
+                    // Estimate: ~10 seconds per MB for transcription on Lambda CPU
+                    const estimatedSec = Math.max(30, (file.size / (1024 * 1024)) * 10);
+                    startProgress(estimatedSec);
                     const encodedKey = btoa(key).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
                     data = await pollForResult(encodedKey);
+                    finishProgress();
                     text = data.segments?.map(s => s.text).join(' ') || data.text || data;
                 } else {
-                    // Small file: direct POST
+                    // Small file: direct POST with progress
                     const form = new FormData();
                     form.append('file', file);
                     form.append('response_format', 'verbose_json');
+                    // Estimate: ~8 seconds per MB for small files (includes cold start)
+                    const estimatedSec = Math.max(15, (file.size / (1024 * 1024)) * 8);
+                    startProgress(estimatedSec);
                     const resp = await fetch(API, { method: 'POST', body: form });
                     if (!resp.ok) {
+                        hideProgress();
                         const err = await resp.text();
                         setStatus('Error: ' + (resp.status === 503 ? 'Service warming up &mdash; try again in 60 seconds' : err), 'error');
                         return;
                     }
                     data = await resp.json();
+                    finishProgress();
                     text = data.text || data.segments?.map(s => s.text).join(' ') || JSON.stringify(data, null, 2);
                 }
 
@@ -1970,6 +2016,7 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
                 result.classList.add('show');
                 setStatus('\u2713 Transcription complete', 'success');
             } catch (e) {
+                hideProgress();
                 setStatus('Network error: ' + e.message, 'error');
             } finally {
                 fileInput.value = '';
