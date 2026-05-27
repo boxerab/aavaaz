@@ -5,10 +5,16 @@ import { Play, Copy, Check } from "lucide-react";
 
 const ENDPOINTS = {
   batch: {
-    label: "Batch Transcription",
+    label: "Batch Transcription (Lambda)",
+    url: "https://gh0edmarma.execute-api.us-east-1.amazonaws.com/v1/audio/transcriptions",
+    method: "POST",
+    description: "Upload audio file for offline transcription via AWS Lambda",
+  },
+  batch_modal: {
+    label: "Batch Transcription (Modal GPU)",
     url: "https://boxerab--aavaaz-transcribe-transcriber-web.modal.run/v1/audio/transcriptions",
     method: "POST",
-    description: "Upload audio file for transcription (OpenAI-compatible API)",
+    description: "GPU-accelerated batch transcription via Modal (faster, large-v3)",
   },
   live: {
     label: "Live WebSocket",
@@ -16,11 +22,11 @@ const ENDPOINTS = {
     method: "WebSocket",
     description: "Real-time streaming transcription via WebSocket",
   },
-  health_batch: {
-    label: "Health (Batch)",
-    url: "https://boxerab--aavaaz-transcribe-transcriber-web.modal.run/health",
+  health_lambda: {
+    label: "Health (Lambda)",
+    url: "https://gh0edmarma.execute-api.us-east-1.amazonaws.com/health",
     method: "GET",
-    description: "Check batch service health and model info",
+    description: "Check Lambda service health",
   },
   health_live: {
     label: "Health (Live)",
@@ -35,13 +41,13 @@ type EndpointKey = keyof typeof ENDPOINTS;
 const CODE_EXAMPLES: Record<string, { curl: string; python: string; javascript: string }> = {
   batch: {
     curl: `curl -X POST \\
-  "https://boxerab--aavaaz-transcribe-transcriber-web.modal.run/v1/audio/transcriptions" \\
+  "https://gh0edmarma.execute-api.us-east-1.amazonaws.com/v1/audio/transcriptions" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -F "file=@audio.mp3" \\
   -F "response_format=json"`,
     python: `import requests
 
-url = "https://boxerab--aavaaz-transcribe-transcriber-web.modal.run/v1/audio/transcriptions"
+url = "https://gh0edmarma.execute-api.us-east-1.amazonaws.com/v1/audio/transcriptions"
 headers = {"Authorization": "Bearer YOUR_API_KEY"}
 
 with open("audio.mp3", "rb") as f:
@@ -56,6 +62,49 @@ result = response.json()
 for segment in result["segments"]:
     print(f"[{segment['start']:.1f}s] {segment['text']}")`,
     javascript: `const formData = new FormData();
+formData.append("file", audioFile);
+formData.append("response_format", "json");
+
+const response = await fetch(
+  "https://gh0edmarma.execute-api.us-east-1.amazonaws.com/v1/audio/transcriptions",
+  {
+    method: "POST",
+    headers: { Authorization: "Bearer YOUR_API_KEY" },
+    body: formData,
+  }
+);
+
+const result = await response.json();
+result.segments.forEach(seg => {
+  console.log(\`[\${seg.start.toFixed(1)}s] \${seg.text}\`);
+});`,
+  },
+  batch_modal: {
+    curl: `# GPU-accelerated — use for large files or when you need large-v3
+curl -X POST \\
+  "https://boxerab--aavaaz-transcribe-transcriber-web.modal.run/v1/audio/transcriptions" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -F "file=@audio.mp3" \\
+  -F "response_format=json"`,
+    python: `import requests
+
+# GPU-accelerated endpoint (Modal) — faster for large files
+url = "https://boxerab--aavaaz-transcribe-transcriber-web.modal.run/v1/audio/transcriptions"
+headers = {"Authorization": "Bearer YOUR_API_KEY"}
+
+with open("audio.mp3", "rb") as f:
+    response = requests.post(
+        url,
+        headers=headers,
+        files={"file": f},
+        data={"response_format": "json"},
+    )
+
+result = response.json()
+for segment in result["segments"]:
+    print(f"[{segment['start']:.1f}s] {segment['text']}")`,
+    javascript: `// GPU-accelerated endpoint (Modal) — faster for large files
+const formData = new FormData();
 formData.append("file", audioFile);
 formData.append("response_format", "json");
 
@@ -132,12 +181,12 @@ ws.onmessage = (event) => {
   }
 };`,
   },
-  health_batch: {
-    curl: `curl "https://boxerab--aavaaz-transcribe-transcriber-web.modal.run/health"`,
+  health_lambda: {
+    curl: `curl "https://gh0edmarma.execute-api.us-east-1.amazonaws.com/health"`,
     python: `import requests
-r = requests.get("https://boxerab--aavaaz-transcribe-transcriber-web.modal.run/health")
+r = requests.get("https://gh0edmarma.execute-api.us-east-1.amazonaws.com/health")
 print(r.json())`,
-    javascript: `const r = await fetch("https://boxerab--aavaaz-transcribe-transcriber-web.modal.run/health");
+    javascript: `const r = await fetch("https://gh0edmarma.execute-api.us-east-1.amazonaws.com/health");
 console.log(await r.json());`,
   },
   health_live: {
@@ -291,11 +340,11 @@ export default function PlaygroundPage() {
 
 client = OpenAI(
     api_key="YOUR_API_KEY",
-    base_url="https://boxerab--aavaaz-transcribe-transcriber-web.modal.run"
+    base_url="https://gh0edmarma.execute-api.us-east-1.amazonaws.com"
 )
 
 transcript = client.audio.transcriptions.create(
-    model="large-v3",
+    model="small.en",
     file=open("audio.mp3", "rb"),
 )`}</pre>
       </div>

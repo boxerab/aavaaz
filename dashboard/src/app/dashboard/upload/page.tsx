@@ -5,7 +5,7 @@ import { Upload, FileAudio, Loader2, Download, Copy, Check } from "lucide-react"
 
 const BATCH_URL =
   process.env.NEXT_PUBLIC_BATCH_URL ||
-  "https://boxerab--aavaaz-transcribe-transcriber-web.modal.run/v1/audio/transcriptions";
+  "https://gh0edmarma.execute-api.us-east-1.amazonaws.com/v1/audio/transcriptions";
 
 interface Segment {
   start: number;
