@@ -157,18 +157,60 @@ class LiveTranscriber:
 
         return ClientManager(max_clients=max_clients, max_connection_time=max_time)
 
-    def _build_post_processor(self):
+    def _build_post_processor(self, features=None):
+        """Build a segment post-processing pipeline.
+
+        If `features` dict is provided (from client options), build a
+        per-connection pipeline based on the client's feature config.
+        Otherwise, fall back to environment-variable-based defaults.
+        """
         import os
 
         fns = []
-        if os.environ.get("AAVAAZ_ENABLE_FORMAT", "1") == "1":
-            from aavaaz.features.formatting import smart_format
 
-            fns.append(smart_format)
-        if os.environ.get("AAVAAZ_ENABLE_PII", "0") == "1":
-            from aavaaz.features.pii_redaction import redact_pii
+        if features:
+            # Per-client feature configuration from dashboard
+            fmt = features.get("formatting", {})
+            if fmt.get("enabled", False):
+                from aavaaz.features.formatting import format_transcript
+                capitalize = fmt.get("capitalize", True)
+                numbers = fmt.get("numbers", True)
+                smart = fmt.get("smart", False)
+                fns.append(lambda text: format_transcript(text, capitalize=capitalize, numbers=numbers, smart=smart))
 
-            fns.append(redact_pii)
+            pii = features.get("pii", {})
+            if pii.get("enabled", False):
+                from aavaaz.features.pii_redaction import redact_pii
+                pii_types = set(pii.get("types", ["ssn", "credit_card", "phone", "email", "ip_address"]))
+                fns.append(lambda text, _t=pii_types: redact_pii(text, pii_types=_t))
+
+            profanity = features.get("profanity", {})
+            if profanity.get("enabled", False):
+                from aavaaz.features.profanity_filter import filter_profanity
+                mode = profanity.get("mode", "partial")
+                extra = profanity.get("extraWords", [])
+                fns.append(lambda text, _m=mode, _e=extra: filter_profanity(text, mode=_m, extra_words=_e or None))
+
+            intel = features.get("intelligence", {})
+            if intel.get("fillerRemoval", False):
+                from aavaaz.features.audio_intelligence import remove_filler_words
+                aggressive = intel.get("fillerAggressive", False)
+                fns.append(lambda text, _a=aggressive: remove_filler_words(text, aggressive=_a))
+
+            nr = features.get("noiseReduction", {})
+            if nr.get("enabled", False):
+                # Note: noise reduction operates on audio, not text segments.
+                # It will be applied in the audio pre-processing step.
+                pass
+
+        else:
+            # Legacy env-var-based config
+            if os.environ.get("AAVAAZ_ENABLE_FORMAT", "1") == "1":
+                from aavaaz.features.formatting import smart_format
+                fns.append(smart_format)
+            if os.environ.get("AAVAAZ_ENABLE_PII", "0") == "1":
+                from aavaaz.features.pii_redaction import redact_pii
+                fns.append(redact_pii)
 
         if not fns:
             return None
@@ -237,16 +279,50 @@ class LiveTranscriber:
         return web_app
 
     def _handle_client(self, websocket: WebSocketAdapter):
-        """Run WhisperLive's client handling in a sync context."""
+        """Run WhisperLive's client handling in a sync context.
+
+        Intercepts the initial options message to extract per-client feature
+        configuration and sets up a per-connection post-processing pipeline.
+        """
+        import json
+
         from websockets.exceptions import ConnectionClosed
         from whisper_live.server import BackendType
 
         try:
             self.server.backend = BackendType.FASTER_WHISPER
+
+            # Peek at the options to extract features config before WhisperLive processes it
+            # We monkey-patch the recv to capture the first message
+            original_recv = websocket.recv
+            captured_options = {}
+
+            def intercepting_recv(timeout=None):
+                nonlocal captured_options
+                data = original_recv(timeout=timeout)
+                try:
+                    captured_options = json.loads(data) if isinstance(data, str) else json.loads(data.decode())
+                except (json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+                    pass
+                # Restore original recv after first message
+                websocket.recv = original_recv
+                return data
+
+            websocket.recv = intercepting_recv
+
             if not self.server.handle_new_connection(
                 websocket, self.model_name, None, False, False
             ):
                 return
+
+            # Apply per-client feature config if provided
+            features = captured_options.get("features")
+            if features:
+                processor = self._build_post_processor(features=features)
+                if processor:
+                    self.server.segment_post_processor = processor
+                    logger.info("Applied per-client feature config: %s",
+                                [k for k, v in features.items() if isinstance(v, dict) and v.get("enabled")])
 
             while not self.server.client_manager.is_client_timeout(websocket):
                 if not self.server.process_audio_frames(websocket):
@@ -258,3 +334,5 @@ class LiveTranscriber:
         finally:
             if self.server.client_manager.get_client(websocket):
                 self.server.client_manager.remove_client(websocket)
+            # Reset to default post-processor after client disconnects
+            self.server.segment_post_processor = self._build_post_processor()

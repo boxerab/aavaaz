@@ -11,6 +11,7 @@ import {
   CreditCard,
   FileAudio,
   Mic,
+  Settings,
   LogOut,
 } from "lucide-react";
 
@@ -20,6 +21,7 @@ const navItems = [
   { href: "/dashboard/usage", label: "Usage", icon: BarChart3 },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
   { href: "/dashboard/transcripts", label: "Transcripts", icon: FileAudio },
+  { href: "/dashboard/settings", label: "Features", icon: Settings },
   { href: "/dashboard/live", label: "Live Demo", icon: Mic },
 ];
 

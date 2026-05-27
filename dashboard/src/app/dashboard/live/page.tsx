@@ -45,7 +45,14 @@ export default function LiveDemoPage() {
       setStatus("Connected — speak now");
       setRecording(true);
 
-      // Send WhisperLive client options
+      // Load feature settings from localStorage
+      let features = null;
+      try {
+        const stored = localStorage.getItem("aavaaz-features-config");
+        if (stored) features = JSON.parse(stored);
+      } catch { /* ignore */ }
+
+      // Send WhisperLive client options with feature config
       const options = {
         uid: crypto.randomUUID(),
         language: language || null,
@@ -53,6 +60,7 @@ export default function LiveDemoPage() {
         model: model,
         use_vad: true,
         word_timestamps: false,
+        ...(features ? { features } : {}),
       };
       ws.send(JSON.stringify(options));
 
