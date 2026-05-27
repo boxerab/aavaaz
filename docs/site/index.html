@@ -1727,7 +1727,8 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
                 <button id="live-stop-btn" class="btn btn-outline" style="margin: 0 8px; display: none; border-color: var(--rose); color: var(--rose);">&#9209; Stop</button>
             </div>
             <div id="live-status" class="demo-status"></div>
-            <div id="live-result" class="demo-result" style="display: none;">
+            <div id="live-result" class="demo-result" style="display: none; position: relative;">
+                <button id="live-copy-btn" title="Copy transcription" style="position: absolute; top: 8px; right: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-secondary); border-radius: 4px; padding: 4px 8px; font-size: 0.75rem; cursor: pointer; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">&#128203; Copy</button>
                 <pre id="live-transcript" style="min-height: 120px; max-height: 300px; overflow-y: auto;"></pre>
             </div>
             <p style="margin-top: 20px; font-size: 0.75rem; color: var(--text-tertiary); text-align: center;">&#128274; <strong>Privacy:</strong> Audio is streamed directly to the GPU, transcribed in memory, and immediately discarded. Nothing is stored.</p>
@@ -2084,6 +2085,16 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
         });
 
         stopBtn.addEventListener('click', stopLive);
+
+        document.getElementById('live-copy-btn').addEventListener('click', () => {
+            const text = transcriptEl.textContent;
+            if (!text) return;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.getElementById('live-copy-btn');
+                btn.innerHTML = '&#10003; Copied';
+                setTimeout(() => { btn.innerHTML = '&#128203; Copy'; }, 2000);
+            });
+        });
 
         function stopLive() {
             if (processor) { processor.disconnect(); processor = null; }
