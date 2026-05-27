@@ -90,4 +90,10 @@ class AavaazServer:
             batch_max_size=self.batch_max_size,
             batch_window_ms=self.batch_window_ms,
             metrics_port=self.metrics_port,
+            api_key=self.api_key,
+            rate_limit_rpm=self.rate_limit_rpm,
+            word_timestamps=self.word_timestamps,
+            hotwords=self.hotwords,
+            enable_diarization=self.enable_diarization,
+            max_speakers=self.max_speakers,
         )
