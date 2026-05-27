@@ -121,7 +121,9 @@ def _store_audio(audio_path: str, filename: str | None = None) -> str | None:
     if os.environ.get("AAVAAZ_STORE_AUDIO", "0") != "1":
         return None
 
-    bucket = os.environ.get("AAVAAZ_AUDIO_BUCKET") or os.environ.get("AAVAAZ_OUTPUT_BUCKET", "")
+    bucket = os.environ.get("AAVAAZ_AUDIO_BUCKET") or os.environ.get(
+        "AAVAAZ_OUTPUT_BUCKET", ""
+    )
     if not bucket:
         logger.warning("AAVAAZ_STORE_AUDIO=1 but no bucket configured")
         return None
@@ -157,7 +159,9 @@ def _transcribe(audio_path: str, progress_callback=None) -> dict:
 
     model = _get_model()
     language = os.environ.get("AAVAAZ_LANGUAGE") or None
-    segments, info = model.transcribe(audio_path, language=language, word_timestamps=True)
+    segments, info = model.transcribe(
+        audio_path, language=language, word_timestamps=True
+    )
 
     pipeline = _build_pipeline()
     results = []
@@ -254,7 +258,9 @@ def _s3_client():
 def handler(event: dict, context: Any) -> dict:
     """Main Lambda entry point — dispatches to S3, web UI, or API handler."""
     request_id = (
-        getattr(context, "aws_request_id", uuid.uuid4().hex) if context else uuid.uuid4().hex
+        getattr(context, "aws_request_id", uuid.uuid4().hex)
+        if context
+        else uuid.uuid4().hex
     )
     logger.info("Request started: request_id=%s", request_id)
 
@@ -423,7 +429,11 @@ def _handle_s3(event: dict, context: Any) -> dict:
             )
 
         output = _format_output(result)
-        ext = "json" if os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json") == "json" else "txt"
+        ext = (
+            "json"
+            if os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json") == "json"
+            else "txt"
+        )
         out_key = f"{output_prefix}{stem}.{ext}"
 
         if output_bucket:
@@ -438,7 +448,9 @@ def _handle_s3(event: dict, context: Any) -> dict:
         else:
             # Same bucket
             s3.put_object(Bucket=bucket, Key=out_key, Body=output.encode())
-            results.append({"input": f"s3://{bucket}/{key}", "output": f"s3://{bucket}/{out_key}"})
+            results.append(
+                {"input": f"s3://{bucket}/{key}", "output": f"s3://{bucket}/{out_key}"}
+            )
 
         # Delete the input audio file from S3 after successful transcription
         try:
@@ -579,7 +591,9 @@ def _handle_api(event: dict, context: Any) -> dict:
         if "audio_url" in payload:
             url = payload["audio_url"]
             if not url.startswith("s3://"):
-                return _response(400, json.dumps({"error": "Only s3:// URLs supported"}))
+                return _response(
+                    400, json.dumps({"error": "Only s3:// URLs supported"})
+                )
             parts = url[5:].split("/", 1)
             if len(parts) != 2:
                 return _response(400, json.dumps({"error": "Invalid S3 URL"}))
@@ -595,7 +609,9 @@ def _handle_api(event: dict, context: Any) -> dict:
             Path(local_path).write_bytes(audio_bytes)
 
         else:
-            return _response(400, json.dumps({"error": "Provide 'audio_url' or 'audio_base64'"}))
+            return _response(
+                400, json.dumps({"error": "Provide 'audio_url' or 'audio_base64'"})
+            )
 
         _store_audio(local_path)
         result = _transcribe(local_path)
@@ -615,13 +631,17 @@ def _handle_multipart(event: dict) -> dict:
 
     max_size = 25 * 1024 * 1024  # 25 MB
     if len(file_bytes) > max_size:
-        return _response(413, json.dumps({"error": "File too large. Maximum size is 25 MB."}))
+        return _response(
+            413, json.dumps({"error": "File too large. Maximum size is 25 MB."})
+        )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         safe_name = Path(filename or "audio.wav").name
         local_path = os.path.join(tmpdir, safe_name)
         Path(local_path).write_bytes(file_bytes)
-        logger.info("Multipart upload: filename=%s size_bytes=%d", safe_name, len(file_bytes))
+        logger.info(
+            "Multipart upload: filename=%s size_bytes=%d", safe_name, len(file_bytes)
+        )
         _store_audio(local_path, safe_name)
         result = _transcribe(local_path)
 
@@ -629,4 +649,6 @@ def _handle_multipart(event: dict) -> dict:
     if fmt == "text":
         text = "\n".join(seg["text"] for seg in result["segments"])
         return _response(200, text, {"Content-Type": "text/plain"})
-    return _response(200, json.dumps(result, indent=2), {"Content-Type": "application/json"})
+    return _response(
+        200, json.dumps(result, indent=2), {"Content-Type": "application/json"}
+    )

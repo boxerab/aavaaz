@@ -34,7 +34,9 @@ WEB_DIR = "/web"
 app = modal.App("aavaaz-live")
 
 image = (
-    modal.Image.from_registry("nvidia/cuda:12.4.1-runtime-ubuntu22.04", add_python="3.12")
+    modal.Image.from_registry(
+        "nvidia/cuda:12.4.1-runtime-ubuntu22.04", add_python="3.12"
+    )
     .apt_install("ffmpeg")
     .pip_install(
         "faster-whisper>=1.0",
