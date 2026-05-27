@@ -121,7 +121,7 @@ export default function UploadPage() {
     if (!urlRes.ok) {
       throw new Error(`Failed to get upload URL: ${await urlRes.text()}`);
     }
-    const { upload_url, key } = await urlRes.json();
+    const { upload_url, key, bucket } = await urlRes.json();
 
     // Step 2: Upload file directly to S3 via presigned URL (no size limit)
     setProgress(10);
@@ -153,7 +153,7 @@ export default function UploadPage() {
     setProgressStage("Transcribing audio...");
 
     const body: Record<string, unknown> = {
-      audio_url: `s3://${key}`,
+      audio_url: `s3://${bucket}/${key}`,
       response_format: format,
     };
     if (features) body.features = features;

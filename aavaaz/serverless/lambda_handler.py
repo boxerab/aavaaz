@@ -325,7 +325,7 @@ def _handle_upload_url(event: dict) -> dict:
 
     return _response(
         200,
-        json.dumps({"upload_url": presigned_url, "key": key}),
+        json.dumps({"upload_url": presigned_url, "key": key, "bucket": bucket}),
         {"Content-Type": "application/json"},
     )
 
