@@ -20,6 +20,7 @@ Environment variables (set via Modal Secrets):
 """
 
 import asyncio
+import contextlib
 import logging
 
 import fastapi
@@ -320,14 +321,14 @@ class LiveTranscriber:
             def intercepting_recv(timeout=None):
                 nonlocal captured_options
                 data = original_recv(timeout=timeout)
-                try:
+                with contextlib.suppress(
+                    json.JSONDecodeError, UnicodeDecodeError, AttributeError
+                ):
                     captured_options = (
                         json.loads(data)
                         if isinstance(data, str)
                         else json.loads(data.decode())
                     )
-                except (json.JSONDecodeError, UnicodeDecodeError, AttributeError):
-                    pass
                 # Restore original recv after first message
                 websocket.recv = original_recv
                 return data

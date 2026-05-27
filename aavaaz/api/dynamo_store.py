@@ -11,6 +11,7 @@ Tables:
   - aavaaz-transcripts-{env}: Transcript job history
 """
 
+import contextlib
 import hashlib
 import logging
 import os
@@ -112,14 +113,12 @@ def validate_api_key(raw_key: str) -> str | None:
     item = items[0]
 
     # Update last_used timestamp (fire and forget)
-    try:
+    with contextlib.suppress(Exception):
         _table_api_keys.update_item(
             Key={"user_id": item["user_id"], "key_id": item["key_id"]},
             UpdateExpression="SET last_used = :now",
             ExpressionAttributeValues={":now": datetime.now(UTC).isoformat()},
         )
-    except Exception:
-        pass
 
     return item["user_id"]
 
@@ -145,9 +144,7 @@ def get_usage(user_id: str, days: int = 30) -> list[dict]:
     """Get daily usage records for a user (last N days)."""
     from datetime import timedelta
 
-    start_date = (datetime.now(UTC) - timedelta(days=days)).strftime(
-        "%Y-%m-%d"
-    )
+    start_date = (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%d")
 
     response = _table_usage.query(
         KeyConditionExpression=Key("user_id").eq(user_id) & Key("date").gte(start_date),
