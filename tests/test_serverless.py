@@ -88,7 +88,14 @@ def test_handler_dispatches_s3(mock_whisper, _env, tmp_path):
     body = json.loads(result["body"])
     assert len(body["results"]) == 1
     assert body["results"][0]["input"] == "s3://input-bucket/test.wav"
-    s3.put_object.assert_called_once()
+    # put_object is called for both progress reporting and the final transcript
+    transcript_calls = [
+        c
+        for c in s3.put_object.call_args_list
+        if c.kwargs.get("Key", "").endswith(".json")
+        and not c.kwargs.get("Key", "").endswith(".progress.json")
+    ]
+    assert len(transcript_calls) == 1
 
 
 @patch("faster_whisper.WhisperModel")
