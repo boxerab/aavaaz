@@ -16,6 +16,9 @@ import {
   Code2,
   ScrollText,
   BookOpen,
+  Users,
+  Plug2,
+  Activity,
   LogOut,
 } from "lucide-react";
 
@@ -27,10 +30,13 @@ const navItems = [
   { href: "/dashboard/keys", label: "API Keys", icon: Key },
   { href: "/dashboard/vocabulary", label: "Vocabulary", icon: BookOpen },
   { href: "/dashboard/settings", label: "Features", icon: Settings },
+  { href: "/dashboard/integrations", label: "Integrations", icon: Plug2 },
+  { href: "/dashboard/team", label: "Team", icon: Users },
   { href: "/dashboard/logs", label: "Request Logs", icon: ScrollText },
   { href: "/dashboard/usage", label: "Usage", icon: BarChart3 },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
   { href: "/dashboard/transcripts", label: "Transcripts", icon: FileAudio },
+  { href: "/dashboard/status", label: "Status", icon: Activity },
 ];
 
 export default function DashboardLayout({
