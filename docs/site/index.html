@@ -1704,7 +1704,7 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
     <div class="section-inner">
         <span class="section-label">Try It</span>
         <h2 class="section-title">Live Transcription Demo</h2>
-        <p class="section-desc">Speak into your microphone and watch real-time transcription appear. Powered by Aavaaz on Modal GPU with Whisper large-v3.<br><em style="color:var(--text-tertiary); font-size:0.8rem;">Note: First use may take 10-20 seconds for GPU cold start. Subsequent requests are instant.</em></p>
+        <p class="section-desc">Speak into your microphone and watch real-time transcription appear. Powered by Aavaaz on Modal GPU with Whisper large-v3.<br><em style="color:var(--text-tertiary); font-size:0.8rem;">Note: First use may take 10-20 seconds for GPU cold start. Transcription appears after 3-5 seconds of speech.</em></p>
 
         <div class="demo-container fade-in">
             <!-- Live streaming controls -->
@@ -2045,7 +2045,7 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
             ws.binaryType = 'arraybuffer';
 
             ws.onopen = () => {
-                setLiveStatus('&#9679; Connected &mdash; speak now', 'success');
+                setLiveStatus('&#9679; Connected &mdash; speak now (transcription appears after 3-5s)', 'success');
                 const options = {
                     uid: crypto.randomUUID(),
                     language: document.getElementById('live-language').value || null,
