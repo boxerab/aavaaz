@@ -14,11 +14,37 @@ const EXAMPLE_TEXTS = [
 export default function TTSPage() {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressStage, setProgressStage] = useState("");
   const [error, setError] = useState("");
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [processingTime, setProcessingTime] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function startProgress() {
+    setProgress(5);
+    setProgressStage("Connecting to GPU...");
+    let pct = 5;
+    // Estimate: ~0.5s per 10 chars, cold start adds ~30s
+    const estimatedMs = Math.max(5000, text.length * 50);
+    const increment = 85 / (estimatedMs / 500); // reach ~90% by estimated time
+
+    progressRef.current = setInterval(() => {
+      pct = Math.min(pct + increment, 92);
+      setProgress(Math.round(pct));
+      if (pct > 15) setProgressStage("Generating speech...");
+      if (pct > 70) setProgressStage("Encoding audio...");
+    }, 500);
+  }
+
+  function stopProgress() {
+    if (progressRef.current) {
+      clearInterval(progressRef.current);
+      progressRef.current = null;
+    }
+  }
 
   async function synthesize() {
     if (!text.trim()) return;
@@ -26,6 +52,7 @@ export default function TTSPage() {
     setError("");
     setAudioUrl(null);
     setProcessingTime(null);
+    startProgress();
 
     try {
       const res = await fetch(TTS_ENDPOINT, {
@@ -39,15 +66,23 @@ export default function TTSPage() {
         throw new Error(err || `HTTP ${res.status}`);
       }
 
+      setProgress(95);
+      setProgressStage("Downloading audio...");
+
       const pt = res.headers.get("X-Processing-Time");
       if (pt) setProcessingTime(pt);
 
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       setAudioUrl(url);
+      setProgress(100);
+      setProgressStage("Done!");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Synthesis failed");
+      setProgress(0);
+      setProgressStage("");
     } finally {
+      stopProgress();
       setLoading(false);
     }
   }
@@ -139,6 +174,22 @@ export default function TTSPage() {
           ))}
         </div>
       </div>
+
+      {/* Progress bar */}
+      {loading && (
+        <div className="rounded-lg border bg-card p-5 space-y-3">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">{progressStage}</span>
+            <span className="font-mono text-xs">{progress}%</span>
+          </div>
+          <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Audio output */}
       {error && (

@@ -196,8 +196,8 @@ class TTSServer:
                 text,
                 "--checkpoint-path",
                 self.model_path,
-                "--output-path",
-                os.path.join(tmpdir, "codes.npy"),
+                "--output-dir",
+                tmpdir,
                 "--num-samples",
                 "1",
             ]
