@@ -283,7 +283,7 @@
                 });
 
                 // Step 3: Poll for transcription result
-                progress.textContent = 'Transcribing (this may take a moment)...';
+                progress.textContent = 'Transcribing (this may take some time)...';
                 progressBar.style.display = 'none';
                 const encodedKey = btoa(key).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
                 const transcript = await pollForResult(encodedKey);

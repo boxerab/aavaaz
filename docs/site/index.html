@@ -1945,7 +1945,7 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
                     if (!putResp.ok) throw new Error('Upload failed: ' + putResp.status);
 
                     // Poll for transcription result
-                    setStatus('<span class="demo-spinner"></span>Transcribing (this may take a moment)&hellip;', 'loading');
+                    setStatus('<span class="demo-spinner"></span>Transcribing (this may take some time)&hellip;', 'loading');
                     const encodedKey = btoa(key).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
                     data = await pollForResult(encodedKey);
                     text = data.segments?.map(s => s.text).join(' ') || data.text || data;
