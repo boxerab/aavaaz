@@ -1,0 +1,94 @@
+# Aavaaz SaaS — Helm values for production EKS deployment
+replicaCount: 2
+
+image:
+  repository: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/aavaaz
+  tag: latest
+  pullPolicy: Always
+
+model: large-v3
+batchInference: true
+metricsPort: 9091
+
+gpu:
+  enabled: true
+  count: 1
+
+# GPU pods should schedule on Karpenter-provisioned GPU nodes
+nodeSelector:
+  workload: gpu-transcription
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+service:
+  type: ClusterIP
+  restPort: 8000
+  wsPort: 9090
+
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: "<ACM_CERT_ARN>"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    # WebSocket sticky sessions
+    alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true,stickiness.lb_cookie.duration_seconds=3600
+  hosts:
+    - host: api.aavaaz.dev
+      paths:
+        - path: /
+          pathType: Prefix
+
+resources:
+  requests:
+    memory: "8Gi"
+    cpu: "2"
+    nvidia.com/gpu: "1"
+  limits:
+    memory: "16Gi"
+    nvidia.com/gpu: "1"
+
+# Horizontal Pod Autoscaler based on GPU utilization / active connections
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+# Environment variables for SaaS mode
+env:
+  - name: AAVAAZ_MODE
+    value: "saas"
+  - name: AAVAAZ_JWT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: aavaaz-secrets
+        key: jwt-secret
+  - name: STRIPE_SECRET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: aavaaz-secrets
+        key: stripe-secret-key
+  - name: STRIPE_WEBHOOK_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: aavaaz-secrets
+        key: stripe-webhook-secret
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: aavaaz-secrets
+        key: database-url
+  - name: REDIS_URL
+    valueFrom:
+      secretKeyRef:
+        name: aavaaz-secrets
+        key: redis-url
+  - name: AWS_S3_BUCKET
+    value: "aavaaz-saas-data-us-east-1"
