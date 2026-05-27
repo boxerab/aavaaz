@@ -12,17 +12,25 @@ import {
   FileAudio,
   Mic,
   Settings,
+  Upload,
+  Code2,
+  ScrollText,
+  BookOpen,
   LogOut,
 } from "lucide-react";
 
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/dashboard/upload", label: "File Upload", icon: Upload },
+  { href: "/dashboard/live", label: "Live Demo", icon: Mic },
+  { href: "/dashboard/playground", label: "API Playground", icon: Code2 },
   { href: "/dashboard/keys", label: "API Keys", icon: Key },
+  { href: "/dashboard/vocabulary", label: "Vocabulary", icon: BookOpen },
+  { href: "/dashboard/settings", label: "Features", icon: Settings },
+  { href: "/dashboard/logs", label: "Request Logs", icon: ScrollText },
   { href: "/dashboard/usage", label: "Usage", icon: BarChart3 },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
   { href: "/dashboard/transcripts", label: "Transcripts", icon: FileAudio },
-  { href: "/dashboard/settings", label: "Features", icon: Settings },
-  { href: "/dashboard/live", label: "Live Demo", icon: Mic },
 ];
 
 export default function DashboardLayout({
