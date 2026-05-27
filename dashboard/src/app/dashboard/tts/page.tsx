@@ -39,11 +39,12 @@ export default function TTSPage() {
         throw new Error(err || `HTTP ${res.status}`);
       }
 
+      const pt = res.headers.get("X-Processing-Time");
+      if (pt) setProcessingTime(pt);
+
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       setAudioUrl(url);
-      const pt = res.headers.get("X-Processing-Time");
-      if (pt) setProcessingTime(pt);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Synthesis failed");
     } finally {
@@ -138,19 +139,6 @@ export default function TTSPage() {
           ))}
         </div>
       </div>
-
-      {/* Loading indicator */}
-      {loading && (
-        <div className="rounded-lg border bg-card p-5 space-y-3">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>Generating speech...</span>
-          </div>
-          <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-            <div className="h-full w-1/3 rounded-full bg-primary animate-pulse" />
-          </div>
-        </div>
-      )}
 
       {/* Audio output */}
       {error && (
