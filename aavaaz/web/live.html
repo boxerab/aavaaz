@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aavaaz Live Transcription</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f3e5f5;
+            margin: 0;
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px 30px;
+            border-radius: 16px;
+            box-shadow: 0 15px 35px rgba(147, 112, 219, 0.15);
+        }
+        h1 { color: #6a1b9a; margin-bottom: 10px; }
+        .subtitle { color: #666; margin-bottom: 30px; }
+        #transcript {
+            margin: 25px auto;
+            white-space: pre-wrap;
+            border: 1px solid #e1bee7;
+            padding: 20px;
+            max-width: 600px;
+            background: #faf0ff;
+            border-radius: 8px;
+            text-align: left;
+            min-height: 150px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-size: 15px;
+            line-height: 1.6;
+        }
+        button {
+            background-color: #8e24aa;
+            color: white;
+            padding: 14px 28px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            transition: background-color 0.2s;
+        }
+        button:hover { background-color: #6a1b9a; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        #stopBtn { background-color: #c62828; display: none; }
+        #stopBtn:hover { background-color: #b71c1c; }
+        .status {
+            margin: 15px 0;
+            font-size: 14px;
+            color: #666;
+        }
+        .status.connected { color: #2e7d32; }
+        .status.error { color: #c62828; }
+        .logo {
+            width: 280px;
+            height: auto;
+            margin-bottom: 10px;
+            display: block;
+        }
+        .controls { margin: 20px 0; }
+        select {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img src="/static/Collabora_Logo.svg" alt="Collabora Logo" class="logo">
+        <h1>Aavaaz Live Transcription</h1>
+        <p class="subtitle">Real-time speech-to-text powered by WhisperLive</p>
+
+        <div class="controls">
+            <label for="language">Language:</label>
+            <select id="language">
+                <option value="">Auto-detect</option>
+                <option value="en">English</option>
+                <option value="es">Spanish</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="it">Italian</option>
+                <option value="pt">Portuguese</option>
+                <option value="ja">Japanese</option>
+                <option value="zh">Chinese</option>
+            </select>
+
+            <label for="model">Model:</label>
+            <select id="model">
+                <option value="large-v3">large-v3</option>
+                <option value="small">small</option>
+                <option value="tiny">tiny</option>
+            </select>
+        </div>
+
+        <button id="startBtn">🎤 Start Recording</button>
+        <button id="stopBtn">⏹ Stop</button>
+
+        <div id="status" class="status">Click Start to begin transcription</div>
+        <div id="transcript"></div>
+    </div>
+
+    <script>
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusEl = document.getElementById('status');
+        const transcriptEl = document.getElementById('transcript');
+
+        let ws = null;
+        let audioContext = null;
+        let processor = null;
+        let stream = null;
+
+        const SAMPLE_RATE = 16000;
+
+        function getWsUrl() {
+            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            return `${proto}//${location.host}/ws`;
+        }
+
+        function setStatus(msg, cls) {
+            statusEl.textContent = msg;
+            statusEl.className = 'status ' + (cls || '');
+        }
+
+        startBtn.addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    audio: { sampleRate: SAMPLE_RATE, channelCount: 1, echoCancellation: true }
+                });
+            } catch (e) {
+                setStatus('Microphone access denied', 'error');
+                return;
+            }
+
+            startBtn.disabled = true;
+            stopBtn.style.display = 'inline-block';
+            transcriptEl.textContent = '';
+            setStatus('Connecting...', '');
+
+            // Connect WebSocket
+            ws = new WebSocket(getWsUrl());
+            ws.binaryType = 'arraybuffer';
+
+            ws.onopen = () => {
+                setStatus('Connected — speak now', 'connected');
+
+                // Send client options (WhisperLive protocol)
+                const options = {
+                    uid: crypto.randomUUID(),
+                    language: document.getElementById('language').value || null,
+                    task: 'transcribe',
+                    model: document.getElementById('model').value,
+                    use_vad: true,
+                    word_timestamps: false,
+                };
+                ws.send(JSON.stringify(options));
+
+                // Start audio capture
+                startAudioCapture();
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.segments) {
+                        const text = data.segments.map(s => s.text).join(' ');
+                        transcriptEl.textContent = text;
+                        transcriptEl.scrollTop = transcriptEl.scrollHeight;
+                    } else if (data.message === 'DISCONNECT') {
+                        stop();
+                        setStatus('Server disconnected', 'error');
+                    } else if (data.status === 'WAIT') {
+                        setStatus(`Server busy — wait ~${Math.ceil(data.message)} min`, 'error');
+                    }
+                } catch (e) {
+                    // Non-JSON message, ignore
+                }
+            };
+
+            ws.onerror = () => setStatus('Connection error', 'error');
+            ws.onclose = () => {
+                setStatus('Disconnected', '');
+                startBtn.disabled = false;
+                stopBtn.style.display = 'none';
+            };
+        });
+
+        stopBtn.addEventListener('click', stop);
+
+        function stop() {
+            if (processor) { processor.disconnect(); processor = null; }
+            if (audioContext) { audioContext.close(); audioContext = null; }
+            if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                // Send END_OF_AUDIO signal
+                ws.send(new TextEncoder().encode('END_OF_AUDIO'));
+                setTimeout(() => ws.close(), 500);
+            }
+            startBtn.disabled = false;
+            stopBtn.style.display = 'none';
+            setStatus('Stopped', '');
+        }
+
+        function startAudioCapture() {
+            audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
+            const source = audioContext.createMediaStreamSource(stream);
+
+            // Use ScriptProcessorNode for broad compatibility
+            processor = audioContext.createScriptProcessor(4096, 1, 1);
+            processor.onaudioprocess = (e) => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    const float32 = e.inputBuffer.getChannelData(0);
+                    ws.send(float32.buffer);
+                }
+            };
+            source.connect(processor);
+            processor.connect(audioContext.destination);
+        }
+    </script>
+</body>
+</html>
