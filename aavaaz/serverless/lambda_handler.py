@@ -265,12 +265,111 @@ def handler(event: dict, context: Any) -> dict:
             return _response(204, "")
 
         if method == "GET":
+            if path == "/v1/upload-url":
+                return _handle_upload_url(event)
+            if path.startswith("/v1/transcription/"):
+                return _handle_transcription_status(event, path)
             return _handle_web_ui(event, path)
 
         return _handle_api(event, context)
     except Exception:
         logger.exception("Unhandled error: request_id=%s", request_id)
         return _response(500, json.dumps({"error": "Internal server error"}))
+
+
+def _handle_upload_url(event: dict) -> dict:
+    """Generate a presigned S3 PUT URL for direct browser upload.
+
+    Query params:
+      filename — original filename (used as S3 key suffix)
+      content_type — MIME type (default: application/octet-stream)
+    """
+    params = event.get("queryStringParameters") or {}
+    filename = params.get("filename", f"{uuid.uuid4().hex}.wav")
+    content_type = params.get("content_type", "application/octet-stream")
+
+    bucket = os.environ.get("AAVAAZ_INPUT_BUCKET", "")
+    if not bucket:
+        # Fall back to the audio_input bucket from env
+        bucket = os.environ.get("AAVAAZ_AUDIO_INPUT_BUCKET", "")
+    if not bucket:
+        return _response(
+            500, json.dumps({"error": "Upload bucket not configured"})
+        )
+
+    # Sanitize filename
+    safe_name = Path(filename).name
+    key = f"uploads/{uuid.uuid4().hex}_{safe_name}"
+
+    s3 = _s3_client()
+    presigned_url = s3.generate_presigned_url(
+        "put_object",
+        Params={
+            "Bucket": bucket,
+            "Key": key,
+            "ContentType": content_type,
+        },
+        ExpiresIn=3600,
+    )
+
+    return _response(
+        200,
+        json.dumps({"upload_url": presigned_url, "key": key}),
+        {"Content-Type": "application/json"},
+    )
+
+
+def _handle_transcription_status(event: dict, path: str) -> dict:
+    """Check if a transcription result exists for a given upload key.
+
+    GET /v1/transcription/{key_base64}
+    Returns the transcript if ready, or 202 if still processing.
+    """
+    # The key is passed as a URL-safe base64-encoded path segment
+    encoded_key = path[len("/v1/transcription/") :]
+    try:
+        # Add padding back (frontend strips trailing '=')
+        padded = encoded_key + "=" * (-len(encoded_key) % 4)
+        upload_key = base64.urlsafe_b64decode(padded).decode()
+    except Exception:
+        return _response(400, json.dumps({"error": "Invalid key encoding"}))
+
+    output_bucket = os.environ.get("AAVAAZ_OUTPUT_BUCKET", "")
+    output_prefix = os.environ.get("AAVAAZ_OUTPUT_PREFIX", "transcripts/")
+
+    if not output_bucket:
+        return _response(
+            500, json.dumps({"error": "Output bucket not configured"})
+        )
+
+    # Derive expected output key from the upload key
+    stem = Path(upload_key).stem
+    fmt = os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json")
+    ext = "json" if fmt == "json" else "txt"
+    out_key = f"{output_prefix}{stem}.{ext}"
+
+    s3 = _s3_client()
+    try:
+        obj = s3.get_object(Bucket=output_bucket, Key=out_key)
+        body = obj["Body"].read().decode()
+        return _response(
+            200,
+            json.dumps({"status": "completed", "transcript": body}),
+            {"Content-Type": "application/json"},
+        )
+    except s3.exceptions.NoSuchKey:
+        return _response(
+            202,
+            json.dumps({"status": "processing"}),
+            {"Content-Type": "application/json"},
+        )
+    except Exception:
+        logger.exception("Error checking transcription status for key=%s", upload_key)
+        return _response(
+            202,
+            json.dumps({"status": "processing"}),
+            {"Content-Type": "application/json"},
+        )
 
 
 def _handle_s3(event: dict, context: Any) -> dict:
@@ -316,6 +415,13 @@ def _handle_s3(event: dict, context: Any) -> dict:
             results.append(
                 {"input": f"s3://{bucket}/{key}", "output": f"s3://{bucket}/{out_key}"}
             )
+
+        # Delete the input audio file from S3 after successful transcription
+        try:
+            s3.delete_object(Bucket=bucket, Key=key)
+            logger.info("Deleted input s3://%s/%s", bucket, key)
+        except Exception:
+            logger.warning("Failed to delete input s3://%s/%s", bucket, key)
 
     return {"statusCode": 200, "body": json.dumps({"results": results})}
 
@@ -486,6 +592,12 @@ def _handle_multipart(event: dict) -> dict:
     file_bytes, filename, response_format = _parse_multipart(event)
     if file_bytes is None:
         return _response(400, json.dumps({"error": "No file found in multipart data"}))
+
+    max_size = 25 * 1024 * 1024  # 25 MB
+    if len(file_bytes) > max_size:
+        return _response(
+            413, json.dumps({"error": "File too large. Maximum size is 25 MB."})
+        )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         safe_name = Path(filename or "audio.wav").name

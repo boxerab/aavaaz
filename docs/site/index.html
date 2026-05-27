@@ -1898,6 +1898,7 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
     // ── LIVE DEMO ──
     (function() {
         const API = 'https://gh0edmarma.execute-api.us-east-1.amazonaws.com/v1/audio/transcriptions';
+        const API_BASE = 'https://gh0edmarma.execute-api.us-east-1.amazonaws.com';
         const dropzone = document.getElementById('demo-dropzone');
         const fileInput = document.getElementById('demo-file-input');
         const status = document.getElementById('demo-status');
@@ -1929,21 +1930,42 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
             setStatus('<span class="demo-spinner"></span>Transcribing <strong>' + file.name + '</strong> (' + (file.size / 1024 / 1024).toFixed(1) + ' MB)&hellip;', 'loading');
             const t0 = performance.now();
 
-            const form = new FormData();
-            form.append('file', file);
-            form.append('response_format', 'verbose_json');
-
             try {
-                const resp = await fetch(API, { method: 'POST', body: form });
-                const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
-                if (!resp.ok) {
-                    const err = await resp.text();
-                    setStatus('Error: ' + (resp.status === 503 ? 'Service warming up &mdash; try again in 60 seconds' : err), 'error');
-                    return;
+                let text, data;
+                if (file.size > 6 * 1024 * 1024) {
+                    // Large file: use presigned S3 upload to bypass API Gateway 10 MB limit
+                    const params = new URLSearchParams({ filename: file.name, content_type: file.type || 'application/octet-stream' });
+                    const urlResp = await fetch(API_BASE + '/v1/upload-url?' + params);
+                    if (!urlResp.ok) throw new Error('Failed to get upload URL: ' + urlResp.status);
+                    const { upload_url, key } = await urlResp.json();
+
+                    // Upload directly to S3
+                    setStatus('<span class="demo-spinner"></span>Uploading <strong>' + file.name + '</strong>&hellip;', 'loading');
+                    const putResp = await fetch(upload_url, { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
+                    if (!putResp.ok) throw new Error('Upload failed: ' + putResp.status);
+
+                    // Poll for transcription result
+                    setStatus('<span class="demo-spinner"></span>Transcribing (this may take a moment)&hellip;', 'loading');
+                    const encodedKey = btoa(key).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                    data = await pollForResult(encodedKey);
+                    text = data.segments?.map(s => s.text).join(' ') || data.text || data;
+                } else {
+                    // Small file: direct POST
+                    const form = new FormData();
+                    form.append('file', file);
+                    form.append('response_format', 'verbose_json');
+                    const resp = await fetch(API, { method: 'POST', body: form });
+                    if (!resp.ok) {
+                        const err = await resp.text();
+                        setStatus('Error: ' + (resp.status === 503 ? 'Service warming up &mdash; try again in 60 seconds' : err), 'error');
+                        return;
+                    }
+                    data = await resp.json();
+                    text = data.text || data.segments?.map(s => s.text).join(' ') || JSON.stringify(data, null, 2);
                 }
-                const data = await resp.json();
-                const text = data.text || data.segments?.map(s => s.text).join(' ') || JSON.stringify(data, null, 2);
-                transcript.textContent = text.trim();
+
+                const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+                transcript.textContent = (typeof text === 'string' ? text : JSON.stringify(text, null, 2)).trim();
                 meta.textContent = elapsed + 's \u00b7 model: small.en \u00b7 ' + (data.duration ? data.duration.toFixed(1) + 's audio' : file.name);
                 result.classList.add('show');
                 setStatus('\u2713 Transcription complete', 'success');
@@ -1952,6 +1974,21 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
             } finally {
                 fileInput.value = '';
             }
+        }
+
+        async function pollForResult(encodedKey) {
+            const maxAttempts = 120;
+            for (let i = 0; i < maxAttempts; i++) {
+                await new Promise(r => setTimeout(r, 5000));
+                const resp = await fetch(API_BASE + '/v1/transcription/' + encodedKey);
+                if (resp.status === 200) {
+                    const data = await resp.json();
+                    if (data.status === 'completed') {
+                        try { return JSON.parse(data.transcript); } catch (e) { return { text: data.transcript }; }
+                    }
+                }
+            }
+            throw new Error('Transcription timed out');
         }
 
         // ── RECORD BUTTON ──

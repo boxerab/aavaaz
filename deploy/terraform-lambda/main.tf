@@ -96,6 +96,17 @@ resource "aws_s3_bucket" "audio_input" {
   force_destroy = true
 }
 
+resource "aws_s3_bucket_cors_configuration" "audio_input_cors" {
+  bucket = aws_s3_bucket.audio_input.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["PUT"]
+    allowed_origins = ["*"]
+    max_age_seconds = 3600
+  }
+}
+
 resource "aws_s3_bucket" "transcript_output" {
   bucket_prefix = "aavaaz-transcripts-"
   force_destroy = true
@@ -138,12 +149,17 @@ resource "aws_iam_role_policy" "lambda_s3" {
     Statement = [
       {
         Effect   = "Allow"
-        Action   = ["s3:GetObject"]
+        Action   = ["s3:GetObject", "s3:DeleteObject"]
         Resource = "${aws_s3_bucket.audio_input.arn}/*"
       },
       {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
+        Resource = "${aws_s3_bucket.audio_input.arn}/uploads/*"
+      },
+      {
         Effect = "Allow"
-        Action = ["s3:PutObject"]
+        Action = ["s3:PutObject", "s3:GetObject"]
         Resource = [
           "${aws_s3_bucket.transcript_output.arn}/transcripts/*",
           "${aws_s3_bucket.transcript_output.arn}/audio/*",
@@ -170,15 +186,16 @@ resource "aws_lambda_function" "transcribe" {
 
   environment {
     variables = {
-      AAVAAZ_MODEL         = var.whisper_model
-      AAVAAZ_OUTPUT_FORMAT = var.output_format
-      AAVAAZ_OUTPUT_BUCKET = aws_s3_bucket.transcript_output.id
-      AAVAAZ_OUTPUT_PREFIX = "transcripts/"
-      AAVAAZ_ENABLE_PII    = var.enable_pii_redaction ? "1" : "0"
-      AAVAAZ_ENABLE_FORMAT = "1"
-      AAVAAZ_STORE_AUDIO   = var.store_audio ? "1" : "0"
-      AAVAAZ_AUDIO_BUCKET  = var.store_audio ? aws_s3_bucket.transcript_output.id : ""
-      AAVAAZ_AUDIO_PREFIX  = "audio/"
+      AAVAAZ_MODEL             = var.whisper_model
+      AAVAAZ_OUTPUT_FORMAT     = var.output_format
+      AAVAAZ_OUTPUT_BUCKET     = aws_s3_bucket.transcript_output.id
+      AAVAAZ_OUTPUT_PREFIX     = "transcripts/"
+      AAVAAZ_ENABLE_PII        = var.enable_pii_redaction ? "1" : "0"
+      AAVAAZ_ENABLE_FORMAT     = "1"
+      AAVAAZ_STORE_AUDIO       = var.store_audio ? "1" : "0"
+      AAVAAZ_AUDIO_BUCKET      = var.store_audio ? aws_s3_bucket.transcript_output.id : ""
+      AAVAAZ_AUDIO_PREFIX      = "audio/"
+      AAVAAZ_INPUT_BUCKET      = aws_s3_bucket.audio_input.id
     }
   }
 }
@@ -276,6 +293,20 @@ resource "aws_apigatewayv2_route" "web_static" {
   count     = var.enable_api_gateway ? 1 : 0
   api_id    = aws_apigatewayv2_api.transcribe[0].id
   route_key = "GET /static/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda[0].id}"
+}
+
+resource "aws_apigatewayv2_route" "upload_url" {
+  count     = var.enable_api_gateway ? 1 : 0
+  api_id    = aws_apigatewayv2_api.transcribe[0].id
+  route_key = "GET /v1/upload-url"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda[0].id}"
+}
+
+resource "aws_apigatewayv2_route" "transcription_status" {
+  count     = var.enable_api_gateway ? 1 : 0
+  api_id    = aws_apigatewayv2_api.transcribe[0].id
+  route_key = "GET /v1/transcription/{proxy+}"
   target    = "integrations/${aws_apigatewayv2_integration.lambda[0].id}"
 }
 
