@@ -152,6 +152,13 @@ export default function UploadPage() {
     setProgress(55);
     setProgressStage("Transcribing audio...");
 
+    // Simulate progress during Lambda processing
+    let pct = 55;
+    const interval = setInterval(() => {
+      pct = Math.min(pct + 1, 90);
+      setProgress(pct);
+    }, 2000);
+
     const body: Record<string, unknown> = {
       audio_url: `s3://${bucket}/${key}`,
       response_format: format,
@@ -163,17 +170,22 @@ export default function UploadPage() {
     };
     if (apiKey) transcribeHeaders["Authorization"] = `Bearer ${apiKey}`;
 
-    const res = await fetch(BATCH_URL, {
-      method: "POST",
-      headers: transcribeHeaders,
-      body: JSON.stringify(body),
-    });
+    let res: Response;
+    try {
+      res = await fetch(BATCH_URL, {
+        method: "POST",
+        headers: transcribeHeaders,
+        body: JSON.stringify(body),
+      });
+    } finally {
+      clearInterval(interval);
+    }
 
     if (!res.ok) {
       throw new Error(`Transcription failed: ${await res.text()}`);
     }
 
-    setProgress(90);
+    setProgress(95);
     setProgressStage("Processing result...");
     const data = await res.json();
     setResult(data);
