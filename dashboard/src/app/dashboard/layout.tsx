@@ -19,6 +19,7 @@ import {
   Users,
   Plug2,
   Activity,
+  Volume2,
   LogOut,
 } from "lucide-react";
 
@@ -26,6 +27,7 @@ const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/upload", label: "File Upload", icon: Upload },
   { href: "/dashboard/live", label: "Live Demo", icon: Mic },
+  { href: "/dashboard/tts", label: "Text to Speech", icon: Volume2 },
   { href: "/dashboard/playground", label: "API Playground", icon: Code2 },
   { href: "/dashboard/keys", label: "API Keys", icon: Key },
   { href: "/dashboard/vocabulary", label: "Vocabulary", icon: BookOpen },

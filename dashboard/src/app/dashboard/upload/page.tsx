@@ -7,6 +7,10 @@ const BATCH_URL =
   process.env.NEXT_PUBLIC_BATCH_URL ||
   "https://gh0edmarma.execute-api.us-east-1.amazonaws.com/v1/audio/transcriptions";
 
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE ||
+  "https://gh0edmarma.execute-api.us-east-1.amazonaws.com";
+
 interface Segment {
   start: number;
   end: number;
@@ -31,6 +35,8 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressStage, setProgressStage] = useState("");
   const [result, setResult] = useState<TranscriptionResult | null>(null);
   const [error, setError] = useState("");
   const [elapsed, setElapsed] = useState(0);
@@ -55,6 +61,8 @@ export default function UploadPage() {
     setLoading(true);
     setError("");
     setResult(null);
+    setProgress(0);
+    setProgressStage("Preparing...");
     const t0 = Date.now();
 
     try {
@@ -65,54 +73,17 @@ export default function UploadPage() {
         if (stored) features = JSON.parse(stored);
       } catch { /* ignore */ }
 
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("response_format", format);
-      if (features) {
-        formData.append("features", JSON.stringify(features));
-      }
-
       const apiKey = localStorage.getItem("aavaaz-api-key") || "";
-      const headers: Record<string, string> = {};
-      if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
-      const res = await fetch(BATCH_URL, {
-        method: "POST",
-        headers,
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`HTTP ${res.status}: ${errText}`);
-      }
-
-      const contentType = res.headers.get("content-type") || "";
-      if (contentType.includes("application/json")) {
-        const data = await res.json();
-        setResult(data);
+      // For files > 4MB, use S3 presigned URL upload path
+      // For smaller files, use direct base64 JSON (faster, no S3 round-trip)
+      if (file.size > 4 * 1024 * 1024) {
+        await transcribeLargeFile(file, features, apiKey, t0);
       } else {
-        const text = await res.text();
-        setResult({ segments: [], text });
+        await transcribeSmallFile(file, features, apiKey, t0);
       }
-      setElapsed(Date.now() - t0);
-
-      // Save to logs
-      const logs = JSON.parse(localStorage.getItem("aavaaz-request-logs") || "[]");
-      logs.unshift({
-        id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
-        type: "batch",
-        file: file.name,
-        size: file.size,
-        duration: elapsed / 1000,
-        format,
-        status: "success",
-      });
-      localStorage.setItem("aavaaz-request-logs", JSON.stringify(logs.slice(0, 100)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
-      // Log error too
       const logs = JSON.parse(localStorage.getItem("aavaaz-request-logs") || "[]");
       logs.unshift({
         id: crypto.randomUUID(),
@@ -128,6 +99,185 @@ export default function UploadPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function transcribeLargeFile(
+    file: File,
+    features: Record<string, unknown> | null,
+    apiKey: string,
+    t0: number
+  ) {
+    // Step 1: Get presigned upload URL
+    setProgress(5);
+    setProgressStage("Getting upload URL...");
+    const urlParams = new URLSearchParams({
+      filename: file.name,
+      content_type: file.type || "application/octet-stream",
+    });
+    const headers: Record<string, string> = {};
+    if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+
+    const urlRes = await fetch(`${API_BASE}/v1/upload-url?${urlParams}`, { headers });
+    if (!urlRes.ok) {
+      throw new Error(`Failed to get upload URL: ${await urlRes.text()}`);
+    }
+    const { upload_url, key } = await urlRes.json();
+
+    // Step 2: Upload file directly to S3 via presigned URL (no size limit)
+    setProgress(10);
+    setProgressStage("Uploading to S3...");
+
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", upload_url);
+      xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const pct = 10 + (e.loaded / e.total) * 40;
+          setProgress(Math.round(pct));
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(`S3 upload failed: HTTP ${xhr.status}`));
+      };
+      xhr.onerror = () => reject(new Error("S3 upload network error"));
+      xhr.timeout = 300000;
+      xhr.ontimeout = () => reject(new Error("Upload timed out"));
+      xhr.send(file);
+    });
+
+    // Step 3: Trigger transcription with S3 key
+    setProgress(55);
+    setProgressStage("Transcribing audio...");
+
+    const body: Record<string, unknown> = {
+      audio_url: `s3://${key}`,
+      response_format: format,
+    };
+    if (features) body.features = features;
+
+    const transcribeHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (apiKey) transcribeHeaders["Authorization"] = `Bearer ${apiKey}`;
+
+    const res = await fetch(BATCH_URL, {
+      method: "POST",
+      headers: transcribeHeaders,
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Transcription failed: ${await res.text()}`);
+    }
+
+    setProgress(90);
+    setProgressStage("Processing result...");
+    const data = await res.json();
+    setResult(data);
+    setProgress(100);
+    setProgressStage("Done!");
+    setElapsed(Date.now() - t0);
+    logSuccess(file, t0);
+  }
+
+  async function transcribeSmallFile(
+    file: File,
+    features: Record<string, unknown> | null,
+    apiKey: string,
+    t0: number
+  ) {
+    // Direct base64 upload (faster for small files)
+    setProgress(10);
+    setProgressStage("Encoding audio...");
+    const arrayBuffer = await file.arrayBuffer();
+    const base64 = btoa(
+      new Uint8Array(arrayBuffer).reduce(
+        (data, byte) => data + String.fromCharCode(byte),
+        ""
+      )
+    );
+
+    setProgress(25);
+    setProgressStage("Uploading to server...");
+
+    const body: Record<string, unknown> = {
+      audio_base64: base64,
+      response_format: format,
+    };
+    if (features) body.features = features;
+
+    // Use XMLHttpRequest for upload progress
+    const response = await new Promise<string>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", BATCH_URL);
+      xhr.setRequestHeader("Content-Type", "application/json");
+      if (apiKey) xhr.setRequestHeader("Authorization", `Bearer ${apiKey}`);
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const uploadPct = 25 + (e.loaded / e.total) * 25;
+          setProgress(Math.round(uploadPct));
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(xhr.responseText);
+        } else {
+          reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText}`));
+        }
+      };
+
+      xhr.onerror = () => reject(new Error("Network error — check your connection"));
+      xhr.ontimeout = () => reject(new Error("Request timed out (>5min)"));
+      xhr.timeout = 300000;
+
+      xhr.upload.onload = () => {
+        setProgress(50);
+        setProgressStage("Transcribing audio...");
+        let pct = 50;
+        const interval = setInterval(() => {
+          pct = Math.min(pct + 2, 90);
+          setProgress(pct);
+        }, 1000);
+        xhr.onloadend = () => clearInterval(interval);
+      };
+
+      xhr.send(JSON.stringify(body));
+    });
+
+    setProgress(95);
+    setProgressStage("Processing result...");
+
+    try {
+      const data = JSON.parse(response);
+      setResult(data);
+    } catch {
+      setResult({ segments: [], text: response });
+    }
+
+    setProgress(100);
+    setProgressStage("Done!");
+    setElapsed(Date.now() - t0);
+    logSuccess(file, t0);
+  }
+
+  function logSuccess(file: File, t0: number) {
+    const logs = JSON.parse(localStorage.getItem("aavaaz-request-logs") || "[]");
+    logs.unshift({
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      type: "batch",
+      file: file.name,
+      size: file.size,
+      duration: (Date.now() - t0) / 1000,
+      format,
+      status: "success",
+    });
+    localStorage.setItem("aavaaz-request-logs", JSON.stringify(logs.slice(0, 100)));
   }
 
   function getFullText(): string {
@@ -203,7 +353,7 @@ export default function UploadPage() {
             <Upload className="h-12 w-12 mx-auto text-muted-foreground" />
             <p className="font-medium">Drop audio file here or click to browse</p>
             <p className="text-sm text-muted-foreground">
-              MP3, WAV, M4A, FLAC, OGG, MP4, WebM up to 100MB
+              MP3, WAV, M4A, FLAC, OGG, MP4, WebM up to 25MB
             </p>
           </div>
         )}
@@ -242,6 +392,29 @@ export default function UploadPage() {
           )}
         </button>
       </div>
+
+      {/* Progress bar */}
+      {loading && (
+        <div className="rounded-lg border bg-card p-5 space-y-3">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">{progressStage}</span>
+            <span className="font-mono text-primary">{progress}%</span>
+          </div>
+          <div className="h-3 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {progress < 50
+              ? "Uploading audio to transcription server..."
+              : progress < 90
+              ? "AI model is processing your audio. This may take a moment for longer files..."
+              : "Almost done..."}
+          </p>
+        </div>
+      )}
 
       {/* Error */}
       {error && (
