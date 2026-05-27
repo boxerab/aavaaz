@@ -1704,7 +1704,42 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
     <div class="section-inner">
         <span class="section-label">Try It</span>
         <h2 class="section-title">Live Transcription Demo</h2>
-        <p class="section-desc">Upload an audio file and get a transcription back in seconds. Powered by Aavaaz on AWS Lambda with Whisper small.en.<br><em style="color:var(--text-tertiary); font-size:0.8rem;">Note: The service may take up to 60 seconds to wake up on first use. If you get an error, wait a moment and try again.</em></p>
+        <p class="section-desc">Speak into your microphone and watch real-time transcription appear. Powered by Aavaaz on Modal GPU with Whisper large-v3.<br><em style="color:var(--text-tertiary); font-size:0.8rem;">Note: First use may take 10-20 seconds for GPU cold start. Subsequent requests are instant.</em></p>
+
+        <div class="demo-container fade-in">
+            <!-- Live streaming controls -->
+            <div style="text-align: center; margin-bottom: 20px;">
+                <div style="display: flex; gap: 12px; justify-content: center; align-items: center; margin-bottom: 16px;">
+                    <label style="color: var(--text-secondary); font-size: 0.85rem;">Language:</label>
+                    <select id="live-language" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 0.85rem;">
+                        <option value="">Auto-detect</option>
+                        <option value="en">English</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="it">Italian</option>
+                        <option value="pt">Portuguese</option>
+                        <option value="ja">Japanese</option>
+                        <option value="zh">Chinese</option>
+                    </select>
+                </div>
+                <button id="live-start-btn" class="btn btn-green" style="margin: 0 8px;">&#127908; Start Live Transcription</button>
+                <button id="live-stop-btn" class="btn btn-outline" style="margin: 0 8px; display: none; border-color: var(--rose); color: var(--rose);">&#9209; Stop</button>
+            </div>
+            <div id="live-status" class="demo-status"></div>
+            <div id="live-result" class="demo-result" style="display: none;">
+                <pre id="live-transcript" style="min-height: 120px; max-height: 300px; overflow-y: auto;"></pre>
+            </div>
+            <p style="margin-top: 20px; font-size: 0.75rem; color: var(--text-tertiary); text-align: center;">&#128274; <strong>Privacy:</strong> Audio is streamed directly to the GPU, transcribed in memory, and immediately discarded. Nothing is stored.</p>
+        </div>
+
+        <!-- Divider -->
+        <div style="margin: 60px 0 40px; text-align: center;">
+            <span style="color: var(--text-tertiary); font-size: 0.85rem; background: var(--bg-primary); padding: 0 20px;">or upload a file</span>
+            <hr style="border: none; border-top: 1px solid var(--border); margin-top: -10px;">
+        </div>
+
+        <p class="section-desc" style="margin-bottom: 20px;">Upload an audio file and get a transcription back in seconds. Powered by Aavaaz on AWS Lambda with Whisper small.en.</p>
 
         <div class="demo-container fade-in">
             <div class="demo-dropzone" id="demo-dropzone">
@@ -1966,6 +2001,115 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
             if (MediaRecorder.isTypeSupported('audio/mp4')) return 'audio/mp4';
             if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) return 'audio/ogg;codecs=opus';
             return '';
+        }
+    })();
+
+    // ── LIVE STREAMING DEMO ──
+    (function() {
+        const WS_URL = 'wss://boxerab--aavaaz-live-livetranscriber-web.modal.run/ws';
+        const SAMPLE_RATE = 16000;
+
+        const startBtn = document.getElementById('live-start-btn');
+        const stopBtn = document.getElementById('live-stop-btn');
+        const statusEl = document.getElementById('live-status');
+        const resultEl = document.getElementById('live-result');
+        const transcriptEl = document.getElementById('live-transcript');
+
+        let ws = null;
+        let audioContext = null;
+        let processor = null;
+        let stream = null;
+
+        function setLiveStatus(msg, cls) {
+            statusEl.className = 'demo-status ' + (cls || '');
+            statusEl.innerHTML = msg;
+        }
+
+        startBtn.addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    audio: { sampleRate: SAMPLE_RATE, channelCount: 1, echoCancellation: true }
+                });
+            } catch (e) {
+                setLiveStatus('Microphone access denied', 'error');
+                return;
+            }
+
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            transcriptEl.textContent = '';
+            resultEl.style.display = 'block';
+            setLiveStatus('<span class="demo-spinner"></span>Connecting to GPU...', 'loading');
+
+            ws = new WebSocket(WS_URL);
+            ws.binaryType = 'arraybuffer';
+
+            ws.onopen = () => {
+                setLiveStatus('&#9679; Connected &mdash; speak now', 'success');
+                const options = {
+                    uid: crypto.randomUUID(),
+                    language: document.getElementById('live-language').value || null,
+                    task: 'transcribe',
+                    model: 'large-v3',
+                    use_vad: true,
+                };
+                ws.send(JSON.stringify(options));
+                startAudio();
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.segments && data.segments.length) {
+                        const text = data.segments.map(s => s.text).join(' ');
+                        transcriptEl.textContent = text;
+                        transcriptEl.scrollTop = transcriptEl.scrollHeight;
+                    } else if (data.message === 'DISCONNECT') {
+                        stopLive();
+                        setLiveStatus('Server disconnected', 'error');
+                    } else if (data.status === 'WAIT') {
+                        setLiveStatus('Server busy &mdash; try again shortly', 'error');
+                    }
+                } catch (e) { /* non-JSON, ignore */ }
+            };
+
+            ws.onerror = () => setLiveStatus('Connection error &mdash; the GPU may be starting up, try again in 15s', 'error');
+            ws.onclose = () => {
+                startBtn.style.display = 'inline-block';
+                stopBtn.style.display = 'none';
+                if (statusEl.className.indexOf('error') === -1 && statusEl.className.indexOf('success') === -1) {
+                    setLiveStatus('Disconnected', '');
+                }
+            };
+        });
+
+        stopBtn.addEventListener('click', stopLive);
+
+        function stopLive() {
+            if (processor) { processor.disconnect(); processor = null; }
+            if (audioContext) { audioContext.close(); audioContext = null; }
+            if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(new TextEncoder().encode('END_OF_AUDIO'));
+                setTimeout(() => ws.close(), 500);
+            }
+            startBtn.style.display = 'inline-block';
+            stopBtn.style.display = 'none';
+            setLiveStatus('&#10003; Stopped', 'success');
+        }
+
+        function startAudio() {
+            audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
+            const source = audioContext.createMediaStreamSource(stream);
+            processor = audioContext.createScriptProcessor(4096, 1, 1);
+            processor.onaudioprocess = (e) => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    const float32 = e.inputBuffer.getChannelData(0);
+                    ws.send(float32.buffer);
+                }
+            };
+            source.connect(processor);
+            processor.connect(audioContext.destination);
         }
     })();
 </script>

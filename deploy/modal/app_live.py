@@ -33,7 +33,6 @@ logger = logging.getLogger("aavaaz.modal.live")
 logger.setLevel(logging.INFO)
 
 WHISPER_MODEL = "large-v3"
-WHISPERLIVE_DIR = "/opt/whisper_live"
 WEB_DIR = "/web"
 
 app = modal.App("aavaaz-live")
@@ -56,15 +55,19 @@ image = (
         f"python -c \"from faster_whisper import WhisperModel; "
         f"WhisperModel('{WHISPER_MODEL}', device='cpu')\""
     )
+    # Install local WhisperLive (with generator fix) BEFORE aavaaz so pip
+    # doesn't pull the PyPI version when resolving aavaaz's dependencies.
+    .add_local_dir(
+        "/home/aaron/src/WhisperLive",
+        remote_path="/root/WhisperLive",
+        copy=True,
+    )
+    .run_commands("pip install --no-deps /root/WhisperLive")
     .add_local_dir("../../aavaaz", remote_path="/root/aavaaz_pkg/aavaaz", copy=True)
     .add_local_file(
         "../../pyproject.toml", remote_path="/root/aavaaz_pkg/pyproject.toml", copy=True
     )
-    .run_commands("pip install /root/aavaaz_pkg")
-    .add_local_dir(
-        "/home/aaron/src/WhisperLive/whisper_live",
-        remote_path=f"{WHISPERLIVE_DIR}/whisper_live",
-    )
+    .run_commands("pip install --no-deps /root/aavaaz_pkg")
     .add_local_dir("../../aavaaz/web", remote_path=WEB_DIR)
 )
 
@@ -84,6 +87,7 @@ class WebSocketAdapter:
         """Send text data (JSON) to the client."""
         if self._closed:
             return
+        logger.debug("Sending to client: %s", data[:200])
         future = asyncio.run_coroutine_threadsafe(
             self._ws.send_text(data), self._loop
         )
@@ -129,9 +133,6 @@ class LiveTranscriber:
     @modal.enter()
     def load_model(self):
         import os
-        import sys
-
-        sys.path.insert(0, WHISPERLIVE_DIR)
 
         from whisper_live.server import TranscriptionServer
 
@@ -162,8 +163,6 @@ class LiveTranscriber:
         logger.info("Model loaded and ready for live transcription")
 
     def _make_client_manager(self, max_clients, max_time):
-        import sys
-        sys.path.insert(0, WHISPERLIVE_DIR)
         from whisper_live.server import ClientManager
         return ClientManager(max_clients=max_clients, max_connection_time=max_time)
 
@@ -248,9 +247,6 @@ class LiveTranscriber:
 
     def _handle_client(self, websocket: WebSocketAdapter):
         """Run WhisperLive's client handling in a sync context."""
-        import sys
-        sys.path.insert(0, WHISPERLIVE_DIR)
-
         from whisper_live.server import BackendType
         from websockets.exceptions import ConnectionClosed
 
