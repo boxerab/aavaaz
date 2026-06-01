@@ -74,7 +74,7 @@
 | # | Test | Steps | Expected Result | Pass? |
 |---|------|-------|-----------------|-------|
 | 36 | Dashboard load time | Hard refresh (Ctrl+Shift+R) | First meaningful paint < 2s | ☐ |
-| 37 | Batch API latency | Upload 30s audio, measure response | < 15s for small.en model | ☐ |
+| 37 | Batch API latency | Upload 30s audio, measure response | < 15s for small model | ☐ |
 | 38 | Live first-byte (warm) | Start live when Modal is warm | First transcript < 2s | ☐ |
 | 39 | Live first-byte (cold) | Start live after 10+ min idle | First transcript < 60s, warning shown | ☐ |
 | 40 | CloudFront caching | Check response headers | Static assets have Cache-Control headers | ☐ |
@@ -95,7 +95,7 @@
 ## Notes
 
 - **Modal cold start**: The live transcription GPU container scales to zero after ~5 min idle. First request takes 30-60s to spin up. This is expected behavior for the demo.
-- **Lambda timeout**: 300s max. Files longer than ~10 minutes may timeout with the current small.en model.
+- **Lambda timeout**: 300s max. Files longer than ~10 minutes may timeout with the current small model.
 - **localStorage**: All state (keys, vocab, features, logs) is stored client-side. Clearing browser data resets everything.
 - **Auth disabled**: Login/signup pages exist but auth guard is disabled for demo purposes.
 

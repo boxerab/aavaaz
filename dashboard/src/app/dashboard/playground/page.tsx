@@ -202,30 +202,31 @@ console.log(await r.json());`,
 export default function PlaygroundPage() {
   const [endpoint, setEndpoint] = useState<EndpointKey>("batch");
   const [lang, setLang] = useState<"curl" | "python" | "javascript">("curl");
-  const [response, setResponse] = useState("");
+  const [responses, setResponses] = useState<Partial<Record<EndpointKey, string>>>({});
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const ep = ENDPOINTS[endpoint];
   const code = CODE_EXAMPLES[endpoint]?.[lang] || "";
+  const response = responses[endpoint] || "";
 
   async function tryEndpoint() {
     if (ep.method === "WebSocket") {
-      setResponse("WebSocket endpoints can't be tested directly here.\nUse the Live Demo page or wscat in terminal.");
+      setResponses(prev => ({ ...prev, [endpoint]: "WebSocket endpoints can't be tested directly here.\nUse the Live Demo page or wscat in terminal." }));
       return;
     }
     setLoading(true);
-    setResponse("");
+    setResponses(prev => ({ ...prev, [endpoint]: "" }));
     try {
       const res = await fetch(ep.url, { method: ep.method });
       const text = await res.text();
       try {
-        setResponse(JSON.stringify(JSON.parse(text), null, 2));
+        setResponses(prev => ({ ...prev, [endpoint]: JSON.stringify(JSON.parse(text), null, 2) }));
       } catch {
-        setResponse(text);
+        setResponses(prev => ({ ...prev, [endpoint]: text }));
       }
     } catch (err) {
-      setResponse(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+      setResponses(prev => ({ ...prev, [endpoint]: `Error: ${err instanceof Error ? err.message : "Unknown"}` }));
     } finally {
       setLoading(false);
     }
@@ -344,7 +345,7 @@ client = OpenAI(
 )
 
 transcript = client.audio.transcriptions.create(
-    model="small.en",
+  model="small",
     file=open("audio.mp3", "rb"),
 )`}</pre>
       </div>

@@ -284,7 +284,7 @@ Production role: Lambda is the batch transcription path.
 
 ```bash
 # Build and push the Lambda container image
-docker build -f Dockerfile.lambda --build-arg WHISPER_MODEL=small.en -t aavaaz-lambda .
+docker build -f Dockerfile.lambda --build-arg WHISPER_MODEL=small -t aavaaz-lambda .
 
 # Deploy infrastructure
 cd deploy/terraform-lambda

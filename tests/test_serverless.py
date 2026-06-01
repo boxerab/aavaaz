@@ -177,6 +177,67 @@ def test_handler_api_invalid_json(_env):
     assert result["statusCode"] == 400
 
 
+def test_handler_cancels_uploaded_transcription(_env, monkeypatch):
+    """DELETE /v1/transcription/{key} should mark the job canceled."""
+    from aavaaz.serverless.lambda_handler import handler
+
+    monkeypatch.setenv("AAVAAZ_INPUT_BUCKET", "input-bucket")
+    monkeypatch.setenv("AAVAAZ_OUTPUT_BUCKET", "output-bucket")
+    upload_key = "uploads/test.mov"
+    encoded = base64.urlsafe_b64encode(upload_key.encode()).decode().rstrip("=")
+
+    event = {
+        "requestContext": {
+            "http": {"method": "DELETE", "path": f"/v1/transcription/{encoded}"}
+        }
+    }
+
+    with patch("aavaaz.serverless.lambda_handler._s3_client") as mock_s3:
+        s3 = MagicMock()
+        mock_s3.return_value = s3
+
+        result = handler(event, None)
+
+    assert result["statusCode"] == 200
+    assert json.loads(result["body"])["status"] == "canceled"
+    s3.delete_object.assert_any_call(Bucket="input-bucket", Key=upload_key)
+    progress_call = s3.put_object.call_args
+    assert progress_call.kwargs["Bucket"] == "output-bucket"
+    assert progress_call.kwargs["Key"] == "transcripts/test.progress.json"
+    assert json.loads(progress_call.kwargs["Body"].decode())["status"] == "canceled"
+
+
+def test_handler_s3_failure_writes_failed_status(_env, monkeypatch):
+    """S3 processing errors should be visible to polling clients."""
+    from aavaaz.serverless.lambda_handler import handler
+
+    monkeypatch.setenv("AAVAAZ_OUTPUT_BUCKET", "output-bucket")
+    event = {
+        "Records": [
+            {
+                "s3": {
+                    "bucket": {"name": "input-bucket"},
+                    "object": {"key": "uploads/broken.mov"},
+                }
+            }
+        ]
+    }
+
+    with patch("aavaaz.serverless.lambda_handler._s3_client") as mock_s3:
+        s3 = MagicMock()
+        s3.download_file.side_effect = RuntimeError("download failed")
+        mock_s3.return_value = s3
+
+        result = handler(event, None)
+
+    assert result["statusCode"] == 200
+    progress_call = s3.put_object.call_args
+    assert progress_call.kwargs["Key"] == "transcripts/broken.progress.json"
+    progress = json.loads(progress_call.kwargs["Body"].decode())
+    assert progress["status"] == "failed"
+    assert "download failed" in progress["error"]
+
+
 @patch("faster_whisper.WhisperModel")
 def test_model_cached_across_calls(mock_whisper, _env):
     """Model should be loaded once and reused (warm start)."""

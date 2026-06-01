@@ -12,7 +12,7 @@ The handler also serves the web demo UI on GET /.
 
 Environment variables
 ---------------------
-AAVAAZ_MODEL          Whisper model name (default: ``small.en``)
+AAVAAZ_MODEL          Whisper model name (default: ``small``)
 AAVAAZ_LANGUAGE       Language code, or empty for auto-detect
 AAVAAZ_OUTPUT_FORMAT  ``json`` | ``text`` | ``srt`` | ``vtt`` (default: ``json``)
 AAVAAZ_OUTPUT_BUCKET  S3 bucket for transcript output (S3 trigger mode)
@@ -48,7 +48,7 @@ logger.setLevel(logging.INFO)
 # ---------------------------------------------------------------------------
 _CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
 }
 
@@ -76,7 +76,7 @@ def _get_model() -> Any:
         except ImportError:
             from faster_whisper import WhisperModel
 
-        name = os.environ.get("AAVAAZ_MODEL", "small.en")
+        name = os.environ.get("AAVAAZ_MODEL", "small")
         logger.info("Loading Whisper model %s", name)
         _model = WhisperModel(name, device="cpu", compute_type="int8")
         logger.info("Model loaded")
@@ -239,7 +239,7 @@ def _transcribe(audio_path: str, progress_callback=None) -> dict:
         "Starting transcription: file=%s size_bytes=%d model=%s",
         os.path.basename(audio_path),
         file_size,
-        os.environ.get("AAVAAZ_MODEL", "small.en"),
+        os.environ.get("AAVAAZ_MODEL", "small"),
     )
     t0 = time.time()
 
@@ -375,6 +375,9 @@ def handler(event: dict, context: Any) -> dict:
                 return _handle_transcription_status(event, path)
             return _handle_web_ui(event, path)
 
+        if method == "DELETE" and path.startswith("/v1/transcription/"):
+            return _handle_transcription_cancel(path)
+
         return _handle_api(event, context)
     except Exception:
         logger.exception("Unhandled error: request_id=%s", request_id)
@@ -421,35 +424,55 @@ def _handle_upload_url(event: dict) -> dict:
     )
 
 
+def _decode_upload_key(path: str) -> str | None:
+    encoded_key = path[len("/v1/transcription/") :]
+    try:
+        padded = encoded_key + "=" * (-len(encoded_key) % 4)
+        return base64.urlsafe_b64decode(padded).decode()
+    except Exception:
+        return None
+
+
+def _transcription_keys(upload_key: str) -> tuple[str, str]:
+    output_prefix = os.environ.get("AAVAAZ_OUTPUT_PREFIX", "transcripts/")
+    stem = Path(upload_key).stem
+    fmt = os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json")
+    ext = "json" if fmt == "json" else "txt"
+    return f"{output_prefix}{stem}.{ext}", f"{output_prefix}{stem}.progress.json"
+
+
+def _read_progress_status(s3: Any, bucket: str, progress_key: str) -> dict | None:
+    try:
+        obj = s3.get_object(Bucket=bucket, Key=progress_key)
+        return json.loads(obj["Body"].read().decode())
+    except Exception:
+        return None
+
+
 def _handle_transcription_status(event: dict, path: str) -> dict:
     """Check if a transcription result exists for a given upload key.
 
     GET /v1/transcription/{key_base64}
     Returns the transcript if ready, or 202 if still processing.
     """
-    # The key is passed as a URL-safe base64-encoded path segment
-    encoded_key = path[len("/v1/transcription/") :]
-    try:
-        # Add padding back (frontend strips trailing '=')
-        padded = encoded_key + "=" * (-len(encoded_key) % 4)
-        upload_key = base64.urlsafe_b64decode(padded).decode()
-    except Exception:
+    upload_key = _decode_upload_key(path)
+    if upload_key is None:
         return _response(400, json.dumps({"error": "Invalid key encoding"}))
 
     output_bucket = os.environ.get("AAVAAZ_OUTPUT_BUCKET", "")
-    output_prefix = os.environ.get("AAVAAZ_OUTPUT_PREFIX", "transcripts/")
 
     if not output_bucket:
         return _response(500, json.dumps({"error": "Output bucket not configured"}))
 
-    # Derive expected output key from the upload key
-    stem = Path(upload_key).stem
-    fmt = os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json")
-    ext = "json" if fmt == "json" else "txt"
-    out_key = f"{output_prefix}{stem}.{ext}"
-    progress_key = f"{output_prefix}{stem}.progress.json"
-
+    out_key, progress_key = _transcription_keys(upload_key)
     s3 = _s3_client()
+
+    progress_status = _read_progress_status(s3, output_bucket, progress_key)
+    if progress_status and progress_status.get("status") in {"canceled", "failed"}:
+        return _response(
+            200, json.dumps(progress_status), {"Content-Type": "application/json"}
+        )
+
     try:
         obj = s3.get_object(Bucket=output_bucket, Key=out_key)
         body = obj["Body"].read().decode()
@@ -462,14 +485,7 @@ def _handle_transcription_status(event: dict, path: str) -> dict:
             {"Content-Type": "application/json"},
         )
     except s3.exceptions.NoSuchKey:
-        # Check for progress file
-        progress = 0
-        try:
-            prog_obj = s3.get_object(Bucket=output_bucket, Key=progress_key)
-            prog_data = json.loads(prog_obj["Body"].read().decode())
-            progress = prog_data.get("progress", 0)
-        except Exception:
-            pass
+        progress = (progress_status or {}).get("progress", 0)
         return _response(
             202,
             json.dumps({"status": "processing", "progress": progress}),
@@ -482,6 +498,43 @@ def _handle_transcription_status(event: dict, path: str) -> dict:
             json.dumps({"status": "processing", "progress": 0}),
             {"Content-Type": "application/json"},
         )
+
+
+def _handle_transcription_cancel(path: str) -> dict:
+    """Cancel client-side polling and remove pending upload/status objects."""
+    upload_key = _decode_upload_key(path)
+    if upload_key is None:
+        return _response(400, json.dumps({"error": "Invalid key encoding"}))
+
+    input_bucket = os.environ.get("AAVAAZ_INPUT_BUCKET", "") or os.environ.get(
+        "AAVAAZ_AUDIO_INPUT_BUCKET", ""
+    )
+    output_bucket = os.environ.get("AAVAAZ_OUTPUT_BUCKET", "")
+    if not output_bucket:
+        return _response(500, json.dumps({"error": "Output bucket not configured"}))
+
+    out_key, progress_key = _transcription_keys(upload_key)
+    s3 = _s3_client()
+
+    if input_bucket:
+        with contextlib.suppress(Exception):
+            s3.delete_object(Bucket=input_bucket, Key=upload_key)
+
+    with contextlib.suppress(Exception):
+        s3.delete_object(Bucket=output_bucket, Key=out_key)
+
+    s3.put_object(
+        Bucket=output_bucket,
+        Key=progress_key,
+        Body=json.dumps({"status": "canceled", "progress": 0}).encode(),
+        ContentType="application/json",
+    )
+
+    return _response(
+        200,
+        json.dumps({"status": "canceled"}),
+        {"Content-Type": "application/json"},
+    )
 
 
 def _handle_s3(event: dict, context: Any) -> dict:
@@ -500,48 +553,77 @@ def _handle_s3(event: dict, context: Any) -> dict:
         stem = Path(key).stem
         progress_key = f"{output_prefix}{stem}.progress.json"
 
-        def _report_progress(pct: int, _key: str = progress_key) -> None:
-            """Write progress update to S3 for client polling."""
+        def _write_status(
+            status: str,
+            progress: int,
+            error: str | None = None,
+            status_key: str = progress_key,
+        ) -> None:
+            if not output_bucket:
+                return
+            payload: dict[str, Any] = {"status": status, "progress": progress}
+            if error:
+                payload["error"] = error
             with contextlib.suppress(Exception):
                 s3.put_object(
                     Bucket=output_bucket,
-                    Key=_key,
-                    Body=json.dumps({"status": "processing", "progress": pct}).encode(),
+                    Key=status_key,
+                    Body=json.dumps(payload).encode(),
                     ContentType="application/json",
                 )
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            local_path = os.path.join(tmpdir, os.path.basename(key))
-            s3.download_file(bucket, key, local_path)
-            _store_audio(local_path, os.path.basename(key))
-            result = _transcribe(
-                local_path,
-                progress_callback=_report_progress if output_bucket else None,
-            )
+        def _report_progress(pct: int, _key: str = progress_key) -> None:
+            """Write progress update to S3 for client polling."""
+            _write_status("processing", pct)
 
-        output = _format_output(result)
-        ext = (
-            "json"
-            if os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json") == "json"
-            else "txt"
-        )
-        out_key = f"{output_prefix}{stem}.{ext}"
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                local_path = os.path.join(tmpdir, os.path.basename(key))
+                s3.download_file(bucket, key, local_path)
+                _store_audio(local_path, os.path.basename(key))
+                result = _transcribe(
+                    local_path,
+                    progress_callback=_report_progress if output_bucket else None,
+                )
 
-        if output_bucket:
-            s3.put_object(Bucket=output_bucket, Key=out_key, Body=output.encode())
-            logger.info("Wrote s3://%s/%s", output_bucket, out_key)
-            results.append(
-                {
-                    "input": f"s3://{bucket}/{key}",
-                    "output": f"s3://{output_bucket}/{out_key}",
-                }
+            if output_bucket:
+                progress_status = _read_progress_status(s3, output_bucket, progress_key)
+                if progress_status and progress_status.get("status") == "canceled":
+                    logger.info(
+                        "Skipping canceled transcription for s3://%s/%s", bucket, key
+                    )
+                    continue
+
+            output = _format_output(result)
+            ext = (
+                "json"
+                if os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json") == "json"
+                else "txt"
             )
-        else:
-            # Same bucket
-            s3.put_object(Bucket=bucket, Key=out_key, Body=output.encode())
-            results.append(
-                {"input": f"s3://{bucket}/{key}", "output": f"s3://{bucket}/{out_key}"}
-            )
+            out_key = f"{output_prefix}{stem}.{ext}"
+
+            if output_bucket:
+                s3.put_object(Bucket=output_bucket, Key=out_key, Body=output.encode())
+                logger.info("Wrote s3://%s/%s", output_bucket, out_key)
+                results.append(
+                    {
+                        "input": f"s3://{bucket}/{key}",
+                        "output": f"s3://{output_bucket}/{out_key}",
+                    }
+                )
+            else:
+                # Same bucket
+                s3.put_object(Bucket=bucket, Key=out_key, Body=output.encode())
+                results.append(
+                    {
+                        "input": f"s3://{bucket}/{key}",
+                        "output": f"s3://{bucket}/{out_key}",
+                    }
+                )
+        except Exception as exc:
+            logger.exception("Failed processing s3://%s/%s", bucket, key)
+            _write_status("failed", 0, str(exc))
+            continue
 
         # Delete the input audio file from S3 after successful transcription
         try:

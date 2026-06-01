@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { Upload, FileAudio, Loader2, Download, Copy, Check } from "lucide-react";
+import { Upload, FileAudio, Loader2, Download, Copy, Check, XCircle } from "lucide-react";
+import { useUpload, type TranscriptionResult } from "@/lib/upload-context";
 
 const BATCH_URL =
   process.env.NEXT_PUBLIC_BATCH_URL ||
@@ -11,20 +12,6 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ||
   "https://gh0edmarma.execute-api.us-east-1.amazonaws.com";
 
-interface Segment {
-  start: number;
-  end: number;
-  text: string;
-  words?: { word: string; start: number; end: number; probability: number }[];
-}
-
-interface TranscriptionResult {
-  text?: string;
-  segments: Segment[];
-  language?: string;
-  duration?: number;
-}
-
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
@@ -32,17 +19,23 @@ function formatTime(seconds: number): string {
 }
 
 export default function UploadPage() {
-  const [file, setFile] = useState<File | null>(null);
+  const {
+    file, setFile,
+    loading, setLoading,
+    progress, setProgress,
+    progressStage, setProgressStage,
+    result, setResult,
+    error, setError,
+    elapsed, setElapsed,
+    format, setFormat,
+  } = useUpload();
   const [dragging, setDragging] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [progressStage, setProgressStage] = useState("");
-  const [result, setResult] = useState<TranscriptionResult | null>(null);
-  const [error, setError] = useState("");
-  const [elapsed, setElapsed] = useState(0);
   const [copied, setCopied] = useState(false);
-  const [format, setFormat] = useState<"json" | "text" | "srt" | "vtt">("json");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const activeXhrRef = useRef<XMLHttpRequest | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const activeUploadKeyRef = useRef<string | null>(null);
+  const cancelRequestedRef = useRef(false);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -58,6 +51,9 @@ export default function UploadPage() {
 
   async function transcribe() {
     if (!file) return;
+    cancelRequestedRef.current = false;
+    abortControllerRef.current = new AbortController();
+    activeUploadKeyRef.current = null;
     setLoading(true);
     setError("");
     setResult(null);
@@ -83,6 +79,10 @@ export default function UploadPage() {
         await transcribeSmallFile(file, features, apiKey, t0);
       }
     } catch (err) {
+      if (cancelRequestedRef.current) {
+        setError("Transcription canceled.");
+        return;
+      }
       setError(err instanceof Error ? err.message : "Unknown error");
       const logs = JSON.parse(localStorage.getItem("aavaaz-request-logs") || "[]");
       logs.unshift({
@@ -98,7 +98,37 @@ export default function UploadPage() {
       localStorage.setItem("aavaaz-request-logs", JSON.stringify(logs.slice(0, 100)));
     } finally {
       setLoading(false);
+      activeXhrRef.current = null;
+      abortControllerRef.current = null;
     }
+  }
+
+  async function cancelTranscription() {
+    cancelRequestedRef.current = true;
+    activeXhrRef.current?.abort();
+    abortControllerRef.current?.abort();
+
+    const key = activeUploadKeyRef.current;
+    if (key) {
+      const encodedKey = btoa(key).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      const apiKey = localStorage.getItem("aavaaz-api-key") || "";
+      const headers: Record<string, string> = {};
+      if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+
+      try {
+        await fetch(`${API_BASE}/v1/transcription/${encodedKey}`, {
+          method: "DELETE",
+          headers,
+        });
+      } catch {
+        // Local cancellation should still complete if remote cleanup is unavailable.
+      }
+    }
+
+    setLoading(false);
+    setProgress(0);
+    setProgressStage("Canceled");
+    setError("Transcription canceled.");
   }
 
   async function transcribeLargeFile(
@@ -117,11 +147,15 @@ export default function UploadPage() {
     const headers: Record<string, string> = {};
     if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
-    const urlRes = await fetch(`${API_BASE}/v1/upload-url?${urlParams}`, { headers });
+    const urlRes = await fetch(`${API_BASE}/v1/upload-url?${urlParams}`, {
+      headers,
+      signal: abortControllerRef.current?.signal,
+    });
     if (!urlRes.ok) {
       throw new Error(`Failed to get upload URL: ${await urlRes.text()}`);
     }
-    const { upload_url, key, bucket } = await urlRes.json();
+    const { upload_url, key } = await urlRes.json();
+    activeUploadKeyRef.current = key;
 
     // Step 2: Upload file directly to S3 via presigned URL (no size limit)
     setProgress(10);
@@ -129,6 +163,7 @@ export default function UploadPage() {
 
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
+      activeXhrRef.current = xhr;
       xhr.open("PUT", upload_url);
       xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
 
@@ -143,6 +178,7 @@ export default function UploadPage() {
         else reject(new Error(`S3 upload failed: HTTP ${xhr.status}`));
       };
       xhr.onerror = () => reject(new Error("S3 upload network error"));
+      xhr.onabort = () => reject(new Error("Upload canceled"));
       xhr.timeout = 300000;
       xhr.ontimeout = () => reject(new Error("Upload timed out"));
       xhr.send(file);
@@ -165,11 +201,12 @@ export default function UploadPage() {
     let data: TranscriptionResult | null = null;
 
     while (Date.now() - startPoll < maxWait) {
+      if (cancelRequestedRef.current) throw new Error("Transcription canceled");
       await new Promise((r) => setTimeout(r, pollInterval));
 
       const statusRes = await fetch(
         `${API_BASE}/v1/transcription/${keyBase64}`,
-        { headers: headers2 }
+        { headers: headers2, signal: abortControllerRef.current?.signal }
       );
 
       if (!statusRes.ok) {
@@ -178,6 +215,14 @@ export default function UploadPage() {
       }
 
       const statusData = await statusRes.json();
+
+      if (statusData.status === "failed") {
+        throw new Error(statusData.error || "Transcription failed");
+      }
+
+      if (statusData.status === "canceled") {
+        throw new Error("Transcription canceled");
+      }
 
       if (statusData.status === "completed") {
         // Parse the transcript (it's stored as a JSON string)
@@ -244,6 +289,7 @@ export default function UploadPage() {
     // Use XMLHttpRequest for upload progress
     const response = await new Promise<string>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
+      activeXhrRef.current = xhr;
       xhr.open("POST", BATCH_URL);
       xhr.setRequestHeader("Content-Type", "application/json");
       if (apiKey) xhr.setRequestHeader("Authorization", `Bearer ${apiKey}`);
@@ -263,7 +309,8 @@ export default function UploadPage() {
         }
       };
 
-      xhr.onerror = () => reject(new Error("Network error — check your connection"));
+        xhr.onerror = () => reject(new Error("Network error — check your connection"));
+        xhr.onabort = () => reject(new Error("Transcription canceled"));
       xhr.ontimeout = () => reject(new Error("Request timed out (>5min)"));
       xhr.timeout = 300000;
 
@@ -347,7 +394,7 @@ export default function UploadPage() {
 
       <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-200">
         <strong>Note:</strong> First request may take 30–60s for cold start.
-        Supports MP3, WAV, M4A, FLAC, OGG, MP4, WebM, and more.
+        Supports MP3, WAV, M4A, FLAC, OGG, MOV, MP4, WebM, and more.
       </div>
 
       {/* Upload area */}
@@ -367,7 +414,7 @@ export default function UploadPage() {
         <input
           ref={fileInputRef}
           type="file"
-          accept="audio/*,video/*,.mp3,.wav,.m4a,.flac,.ogg,.mp4,.webm,.wma"
+          accept="audio/*,video/*,.mp3,.wav,.m4a,.flac,.ogg,.mov,.mp4,.webm,.wma"
           onChange={(e) => setFile(e.target.files?.[0] || null)}
           className="hidden"
         />
@@ -385,7 +432,7 @@ export default function UploadPage() {
             <Upload className="h-12 w-12 mx-auto text-muted-foreground" />
             <p className="font-medium">Drop audio file here or click to browse</p>
             <p className="text-sm text-muted-foreground">
-              MP3, WAV, M4A, FLAC, OGG, MP4, WebM up to 25MB
+              MP3, WAV, M4A, FLAC, OGG, MOV, MP4, WebM up to 25MB
             </p>
           </div>
         )}
@@ -423,6 +470,15 @@ export default function UploadPage() {
             </>
           )}
         </button>
+        {loading && (
+          <button
+            onClick={cancelTranscription}
+            className="inline-flex items-center gap-2 rounded-md border border-red-500/40 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-500/10 transition-colors"
+          >
+            <XCircle className="h-4 w-4" />
+            Cancel
+          </button>
+        )}
       </div>
 
       {/* Progress bar */}

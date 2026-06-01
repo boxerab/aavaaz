@@ -14,7 +14,7 @@ set -euo pipefail
 
 REGION="${AWS_REGION:-us-east-1}"
 REPO_NAME="aavaaz-lambda"
-WHISPER_MODEL="${AAVAAZ_MODEL:-small.en}"
+WHISPER_MODEL="${AAVAAZ_MODEL:-small}"
 
 echo "==> Initializing Terraform..."
 terraform init

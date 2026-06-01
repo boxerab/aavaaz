@@ -64,7 +64,7 @@ class AavaazClient:
 
         Args:
             audio: File path, Path object, or file-like binary object.
-            model: Whisper model name (e.g. "large-v3", "small.en").
+            model: Whisper model name (e.g. "large-v3", "small").
             language: Language code (e.g. "en", "es") or None for auto-detect.
             response_format: "json", "text", "srt", or "vtt".
             hotwords: List of words to boost recognition of.

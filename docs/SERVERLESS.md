@@ -27,7 +27,7 @@ Live transcription is deployed separately on Modal via `deploy/modal/app_live.py
 
 | Mode | Trigger | Output |
 |------|---------|--------|
-| **S3 event** | Upload `.wav`/`.mp3`/`.flac`/`.m4a`/`.ogg` to the input bucket | Transcript written to output bucket |
+| **S3 event** | Upload supported audio/video files under `uploads/` in the input bucket | Transcript written to output bucket |
 | **REST API** | `POST /v1/audio/transcriptions` with S3 URL or base64 audio | Transcript in HTTP response |
 
 ## Quick Start
@@ -40,7 +40,7 @@ aws ecr get-login-password --region us-east-1 | \
   docker login --username AWS --password-stdin <account>.dkr.ecr.us-east-1.amazonaws.com
 
 docker build -f Dockerfile.lambda \
-  --build-arg WHISPER_MODEL=small.en \
+  --build-arg WHISPER_MODEL=small \
   -t aavaaz-lambda .
 
 docker tag aavaaz-lambda:latest <account>.dkr.ecr.us-east-1.amazonaws.com/aavaaz-lambda:latest
@@ -58,8 +58,8 @@ terraform apply
 ### 3. Transcribe via S3
 
 ```bash
-# Upload an audio file — transcription starts automatically
-aws s3 cp recording.wav s3://$(terraform output -raw audio_input_bucket)/
+# Upload an audio or video file — transcription starts automatically
+aws s3 cp recording.mov s3://$(terraform output -raw audio_input_bucket)/uploads/
 
 # Check the output bucket for the transcript
 aws s3 ls s3://$(terraform output -raw transcript_output_bucket)/transcripts/
@@ -122,7 +122,7 @@ Use `int8` compute type (default in the Lambda image) to halve memory usage.
 
 - **CPU only** — no GPU acceleration on Lambda
 - **15-minute timeout** — files longer than ~10 minutes may time out with larger models
-- **10 GB memory** — `large-v3` may not fit; use `small.en` or `medium.en`
+- **10 GB memory** — `large-v3` may not fit; use `small` or `medium.en`
 - **Cold starts** — first invocation takes 15-30 seconds to load the model
   (subsequent warm invocations reuse the cached model)
 - **No streaming** — batch/file mode only; use the ECS deployment for real-time WebSocket
@@ -131,10 +131,10 @@ Use `int8` compute type (default in the Lambda image) to halve memory usage.
 
 | Model | Memory | Typical duration | Cost per request |
 |-------|--------|-----------------|-----------------|
-| `small.en` | 4 GB | ~15 sec | ~$0.001 |
+| `small` | 4 GB | ~15 sec | ~$0.001 |
 | `medium.en` | 8 GB | ~30 sec | ~$0.004 |
 
-At 1,000 files/day with `small.en`: approximately **$1/day** + S3 storage.
+At 1,000 files/day with `small`: approximately **$1/day** + S3 storage.
 
 ## Logging & Monitoring
 

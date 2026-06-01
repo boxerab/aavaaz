@@ -133,7 +133,7 @@ export default function StatusPage() {
           </div>
         </div>
         <div className="text-sm text-muted-foreground space-y-2 pt-2">
-          <p><strong>Batch Transcription (Lambda):</strong> Processing time scales linearly with audio duration. Expect ~0.5x real-time for small.en model.</p>
+          <p><strong>Batch Transcription (Lambda):</strong> Processing time scales linearly with audio duration. Expect ~0.5x real-time for small model.</p>
           <p><strong>Live Transcription (Modal GPU):</strong> Cold starts take 30-60s when the GPU container scales from zero. Warm containers respond in &lt;100ms.</p>
           <p><strong>Maintenance Windows:</strong> Scheduled deployments happen with zero downtime (blue-green). Emergency maintenance is communicated via status page updates.</p>
         </div>

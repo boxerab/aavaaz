@@ -81,7 +81,7 @@ cd deploy/terraform-lambda
 ```
 
 This script:
-1. Runs `terraform apply` to create infrastructure (ECR, Lambda, S3, API Gateway, IAM roles)
+1. Runs `terraform apply` to create infrastructure (ECR, Lambda, S3, API Gateway, IAM roles, AWS Budget)
 2. Copies WhisperLive source from `~/src/WhisperLive/whisper_live/` into the build context
 3. Builds the Docker container image with the Whisper model baked in
 4. Pushes the image to ECR
@@ -121,7 +121,29 @@ curl -X POST "$API_ENDPOINT" \
 | S3 | 5GB storage | Audio + transcript storage |
 | ECR | 500MB storage | Container image |
 
-With `small.en` at 3GB RAM on CPU, transcription runs at roughly 1.5x realtime (5-min audio ≈ 200s processing), so free tier gives you approximately **37 hours of Lambda compute per month**.
+With `small` at 3GB RAM on CPU, transcription runs at roughly 1.5x realtime (5-min audio ≈ 200s processing), so free tier gives you approximately **37 hours of Lambda compute per month**.
+
+## Monthly Budget Guardrail
+
+Terraform creates an AWS Budget named `aavaaz-lambda-monthly-usage` with a default monthly limit of **$50**. It also deploys a budget shutdown handler by default. When actual monthly spend reaches 100% of the budget, AWS Budgets publishes to SNS and the handler disables the transcription Lambda by setting reserved concurrency to `0`.
+
+Add an alert email to receive notifications at 80% forecasted spend and 100% actual spend:
+
+```bash
+terraform apply \
+  -var="monthly_budget_limit_usd=50" \
+  -var="budget_alert_email=you@example.com"
+```
+
+AWS Budgets sends notifications; it does not hard-stop Lambda invocations by itself. The included shutdown handler performs the stop action, but AWS Budget notifications can lag behind real-time spend.
+
+To re-enable the service after reviewing spend:
+
+```bash
+aws lambda delete-function-concurrency \
+  --function-name aavaaz-transcribe \
+  --region us-east-1
+```
 
 ## Model Selection
 
@@ -129,21 +151,21 @@ With `small.en` at 3GB RAM on CPU, transcription runs at roughly 1.5x realtime (
 |-------|--------|-----------|--------------|-----------|----------|-----------|
 | `tiny.en` | 39M | ~47s | ~7x realtime | ~43s | Good for clear English | ~$0.002 |
 | `base.en` | 74M | ~60s | ~4x realtime | ~75s | Better | ~$0.004 |
-| `small.en` | 244M | ~90s | ~1.5x realtime | ~200s | Much better (accents, noise) | ~$0.01 |
+| `small` | 244M | ~90s | ~1.5x realtime | ~200s | Much better (accents, noise, multilingual audio) | ~$0.01 |
 | `medium.en` | 769M | ❌ | - | - | - | Won't fit in 3GB |
 
 **Recommendations:**
 - `tiny.en` — fastest, cheapest, fine for clean speech in quiet environments
-- `small.en` — best quality that fits on Lambda free tier; handles accents, background noise, proper nouns well
+- `small` — best quality that fits on Lambda free tier; handles accents, background noise, proper nouns, and multilingual audio well
 - `medium.en` and larger — won't fit in Lambda's 3008 MB free-tier limit
 
 **To switch models:**
 ```bash
 cd deploy/terraform-lambda
-WHISPER_MODEL=small.en ./deploy.sh
+WHISPER_MODEL=small ./deploy.sh
 ```
 
-This rebuilds the container with the new model baked in (~5 min for small.en download + build).
+This rebuilds the container with the new model baked in (~5 min for small download + build).
 
 **Note:** Cold starts always exceed API Gateway's 29s timeout regardless of model. Always pre-warm after idle periods.
 
@@ -152,16 +174,19 @@ This rebuilds the container with the new model baked in (~5 min for small.en dow
 Edit `deploy/terraform-lambda/main.tf` variables or set via Terraform:
 
 ```bash
-terraform apply -var="whisper_model=base.en" -var="lambda_memory_mb=2048"
+terraform apply -var="whisper_model=base" -var="lambda_memory_mb=2048"
 ```
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `whisper_model` | `small.en` | Whisper model (tiny.en, base.en, small.en) |
+| `whisper_model` | `small` | Whisper model (tiny, base, small) |
 | `lambda_memory_mb` | 3008 | Lambda memory (more = more CPU, max 3008 free tier) |
 | `lambda_timeout` | 300 | Max seconds per invocation |
 | `output_format` | json | Transcript format |
 | `enable_api_gateway` | true | Create HTTP API |
+| `monthly_budget_limit_usd` | 50 | Monthly AWS Budget limit in USD |
+| `budget_alert_email` | empty | Optional email for budget alerts |
+| `enable_budget_shutdown` | true | Disable the Lambda function when actual spend reaches the budget limit |
 
 **Note:** The deploy script uses `WHISPER_MODEL` env var to control the Docker build model. The Terraform variable controls the Lambda environment variable (they should match).
 

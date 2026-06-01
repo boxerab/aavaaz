@@ -1067,10 +1067,10 @@
             Aavaaz
         </a>
         <ul class="nav-links">
+            <li><a href="#demo">Demo</a></li>
             <li><a href="#backends">Backends</a></li>
             <li><a href="#features">Features</a></li>
             <li><a href="#capabilities">Capabilities</a></li>
-            <li><a href="#demo">Demo</a></li>
             <li><a href="#sdks">SDKs</a></li>
             <li><a href="#quickstart">Docs</a></li>
             <li><a href="https://du7890u4mptc6.cloudfront.net/dashboard/" class="nav-btn-ghost">Dashboard</a></li>
@@ -1151,6 +1151,80 @@
         <span style="font-weight: 400; color: var(--text-muted); font-size: 0.85rem;">and 40+ open source contributors worldwide</span>
     </div>
 </div>
+
+<!-- ═══ LIVE DEMO ═══ -->
+<section id="demo">
+    <div class="section-inner">
+        <span class="section-label">Try It</span>
+        <h2 class="section-title">Live Transcription Demo</h2>
+        <p class="section-desc">Speak into your microphone and watch real-time transcription appear. Powered by Aavaaz on Modal GPU (NVIDIA T4) with Whisper large-v3.<br><em style="color:var(--text-tertiary); font-size:0.8rem;">Note: First use may take 10-20 seconds for GPU cold start. Transcription appears after 3-5 seconds of speech.</em></p>
+
+        <div class="demo-container fade-in">
+            <!-- Live streaming controls -->
+            <div style="text-align: center; margin-bottom: 20px;">
+                <div style="display: flex; gap: 12px; justify-content: center; align-items: center; margin-bottom: 16px;">
+                    <label style="color: var(--text-secondary); font-size: 0.85rem;">Language:</label>
+                    <select id="live-language" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 0.85rem;">
+                        <option value="">Auto-detect</option>
+                        <option value="en">English</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="it">Italian</option>
+                        <option value="pt">Portuguese</option>
+                        <option value="ja">Japanese</option>
+                        <option value="zh">Chinese</option>
+                    </select>
+                </div>
+                <button id="live-start-btn" class="btn btn-green" style="margin: 0 8px;">&#127908; Start Live Transcription</button>
+                <button id="live-stop-btn" class="btn btn-outline" style="margin: 0 8px; display: none; border-color: var(--rose); color: var(--rose);">&#9209; Stop</button>
+            </div>
+            <div id="live-status" class="demo-status"></div>
+            <div id="live-result" class="demo-result" style="display: none; position: relative;">
+                <button id="live-copy-btn" title="Copy transcription" style="position: absolute; top: 8px; right: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-secondary); border-radius: 4px; padding: 5px 6px; cursor: pointer; opacity: 0.5; transition: opacity 0.2s; line-height: 1;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11V3a1.5 1.5 0 0 1 1.5-1.5H11"/></svg></button>
+                <pre id="live-transcript" style="min-height: 120px; max-height: 300px; overflow-y: auto;"></pre>
+            </div>
+            <p style="margin-top: 20px; font-size: 0.75rem; color: var(--text-tertiary); text-align: center;">&#128274; <strong>Privacy:</strong> Audio is streamed directly to the GPU, transcribed in memory, and immediately discarded. Nothing is stored.</p>
+        </div>
+
+        <!-- Divider -->
+        <div style="margin: 60px 0 40px; text-align: center;">
+            <span style="color: var(--text-tertiary); font-size: 0.85rem; background: var(--bg-primary); padding: 0 20px;">or upload a file</span>
+            <hr style="border: none; border-top: 1px solid var(--border); margin-top: -10px;">
+        </div>
+
+        <p class="section-desc" style="margin-bottom: 20px;">Upload an audio file and get a transcription back in seconds. Powered by Aavaaz on AWS Lambda with Whisper small.</p>
+
+        <div class="demo-container fade-in">
+            <div class="demo-dropzone" id="demo-dropzone">
+                <div class="demo-dropzone-icon">&#127908;</div>
+                <h3>Drop an audio file here</h3>
+                <p>or click to browse &mdash; WAV, MP3, FLAC, OGG, M4A, MOV (max 25 MB)</p>
+                <input type="file" class="demo-file-input" id="demo-file-input">
+            </div>
+            <div class="demo-record-row">
+                <button class="demo-record-btn" id="demo-record-btn">
+                    <span class="demo-record-dot" id="demo-record-dot"></span>
+                    <span id="demo-record-label">Record</span>
+                </button>
+                <span class="demo-record-timer" id="demo-record-timer"></span>
+            </div>
+            <div class="demo-status" id="demo-status"></div>
+            <div id="demo-progress-wrap" style="display:none; margin-top: 12px;">
+                <div style="background: var(--bg-tertiary); border-radius: 8px; height: 6px; overflow: hidden; border: 1px solid var(--border);">
+                    <div id="demo-progress-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, var(--green), var(--blue)); border-radius: 8px; transition: width 0.5s ease;"></div>
+                </div>
+                <div id="demo-progress-text" style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 6px; text-align: right;"></div>
+            </div>
+            <div class="demo-result" id="demo-result" style="position: relative;">
+                <button id="demo-copy-btn" title="Copy transcription" style="position: absolute; top: 8px; right: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-secondary); border-radius: 4px; padding: 5px 6px; cursor: pointer; opacity: 0.5; transition: opacity 0.2s; line-height: 1;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11V3a1.5 1.5 0 0 1 1.5-1.5H11"/></svg></button>
+                <pre id="demo-transcript"></pre>
+                <div class="demo-meta" id="demo-meta"></div>
+            </div>
+            <p style="margin-top: 20px; font-size: 0.75rem; color: var(--text-tertiary); text-align: center;">&#128274; <strong>Privacy:</strong> Your audio is processed in memory and immediately discarded. We do not store, retain, or share any uploaded audio files.</p>
+        </div>
+    </div>
+</section>
 
 <!-- ═══ BACKENDS ═══ -->
 <section id="backends">
@@ -1680,80 +1754,6 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
     </div>
 </section>
 
-<!-- ═══ LIVE DEMO ═══ -->
-<section id="demo">
-    <div class="section-inner">
-        <span class="section-label">Try It</span>
-        <h2 class="section-title">Live Transcription Demo</h2>
-        <p class="section-desc">Speak into your microphone and watch real-time transcription appear. Powered by Aavaaz on Modal GPU (NVIDIA T4) with Whisper large-v3.<br><em style="color:var(--text-tertiary); font-size:0.8rem;">Note: First use may take 10-20 seconds for GPU cold start. Transcription appears after 3-5 seconds of speech.</em></p>
-
-        <div class="demo-container fade-in">
-            <!-- Live streaming controls -->
-            <div style="text-align: center; margin-bottom: 20px;">
-                <div style="display: flex; gap: 12px; justify-content: center; align-items: center; margin-bottom: 16px;">
-                    <label style="color: var(--text-secondary); font-size: 0.85rem;">Language:</label>
-                    <select id="live-language" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 0.85rem;">
-                        <option value="">Auto-detect</option>
-                        <option value="en">English</option>
-                        <option value="es">Spanish</option>
-                        <option value="fr">French</option>
-                        <option value="de">German</option>
-                        <option value="it">Italian</option>
-                        <option value="pt">Portuguese</option>
-                        <option value="ja">Japanese</option>
-                        <option value="zh">Chinese</option>
-                    </select>
-                </div>
-                <button id="live-start-btn" class="btn btn-green" style="margin: 0 8px;">&#127908; Start Live Transcription</button>
-                <button id="live-stop-btn" class="btn btn-outline" style="margin: 0 8px; display: none; border-color: var(--rose); color: var(--rose);">&#9209; Stop</button>
-            </div>
-            <div id="live-status" class="demo-status"></div>
-            <div id="live-result" class="demo-result" style="display: none; position: relative;">
-                <button id="live-copy-btn" title="Copy transcription" style="position: absolute; top: 8px; right: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-secondary); border-radius: 4px; padding: 5px 6px; cursor: pointer; opacity: 0.5; transition: opacity 0.2s; line-height: 1;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11V3a1.5 1.5 0 0 1 1.5-1.5H11"/></svg></button>
-                <pre id="live-transcript" style="min-height: 120px; max-height: 300px; overflow-y: auto;"></pre>
-            </div>
-            <p style="margin-top: 20px; font-size: 0.75rem; color: var(--text-tertiary); text-align: center;">&#128274; <strong>Privacy:</strong> Audio is streamed directly to the GPU, transcribed in memory, and immediately discarded. Nothing is stored.</p>
-        </div>
-
-        <!-- Divider -->
-        <div style="margin: 60px 0 40px; text-align: center;">
-            <span style="color: var(--text-tertiary); font-size: 0.85rem; background: var(--bg-primary); padding: 0 20px;">or upload a file</span>
-            <hr style="border: none; border-top: 1px solid var(--border); margin-top: -10px;">
-        </div>
-
-        <p class="section-desc" style="margin-bottom: 20px;">Upload an audio file and get a transcription back in seconds. Powered by Aavaaz on AWS Lambda with Whisper small.en.</p>
-
-        <div class="demo-container fade-in">
-            <div class="demo-dropzone" id="demo-dropzone">
-                <div class="demo-dropzone-icon">&#127908;</div>
-                <h3>Drop an audio file here</h3>
-                <p>or click to browse &mdash; WAV, MP3, FLAC, OGG, M4A (max 25 MB)</p>
-                <input type="file" class="demo-file-input" id="demo-file-input">
-            </div>
-            <div class="demo-record-row">
-                <button class="demo-record-btn" id="demo-record-btn">
-                    <span class="demo-record-dot" id="demo-record-dot"></span>
-                    <span id="demo-record-label">Record</span>
-                </button>
-                <span class="demo-record-timer" id="demo-record-timer"></span>
-            </div>
-            <div class="demo-status" id="demo-status"></div>
-            <div id="demo-progress-wrap" style="display:none; margin-top: 12px;">
-                <div style="background: var(--bg-tertiary); border-radius: 8px; height: 6px; overflow: hidden; border: 1px solid var(--border);">
-                    <div id="demo-progress-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, var(--green), var(--blue)); border-radius: 8px; transition: width 0.5s ease;"></div>
-                </div>
-                <div id="demo-progress-text" style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 6px; text-align: right;"></div>
-            </div>
-            <div class="demo-result" id="demo-result" style="position: relative;">
-                <button id="demo-copy-btn" title="Copy transcription" style="position: absolute; top: 8px; right: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text-secondary); border-radius: 4px; padding: 5px 6px; cursor: pointer; opacity: 0.5; transition: opacity 0.2s; line-height: 1;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11V3a1.5 1.5 0 0 1 1.5-1.5H11"/></svg></button>
-                <pre id="demo-transcript"></pre>
-                <div class="demo-meta" id="demo-meta"></div>
-            </div>
-            <p style="margin-top: 20px; font-size: 0.75rem; color: var(--text-tertiary); text-align: center;">&#128274; <strong>Privacy:</strong> Your audio is processed in memory and immediately discarded. We do not store, retain, or share any uploaded audio files.</p>
-        </div>
-    </div>
-</section>
-
 <!-- ═══ BLOG POSTS ═══ -->
 <section id="blog">
     <div class="section-inner">
@@ -1994,7 +1994,7 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
 
                 const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
                 transcript.textContent = (typeof text === 'string' ? text : JSON.stringify(text, null, 2)).trim();
-                meta.textContent = elapsed + 's \u00b7 model: small.en \u00b7 ' + (data.duration ? data.duration.toFixed(1) + 's audio' : file.name);
+                meta.textContent = elapsed + 's \u00b7 model: small \u00b7 ' + (data.duration ? data.duration.toFixed(1) + 's audio' : file.name);
                 result.classList.add('show');
                 setStatus('\u2713 Transcription complete', 'success');
             } catch (e) {
@@ -2014,6 +2014,12 @@ curl http://localhost:<span class="num">8000</span>/health</pre>
                 const data = await resp.json();
                 if (resp.status === 200 && data.status === 'completed') {
                     try { return JSON.parse(data.transcript); } catch (e) { return { text: data.transcript }; }
+                }
+                if (data.status === 'failed') {
+                    throw new Error(data.error || 'Transcription failed');
+                }
+                if (data.status === 'canceled') {
+                    throw new Error('Transcription canceled');
                 }
                 // Use real progress from Lambda when available
                 if (data.progress > 0) {

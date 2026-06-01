@@ -20,6 +20,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.4"
+    }
   }
 }
 
@@ -38,7 +42,25 @@ variable "aws_region" {
 variable "whisper_model" {
   description = "Whisper model baked into the container image"
   type        = string
-  default     = "small.en"
+  default     = "small"
+}
+
+variable "monthly_budget_limit_usd" {
+  description = "Monthly AWS budget limit for this Lambda deployment account"
+  type        = number
+  default     = 50
+}
+
+variable "budget_alert_email" {
+  description = "Optional email address for budget alerts"
+  type        = string
+  default     = ""
+}
+
+variable "enable_budget_shutdown" {
+  description = "Disable the transcription Lambda when actual monthly spend reaches the budget limit"
+  type        = bool
+  default     = true
 }
 
 variable "lambda_memory_mb" {
@@ -119,9 +141,86 @@ resource "aws_s3_bucket_lifecycle_configuration" "input_cleanup" {
     id     = "cleanup-processed-audio"
     status = "Enabled"
 
+    filter {
+      prefix = ""
+    }
+
     expiration {
       days = 7
     }
+  }
+}
+
+# ---------- Monthly Budget Guardrail ----------
+
+resource "aws_budgets_budget" "lambda_monthly_usage" {
+  name         = "aavaaz-lambda-monthly-usage"
+  budget_type  = "COST"
+  limit_amount = tostring(var.monthly_budget_limit_usd)
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+
+  dynamic "notification" {
+    for_each = var.budget_alert_email == "" ? [] : [var.budget_alert_email]
+
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = 80
+      threshold_type             = "PERCENTAGE"
+      notification_type          = "FORECASTED"
+      subscriber_email_addresses = [notification.value]
+    }
+  }
+
+  dynamic "notification" {
+    for_each = var.budget_alert_email == "" ? [] : [var.budget_alert_email]
+
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = 100
+      threshold_type             = "PERCENTAGE"
+      notification_type          = "ACTUAL"
+      subscriber_email_addresses = [notification.value]
+    }
+  }
+
+  dynamic "notification" {
+    for_each = var.enable_budget_shutdown ? [aws_sns_topic.budget_shutdown[0].arn] : []
+
+    content {
+      comparison_operator       = "GREATER_THAN"
+      threshold                 = 100
+      threshold_type            = "PERCENTAGE"
+      notification_type         = "ACTUAL"
+      subscriber_sns_topic_arns = [notification.value]
+    }
+  }
+}
+
+resource "aws_sns_topic" "budget_shutdown" {
+  count = var.enable_budget_shutdown ? 1 : 0
+  name  = "aavaaz-lambda-budget-shutdown"
+}
+
+resource "aws_sns_topic_policy" "budget_shutdown" {
+  count  = var.enable_budget_shutdown ? 1 : 0
+  arn    = aws_sns_topic.budget_shutdown[0].arn
+  policy = data.aws_iam_policy_document.budget_shutdown_topic[0].json
+}
+
+data "aws_iam_policy_document" "budget_shutdown_topic" {
+  count = var.enable_budget_shutdown ? 1 : 0
+
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["budgets.amazonaws.com"]
+    }
+
+    actions   = ["SNS:Publish"]
+    resources = [aws_sns_topic.budget_shutdown[0].arn]
   }
 }
 
@@ -174,6 +273,46 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+resource "aws_iam_role" "budget_shutdown" {
+  count = var.enable_budget_shutdown ? 1 : 0
+  name  = "aavaaz-budget-shutdown"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "budget_shutdown" {
+  count = var.enable_budget_shutdown ? 1 : 0
+  name  = "aavaaz-budget-shutdown"
+  role  = aws_iam_role.budget_shutdown[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+        ]
+        Resource = "arn:aws:logs:${var.aws_region}:*:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["lambda:PutFunctionConcurrency"]
+        Resource = aws_lambda_function.transcribe.arn
+      },
+    ]
+  })
+}
+
 # ---------- Lambda ----------
 
 resource "aws_lambda_function" "transcribe" {
@@ -186,18 +325,58 @@ resource "aws_lambda_function" "transcribe" {
 
   environment {
     variables = {
-      AAVAAZ_MODEL             = var.whisper_model
-      AAVAAZ_OUTPUT_FORMAT     = var.output_format
-      AAVAAZ_OUTPUT_BUCKET     = aws_s3_bucket.transcript_output.id
-      AAVAAZ_OUTPUT_PREFIX     = "transcripts/"
-      AAVAAZ_ENABLE_PII        = var.enable_pii_redaction ? "1" : "0"
-      AAVAAZ_ENABLE_FORMAT     = "1"
-      AAVAAZ_STORE_AUDIO       = var.store_audio ? "1" : "0"
-      AAVAAZ_AUDIO_BUCKET      = var.store_audio ? aws_s3_bucket.transcript_output.id : ""
-      AAVAAZ_AUDIO_PREFIX      = "audio/"
-      AAVAAZ_INPUT_BUCKET      = aws_s3_bucket.audio_input.id
+      AAVAAZ_MODEL         = var.whisper_model
+      AAVAAZ_OUTPUT_FORMAT = var.output_format
+      AAVAAZ_OUTPUT_BUCKET = aws_s3_bucket.transcript_output.id
+      AAVAAZ_OUTPUT_PREFIX = "transcripts/"
+      AAVAAZ_ENABLE_PII    = var.enable_pii_redaction ? "1" : "0"
+      AAVAAZ_ENABLE_FORMAT = "1"
+      AAVAAZ_STORE_AUDIO   = var.store_audio ? "1" : "0"
+      AAVAAZ_AUDIO_BUCKET  = var.store_audio ? aws_s3_bucket.transcript_output.id : ""
+      AAVAAZ_AUDIO_PREFIX  = "audio/"
+      AAVAAZ_INPUT_BUCKET  = aws_s3_bucket.audio_input.id
     }
   }
+}
+
+data "archive_file" "budget_shutdown" {
+  count       = var.enable_budget_shutdown ? 1 : 0
+  type        = "zip"
+  source_file = "${path.module}/budget_shutdown.py"
+  output_path = "${path.module}/.terraform/budget_shutdown.zip"
+}
+
+resource "aws_lambda_function" "budget_shutdown" {
+  count            = var.enable_budget_shutdown ? 1 : 0
+  function_name    = "aavaaz-budget-shutdown"
+  role             = aws_iam_role.budget_shutdown[0].arn
+  filename         = data.archive_file.budget_shutdown[0].output_path
+  source_code_hash = data.archive_file.budget_shutdown[0].output_base64sha256
+  handler          = "budget_shutdown.handler"
+  runtime          = "python3.12"
+  timeout          = 30
+
+  environment {
+    variables = {
+      TARGET_FUNCTION_NAME = aws_lambda_function.transcribe.function_name
+    }
+  }
+}
+
+resource "aws_lambda_permission" "budget_shutdown_sns" {
+  count         = var.enable_budget_shutdown ? 1 : 0
+  statement_id  = "AllowBudgetShutdownSNSInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.budget_shutdown[0].function_name
+  principal     = "sns.amazonaws.com"
+  source_arn    = aws_sns_topic.budget_shutdown[0].arn
+}
+
+resource "aws_sns_topic_subscription" "budget_shutdown" {
+  count     = var.enable_budget_shutdown ? 1 : 0
+  topic_arn = aws_sns_topic.budget_shutdown[0].arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.budget_shutdown[0].arn
 }
 
 # Lambda Function URL — no 29s API Gateway timeout limitation
@@ -222,31 +401,7 @@ resource "aws_s3_bucket_notification" "audio_uploaded" {
   lambda_function {
     lambda_function_arn = aws_lambda_function.transcribe.arn
     events              = ["s3:ObjectCreated:*"]
-    filter_suffix       = ".wav"
-  }
-
-  lambda_function {
-    lambda_function_arn = aws_lambda_function.transcribe.arn
-    events              = ["s3:ObjectCreated:*"]
-    filter_suffix       = ".mp3"
-  }
-
-  lambda_function {
-    lambda_function_arn = aws_lambda_function.transcribe.arn
-    events              = ["s3:ObjectCreated:*"]
-    filter_suffix       = ".flac"
-  }
-
-  lambda_function {
-    lambda_function_arn = aws_lambda_function.transcribe.arn
-    events              = ["s3:ObjectCreated:*"]
-    filter_suffix       = ".m4a"
-  }
-
-  lambda_function {
-    lambda_function_arn = aws_lambda_function.transcribe.arn
-    events              = ["s3:ObjectCreated:*"]
-    filter_suffix       = ".ogg"
+    filter_prefix       = "uploads/"
   }
 
   depends_on = [aws_lambda_permission.s3_invoke]
@@ -261,8 +416,8 @@ resource "aws_apigatewayv2_api" "transcribe" {
 
   cors_configuration {
     allow_origins = ["*"]
-    allow_methods = ["GET", "POST", "OPTIONS"]
-    allow_headers = ["Content-Type"]
+    allow_methods = ["GET", "POST", "DELETE", "OPTIONS"]
+    allow_headers = ["Authorization", "Content-Type"]
     max_age       = 86400
   }
 }
@@ -303,10 +458,24 @@ resource "aws_apigatewayv2_route" "upload_url" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda[0].id}"
 }
 
+resource "aws_apigatewayv2_route" "health" {
+  count     = var.enable_api_gateway ? 1 : 0
+  api_id    = aws_apigatewayv2_api.transcribe[0].id
+  route_key = "GET /health"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda[0].id}"
+}
+
 resource "aws_apigatewayv2_route" "transcription_status" {
   count     = var.enable_api_gateway ? 1 : 0
   api_id    = aws_apigatewayv2_api.transcribe[0].id
   route_key = "GET /v1/transcription/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda[0].id}"
+}
+
+resource "aws_apigatewayv2_route" "transcription_cancel" {
+  count     = var.enable_api_gateway ? 1 : 0
+  api_id    = aws_apigatewayv2_api.transcribe[0].id
+  route_key = "DELETE /v1/transcription/{proxy+}"
   target    = "integrations/${aws_apigatewayv2_integration.lambda[0].id}"
 }
 
