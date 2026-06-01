@@ -56,6 +56,48 @@ Ensure Docker is installed and running: https://docs.docker.com/engine/install/
 9. Select **Command Line Interface (CLI)** → acknowledge → **Create**
 10. **Copy both the Access Key ID and Secret Access Key** (secret is shown only once!)
 
+#### Add SNS permissions for the budget shutdown guardrail
+
+The `$50` budget shutdown path uses AWS Budgets → SNS → Lambda. The deploy user therefore needs permission to create and manage the SNS topic named `aavaaz-lambda-budget-shutdown`.
+
+In the AWS Console:
+
+1. Go to **IAM** → **Users** → **aavaaz-deploy**.
+2. Open the **Permissions** tab.
+3. Click **Add permissions** → **Create inline policy**.
+4. Open the **JSON** tab and paste:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowAavaazBudgetShutdownSns",
+      "Effect": "Allow",
+      "Action": [
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:GetTopicAttributes",
+        "sns:SetTopicAttributes",
+        "sns:ListTagsForResource",
+        "sns:TagResource",
+        "sns:UntagResource",
+        "sns:Subscribe",
+        "sns:Unsubscribe",
+        "sns:Publish"
+      ],
+      "Resource": "arn:aws:sns:us-east-1:000152811496:aavaaz-lambda-budget-shutdown"
+    }
+  ]
+}
+```
+
+5. Click **Next**.
+6. Name the policy `AavaazBudgetShutdownSNS`.
+7. Click **Create policy**.
+
+If the IAM console refuses the resource-scoped policy before the SNS topic exists, temporarily set `"Resource": "*"`, deploy once, and then narrow it back to the topic ARN above.
+
 #### Configure the CLI
 
 ```bash
