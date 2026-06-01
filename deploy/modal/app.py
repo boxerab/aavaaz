@@ -112,18 +112,10 @@ class Transcriber:
     def web(self):
         import os
 
-        from fastapi.middleware.cors import CORSMiddleware
         from fastapi.responses import HTMLResponse
         from fastapi.staticfiles import StaticFiles
 
         web_app = fastapi.FastAPI(title="Aavaaz Transcription Demo")
-
-        web_app.add_middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_methods=["GET", "POST", "OPTIONS"],
-            allow_headers=["Authorization", "Content-Type"],
-        )
 
         # Serve static assets (logo, etc.)
         web_app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
@@ -273,12 +265,8 @@ class Transcriber:
         # Decode audio to raw float32 samples at 16kHz
         audio = decode_audio(audio_path)
 
-        req_language = self.language
-        if req_language is None:
-            req_language = self._detect_stable_language_from_audio(audio)
-
         # Submit to WhisperLive batch inference worker
-        req = BatchRequest(audio=audio, language=req_language)
+        req = BatchRequest(audio=audio, language=self.language)
         self.batch_worker.submit(req)
         req.future.wait(timeout=300)
 
@@ -317,73 +305,6 @@ class Transcriber:
             "duration": info.duration if info else 0.0,
             "segments": results,
         }
-
-    def _detect_stable_language_from_audio(self, audio) -> str | None:
-        """Auto-detect language from short probes, then pin for this request."""
-        sample_rate = 16000
-        window = 20 * sample_rate
-        step = 10 * sample_rate
-        max_probes = 3
-
-        scores = {}
-        probes = 0
-
-        for i in range(max_probes):
-            start = i * step
-            end = min(start + window, len(audio))
-            chunk = audio[start:end]
-            if len(chunk) < 5 * sample_rate:
-                break
-
-            try:
-                _, info = self.model.transcribe(
-                    chunk,
-                    language=None,
-                    vad_filter=True,
-                    word_timestamps=False,
-                )
-            except Exception:
-                continue
-
-            lang = getattr(info, "language", None)
-            prob = float(getattr(info, "language_probability", 0.0) or 0.0)
-            if not lang:
-                continue
-
-            scores[lang] = scores.get(lang, 0.0) + max(prob, 0.01)
-            probes += 1
-
-            if prob >= 0.9:
-                logger.info(
-                    "Batch language lock (high confidence): lang=%s prob=%.2f",
-                    lang,
-                    prob,
-                )
-                return lang
-
-        if not scores or probes == 0:
-            return None
-
-        best_lang = max(scores, key=scores.get)
-        total = sum(scores.values())
-        ratio = scores[best_lang] / total if total > 0 else 0.0
-
-        if probes >= 2 and ratio >= 0.65:
-            logger.info(
-                "Batch language lock (consensus): lang=%s ratio=%.2f probes=%d",
-                best_lang,
-                ratio,
-                probes,
-            )
-            return best_lang
-
-        logger.info(
-            "Batch language probe inconclusive: probes=%d best=%s ratio=%.2f",
-            probes,
-            best_lang,
-            ratio,
-        )
-        return None
 
     def _build_pipeline(self) -> list:
         import os
