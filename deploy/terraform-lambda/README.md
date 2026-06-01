@@ -84,9 +84,20 @@ In the AWS Console:
         "sns:UntagResource",
         "sns:Subscribe",
         "sns:Unsubscribe",
-        "sns:Publish"
+        "sns:Publish",
+        "sns:GetSubscriptionAttributes",
+        "sns:ListSubscriptionsByTopic"
       ],
       "Resource": "arn:aws:sns:us-east-1:000152811496:aavaaz-lambda-budget-shutdown"
+    },
+    {
+      "Sid": "AllowAavaazBudgetCreateUpdate",
+      "Effect": "Allow",
+      "Action": [
+        "budgets:ModifyBudget",
+        "budgets:ViewBudget"
+      ],
+      "Resource": "arn:aws:budgets::000152811496:budget/aavaaz-lambda-monthly-usage"
     }
   ]
 }
