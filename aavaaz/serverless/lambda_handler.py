@@ -49,7 +49,7 @@ logger.setLevel(logging.INFO)
 _CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type",
 }
 
 
@@ -111,6 +111,92 @@ def _apply_pipeline(segment: dict, pipeline: list[Any]) -> dict:
     return segment
 
 
+def _detect_stable_language(model: Any, audio_path: str) -> str | None:
+    """Auto-detect language using a short consensus window.
+
+    Uses up to three 20s probes from the beginning of the audio and locks to
+    the weighted-majority language to reduce transient language flips.
+    """
+    try:
+        from faster_whisper.audio import decode_audio
+    except Exception:
+        return None
+
+    try:
+        audio = decode_audio(audio_path, sampling_rate=16000)
+    except Exception:
+        logger.exception("Language probe decode failed")
+        return None
+
+    if audio is None or len(audio) == 0:
+        return None
+
+    sample_rate = 16000
+    window = 20 * sample_rate
+    step = 10 * sample_rate
+    max_probes = 3
+
+    scores: dict[str, float] = {}
+    probes = 0
+
+    for i in range(max_probes):
+        start = i * step
+        end = min(start + window, len(audio))
+        chunk = audio[start:end]
+        if len(chunk) < 5 * sample_rate:
+            break
+
+        try:
+            _, info = model.transcribe(
+                chunk,
+                language=None,
+                vad_filter=True,
+                word_timestamps=False,
+            )
+        except Exception:
+            continue
+
+        lang = getattr(info, "language", None)
+        prob = float(getattr(info, "language_probability", 0.0) or 0.0)
+        if not lang:
+            continue
+
+        scores[lang] = scores.get(lang, 0.0) + max(prob, 0.01)
+        probes += 1
+
+        if prob >= 0.9:
+            logger.info(
+                "Language probe locked early: lang=%s prob=%.2f",
+                lang,
+                prob,
+            )
+            return lang
+
+    if not scores or probes == 0:
+        return None
+
+    best_lang = max(scores, key=scores.get)
+    total = sum(scores.values())
+    ratio = scores[best_lang] / total if total > 0 else 0.0
+
+    if probes >= 2 and ratio >= 0.65:
+        logger.info(
+            "Language probe consensus: lang=%s ratio=%.2f probes=%d",
+            best_lang,
+            ratio,
+            probes,
+        )
+        return best_lang
+
+    logger.info(
+        "Language probe inconclusive: probes=%d best=%s ratio=%.2f",
+        probes,
+        best_lang,
+        ratio,
+    )
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Core transcription
 # ---------------------------------------------------------------------------
@@ -159,6 +245,9 @@ def _transcribe(audio_path: str, progress_callback=None) -> dict:
 
     model = _get_model()
     language = os.environ.get("AAVAAZ_LANGUAGE") or None
+    if language is None:
+        language = _detect_stable_language(model, audio_path)
+
     segments, info = model.transcribe(
         audio_path, language=language, word_timestamps=True
     )
@@ -278,6 +367,8 @@ def handler(event: dict, context: Any) -> dict:
             return _response(204, "")
 
         if method == "GET":
+            if path == "/health":
+                return _response(200, json.dumps({"status": "ok", "mode": "batch"}))
             if path == "/v1/upload-url":
                 return _handle_upload_url(event)
             if path.startswith("/v1/transcription/"):
