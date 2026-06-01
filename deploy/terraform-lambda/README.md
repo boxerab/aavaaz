@@ -95,7 +95,10 @@ In the AWS Console:
       "Effect": "Allow",
       "Action": [
         "budgets:ModifyBudget",
-        "budgets:ViewBudget"
+        "budgets:ViewBudget",
+        "budgets:ListTagsForResource",
+        "budgets:TagResource",
+        "budgets:UntagResource"
       ],
       "Resource": "arn:aws:budgets::000152811496:budget/aavaaz-lambda-monthly-usage"
     }
