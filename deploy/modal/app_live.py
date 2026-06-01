@@ -14,6 +14,8 @@ Connect a WhisperLive client to wss://<modal-url>/ws
 Environment variables (set via Modal Secrets):
     AAVAAZ_MODEL          Whisper model name (default: large-v3)
     AAVAAZ_LANGUAGE       Language code, or empty for auto-detect
+    AAVAAZ_LOCK_LANGUAGE  If true, ignores runtime control messages that try to
+                          mutate language/options after session start (default: true)
     AAVAAZ_API_KEY        Optional API key for authentication
     AAVAAZ_MAX_CLIENTS    Max concurrent WebSocket clients (default: 4)
     AAVAAZ_MAX_TIME       Max connection time in seconds (default: 600)
@@ -123,6 +125,8 @@ class WebSocketAdapter:
 class LiveTranscriber:
     @modal.enter()
     def load_model(self):
+        import json
+        import logging
         import os
 
         from whisper_live.server import TranscriptionServer
@@ -138,6 +142,13 @@ class LiveTranscriber:
         self.server.segment_post_processor = self._build_post_processor()
         self.model_name = model_name
         self.api_key = os.environ.get("AAVAAZ_API_KEY")
+        self.lock_language = os.environ.get("AAVAAZ_LOCK_LANGUAGE", "true").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        self.forced_language = os.environ.get("AAVAAZ_LANGUAGE") or None
         self.server.use_vad = True
         self.server.single_model = True
         self.server.batch_config = None
@@ -147,6 +158,60 @@ class LiveTranscriber:
         # Pre-load the model so first connection is fast
         from faster_whisper import WhisperModel
         from whisper_live.backend.faster_whisper_backend import ServeClientFasterWhisper
+
+        # Improve auto-detect robustness: only lock language after a short
+        # consensus window, which helps avoid transient cross-language drift.
+        original_set_language = ServeClientFasterWhisper.set_language
+
+        def consensus_set_language(client, info):
+            if client.language is not None:
+                return
+
+            lang = getattr(info, "language", None)
+            prob = float(getattr(info, "language_probability", 0.0) or 0.0)
+            if not lang:
+                return
+
+            votes = getattr(client, "_aavaaz_lang_votes", [])
+            votes.append((lang, prob))
+            if len(votes) > 8:
+                votes = votes[-8:]
+            client._aavaaz_lang_votes = votes
+
+            scores = {}
+            for vote_lang, vote_prob in votes:
+                scores[vote_lang] = scores.get(vote_lang, 0.0) + max(vote_prob, 0.01)
+
+            best_lang = max(scores, key=scores.get)
+            total = sum(scores.values())
+            best_ratio = scores[best_lang] / total if total > 0 else 0.0
+
+            if len(votes) >= 3 and (best_ratio >= 0.7 or prob >= 0.85):
+                client.language = best_lang
+                logging.info(
+                    (
+                        "Locked auto-detected language to %s after %d votes "
+                        "(ratio=%.2f, latest_prob=%.2f)"
+                    ),
+                    best_lang,
+                    len(votes),
+                    best_ratio,
+                    prob,
+                )
+                with contextlib.suppress(Exception):
+                    client.websocket.send(
+                        json.dumps(
+                            {
+                                "uid": client.client_uid,
+                                "language": client.language,
+                                "language_prob": prob,
+                            }
+                        )
+                    )
+
+        ServeClientFasterWhisper.set_language = (
+            consensus_set_language if self.lock_language else original_set_language
+        )
 
         ServeClientFasterWhisper.SINGLE_MODEL = WhisperModel(
             model_name, device="cuda", compute_type="float16"
@@ -250,10 +315,18 @@ class LiveTranscriber:
     def web(self):
         import os
 
-        from fastapi.responses import HTMLResponse
+        from fastapi.middleware.cors import CORSMiddleware
+        from fastapi.responses import HTMLResponse, JSONResponse
         from fastapi.staticfiles import StaticFiles
 
         web_app = fastapi.FastAPI(title="Aavaaz Live Transcription")
+
+        web_app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type"],
+        )
 
         web_app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
@@ -267,11 +340,10 @@ class LiveTranscriber:
 
         @web_app.get("/health")
         async def health():
-            return {
-                "status": "ok",
-                "mode": "live",
-                "model": self.model_name,
-            }
+            return JSONResponse(
+                content={"status": "ok", "mode": "live", "model": self.model_name},
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
 
         @web_app.websocket("/ws")
         async def websocket_endpoint(ws: fastapi.WebSocket):
@@ -329,8 +401,31 @@ class LiveTranscriber:
                         if isinstance(data, str)
                         else json.loads(data.decode())
                     )
-                # Restore original recv after first message
-                websocket.recv = original_recv
+                if (
+                    self.lock_language
+                    and self.forced_language is not None
+                    and isinstance(captured_options, dict)
+                ):
+                    captured_options["language"] = self.forced_language
+                    data = json.dumps(captured_options)
+
+                def locked_recv(timeout=None):
+                    frame = original_recv(timeout=timeout)
+                    if not self.lock_language or not isinstance(frame, str):
+                        return frame
+                    if frame.strip() == "END_OF_AUDIO":
+                        return frame
+                    with contextlib.suppress(json.JSONDecodeError):
+                        payload = json.loads(frame)
+                        if isinstance(payload, dict):
+                            logger.info(
+                                "Ignoring runtime control frame while language lock is enabled"
+                            )
+                            return b""
+                    return frame
+
+                # Restore recv after first message, but keep runtime control locked.
+                websocket.recv = locked_recv
                 return data
 
             websocket.recv = intercepting_recv
