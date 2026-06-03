@@ -26,13 +26,18 @@ export default function TTSPage() {
     setError("");
     setAudioUrl(null);
     setProcessingTime(null);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     try {
+      const controller = new AbortController();
+      timeout = setTimeout(() => controller.abort(), 120000);
       const res = await fetch(TTS_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: text.trim() }),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
 
       if (!res.ok) {
         const err = await res.text();
@@ -48,6 +53,9 @@ export default function TTSPage() {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Synthesis failed");
     } finally {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
       setLoading(false);
     }
   }

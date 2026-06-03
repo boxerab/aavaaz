@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aavaaz"
-version = "0.1.0"
+version = "0.9.0"
 description = "Aavaaz — production-grade speech-to-text platform built on WhisperLive"
 readme = "README.md"
 license = "MPL-2.0"
@@ -35,7 +35,7 @@ dependencies = [
 
 [project.optional-dependencies]
 whisper = [
-    "whisper-live>=0.8.0",
+    "whisper-live>=0.9.0",
 ]
 dev = [
     "pytest>=8.0",
@@ -52,9 +52,6 @@ aavaaz = "aavaaz.cli:main"
 Homepage = "https://github.com/collabora/aavaaz"
 Repository = "https://github.com/collabora/aavaaz"
 Issues = "https://github.com/collabora/aavaaz/issues"
-
-[tool.uv.sources]
-whisper-live = { path = "../WhisperLive", editable = true }
 
 [tool.setuptools.packages.find]
 include = ["aavaaz*"]

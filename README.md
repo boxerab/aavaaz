@@ -17,21 +17,34 @@ with enterprise features that compete with Deepgram, ElevenLabs, and AssemblyAI.
 
 ## Quick Start
 
-### Option 1: Using `uv` (Fast & Reproducible) 
+### Option 1: Install from PyPI (Recommended)
+
+```bash
+# Create a virtualenv (Python 3.12 required)
+python3.12 -m venv .venv && source .venv/bin/activate
+
+# Install aavaaz with WhisperLive + ML stack
+pip install "aavaaz[whisper]"
+
+# Start the server
+aavaaz serve --model large-v3
+
+# Transcribe a file
+aavaaz transcribe audio.wav
+```
+
+### Option 2: Using `uv` (Fast & Reproducible)
 
 ```bash
 # Install uv: https://docs.astral.sh/uv/
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Clone WhisperLive alongside aavaaz (required — aavaaz uses a patched fork)
-git clone https://github.com/collabora/WhisperLive.git ../WhisperLive
-
 # Create venv with Python 3.12 (required; 3.14 not yet supported by ML deps)
 uv venv .venv --python python3.12
 source .venv/bin/activate
 
-# Install aavaaz with ML stack (whisper-live, torch, etc)
-uv sync --extra whisper
+# Install from PyPI
+uv pip install "aavaaz[whisper]"
 
 # Start the server
 aavaaz serve --model large-v3
@@ -44,15 +57,25 @@ aavaaz transcribe audio.wav
 > not yet publish wheels for Python 3.14. Use `python3.12` explicitly when
 > creating the virtualenv. On Fedora: `sudo dnf install python3.12`
 
-### Option 2: Using `pip` with Requirements Files
+### Option 3: Local Development Install
+
+```bash
+git clone git@github.com:collabora/aavaaz.git
+cd aavaaz
+python3.12 -m venv .venv && source .venv/bin/activate
+
+# Local editable install
+pip install -e .
+
+# With WhisperLive + dev tooling
+pip install -e ".[whisper,dev]"
+```
+
+### Option 4: Using `pip` with Requirements Files
 
 ```bash
 # Create a virtualenv (Python 3.12 required)
 python3.12 -m venv .venv && source .venv/bin/activate
-
-# Clone WhisperLive (patched fork required by aavaaz)
-git clone https://github.com/collabora/WhisperLive.git ../WhisperLive
-pip install -e ../WhisperLive
 
 # Install base + ML stack (large ~20GB download for torch/onnx)
 pip install -r requirements/whisper.txt
@@ -71,22 +94,6 @@ curl -X POST http://localhost:8000/v1/audio/transcriptions \
   -F file=@audio.wav -F model=large-v3
 ```
 
-### Option 3: Using `pyproject.toml` Extras
-
-```bash
-python3.12 -m venv .venv && source .venv/bin/activate
-
-# Clone WhisperLive (patched fork required by aavaaz)
-git clone https://github.com/collabora/WhisperLive.git ../WhisperLive
-pip install -e ../WhisperLive
-
-# Install base only
-pip install -e .
-
-# Or install with whisper-live + dev tools
-pip install -e ".[whisper,dev]"
-```
-
 ### Note on Storage
 
 The full ML stack (torch, onnxruntime, torchaudio) requires **~20GB** disk space. 
@@ -98,7 +105,7 @@ If you hit disk quota errors, consider:
 ### Requirements Files
 
 - `requirements/base.txt` — Core dependencies only (fastapi, uvicorn, boto3)
-- `requirements/whisper.txt` — Full ML stack (torch, whisper-live, etc)
+- `requirements/whisper.txt` — Full ML stack (torch, whisper-live>=0.9.0, etc)
 - `requirements/dev.txt` — Development tools (pytest, ruff, etc)
 
 ## Architecture

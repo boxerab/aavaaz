@@ -94,7 +94,7 @@ web_app.add_middleware(
     image=image,
     gpu="A10G",
     secrets=[_aavaaz_secret],
-    scaledown_window=300,
+    scaledown_window=900,
 )
 @modal.concurrent(max_inputs=4)
 class TTSServer:

@@ -1086,7 +1086,7 @@
     <div class="hero-content">
         <div class="hero-badge">
             <div class="badge-dot"></div>
-            Open Source &middot; <span>v0.8.0</span>
+            Open Source &middot; <span>v0.9.0</span>
         </div>
         <h1>Real-Time Speech-to-Text<br><em>Powered by WhisperLive</em></h1>
         <p class="hero-sub">
@@ -1113,7 +1113,7 @@
     <span class="f">--api-key</span> <span class="v">"sk-..."</span> \
     <span class="f">--batch-inference</span> <span class="f">--metrics-port</span> <span class="v">9091</span>
 
-<span class="o">INFO  Aavaaz v0.8.0 starting...</span>
+<span class="o">INFO  Aavaaz v0.9.0 starting...</span>
 <span class="o">INFO  Backend: faster_whisper | Model: small</span>
 <span class="o">INFO  REST API &rarr; http://0.0.0.0:8000</span>
 <span class="o">INFO  Swagger  &rarr; http://0.0.0.0:8000/docs</span>
@@ -1614,14 +1614,12 @@
             </div>
             <div class="tab-body">
                 <div class="tab-panel active" id="tab-python">
-<pre><span class="cmt"># Clone repos (aavaaz uses a patched WhisperLive fork)</span>
-git clone https://github.com/collabora/aavaaz.git && cd aavaaz
-git clone https://github.com/collabora/WhisperLive.git ../WhisperLive
-
-<span class="cmt"># Install with uv (Python 3.12 required; 3.14 not yet supported)</span>
-uv venv .venv --python python3.12
+<pre><span class="cmt"># Create a virtualenv (Python 3.12 required; 3.14 not yet supported)</span>
+python3.12 -m venv .venv
 source .venv/bin/activate
-uv sync --extra whisper
+
+<span class="cmt"># Install from PyPI (includes WhisperLive + ML stack)</span>
+pip install <span class="str">"aavaaz[whisper]"</span>
 
 <span class="cmt"># Start server</span>
 aavaaz serve <span class="kw">--port</span> <span class="num">9090</span> <span class="kw">--backend</span> <span class="str">faster_whisper</span>

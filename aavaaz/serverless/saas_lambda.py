@@ -90,7 +90,7 @@ async def require_auth(request: Request) -> dict:
 
 # ─── FastAPI App ─────────────────────────────────────────────────────────────
 
-app = FastAPI(title="Aavaaz SaaS API", version="0.1.0")
+app = FastAPI(title="Aavaaz SaaS API", version="0.9.0")
 
 app.add_middleware(
     CORSMiddleware,

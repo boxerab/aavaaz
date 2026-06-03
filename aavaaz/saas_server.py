@@ -31,7 +31,7 @@ def create_saas_app() -> FastAPI:
     app = FastAPI(
         title="Aavaaz SaaS Platform",
         description="Enterprise speech-to-text SaaS management API",
-        version="0.1.0",
+        version="0.9.0",
     )
 
     # CORS for dashboard

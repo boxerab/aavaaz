@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
+import { UploadProvider } from "@/lib/upload-context";
 import {
   LayoutDashboard,
   Key,
@@ -106,7 +107,9 @@ export default function DashboardLayout({
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
-        <div className="p-8 max-w-6xl mx-auto">{children}</div>
+        <div className="p-8 max-w-6xl mx-auto">
+          <UploadProvider>{children}</UploadProvider>
+        </div>
       </main>
     </div>
   );
