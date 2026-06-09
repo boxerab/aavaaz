@@ -344,17 +344,19 @@
         .backends-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 1px;
-            background: var(--border);
-            border-radius: 16px;
-            overflow: hidden;
+            gap: 16px;
         }
         .backend-card {
             background: var(--bg-secondary);
-            padding: 40px 32px;
-            transition: background 0.2s;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            transition: all 0.2s;
         }
-        .backend-card:hover { background: var(--bg-card-hover); }
+        .backend-card:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-card-hover);
+        }
         .backend-icon {
             width: 48px; height: 48px;
             border-radius: 12px;
@@ -382,18 +384,20 @@
         .features-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 1px;
-            background: var(--border);
-            border-radius: 16px;
-            overflow: hidden;
+            gap: 16px;
+            /* remove background and border-radius/overflow */
         }
         .feature-card {
             background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
             padding: 32px 28px;
-            transition: background 0.2s;
-            position: relative;
+            transition: all 0.2s;
         }
-        .feature-card:hover { background: var(--bg-card-hover); }
+        .feature-card:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-card-hover);
+        }
         .feature-card .f-icon {
             font-size: 1.5rem;
             margin-bottom: 16px;
