@@ -48,7 +48,13 @@ def test_server_init_stores_params():
 
 
 def test_server_run_passes_params():
-    """Verify run() passes all params to WhisperLive's TranscriptionServer."""
+    """Verify run() passes top-level params to WhisperLive's TranscriptionServer.
+
+    word_timestamps / hotwords / enable_diarization / max_speakers / model
+    are NOT passed as run() kwargs — WhisperLive reads them per-client via
+    the options dict. Aavaaz wraps initialize_client to inject them; the
+    wrapper behavior is covered by test_server_run_injects_client_defaults.
+    """
     server = AavaazServer(
         model="tiny",
         batch_inference=True,
@@ -69,15 +75,86 @@ def test_server_run_passes_params():
         mock_ts.run.assert_called_once()
         call_kwargs = mock_ts.run.call_args[1]
 
-        assert call_kwargs["faster_whisper_custom_model_path"] == "tiny"
+        # Canonical short names like "tiny" are NOT a custom path; the model
+        # name flows through the options dict via the wrapper instead.
+        assert call_kwargs["faster_whisper_custom_model_path"] is None
         assert call_kwargs["batch_enabled"] is True
         assert call_kwargs["api_key"] == "key123"
         assert call_kwargs["rate_limit_rpm"] == 60
         assert call_kwargs["metrics_port"] == 9091
-        assert call_kwargs["word_timestamps"] is True
-        assert call_kwargs["hotwords"] == "test"
-        assert call_kwargs["enable_diarization"] is True
-        assert call_kwargs["max_speakers"] == 3
+
+        # These four are no longer passed at the run() level — they're
+        # per-client defaults injected via the initialize_client wrapper.
+        for removed in (
+            "word_timestamps",
+            "hotwords",
+            "enable_diarization",
+            "max_speakers",
+            "model",
+        ):
+            assert removed not in call_kwargs, (
+                f"{removed!r} should no longer be a run() kwarg; "
+                f"it is injected per-client via initialize_client wrapper"
+            )
+
+
+def test_server_run_passes_custom_model_path():
+    """HF-style names with '/' (e.g. 'distil-whisper/distil-large-v3') and
+    local paths ARE passed as faster_whisper_custom_model_path."""
+    server = AavaazServer(model="distil-whisper/distil-large-v3")
+    with patch("aavaaz.server.TranscriptionServer") as mock_ts_cls:
+        mock_ts = MagicMock()
+        mock_ts_cls.return_value = mock_ts
+        server.run()
+        call_kwargs = mock_ts.run.call_args[1]
+        assert (
+            call_kwargs["faster_whisper_custom_model_path"]
+            == "distil-whisper/distil-large-v3"
+        )
+
+
+def test_server_run_injects_client_defaults():
+    """The wrapped initialize_client must setdefault the four flags + model
+    into each client's options dict so WhisperLive's per-client code reads
+    them correctly."""
+    server = AavaazServer(
+        model="tiny",
+        word_timestamps=True,
+        hotwords="acme,widget",
+        enable_diarization=True,
+        max_speakers=3,
+    )
+    with patch("aavaaz.server.TranscriptionServer") as mock_ts_cls:
+        mock_ts = MagicMock()
+        mock_ts_cls.return_value = mock_ts
+        # Capture the wrapped initialize_client by stashing whatever value
+        # gets assigned to it on the mock.
+        server.run()
+
+        # After server.run(), the wrapper should have replaced mock_ts.initialize_client.
+        wrapped = mock_ts.initialize_client
+        # Calling it with an empty options dict should fill in the defaults.
+        sentinel_options = {}
+        wrapped("fake_websocket", sentinel_options, "model_path_arg", None, False)
+        assert sentinel_options["model"] == "tiny"
+        assert sentinel_options["word_timestamps"] is True
+        assert sentinel_options["hotwords"] == "acme,widget"
+        assert sentinel_options["enable_diarization"] is True
+        assert sentinel_options["max_speakers"] == 3
+
+        # Client-supplied values must NOT be overwritten.
+        client_options = {
+            "model": "client-model",
+            "hotwords": "client-hot",
+            "word_timestamps": False,
+        }
+        wrapped("fake_websocket", client_options, "model_path_arg", None, False)
+        assert client_options["model"] == "client-model"
+        assert client_options["hotwords"] == "client-hot"
+        assert client_options["word_timestamps"] is False
+        # Unsupplied flags still get the server default.
+        assert client_options["enable_diarization"] is True
+        assert client_options["max_speakers"] == 3
 
 
 def test_server_run_wires_plugin_pipeline():

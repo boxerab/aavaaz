@@ -7,6 +7,7 @@ plugin pipeline without modifying WhisperLive core code.
 """
 
 import logging
+import os
 
 from whisper_live.server import TranscriptionServer
 
@@ -78,11 +79,37 @@ class AavaazServer:
             self.plugin_registry.apply if len(self.plugin_registry) > 0 else None
         )
 
+        # WhisperLive's server.run() has no kwargs for these server-wide
+        # defaults, but its per-client code already reads them via the
+        # options dict. Wrap initialize_client so Aavaaz's flags act as
+        # defaults that any client can override via its WS handshake.
+        original_init_client = server.initialize_client
+        is_custom_model = self.model and (
+            "/" in self.model or os.path.exists(self.model)
+        )
+        server_defaults = {
+            "model": self.model,
+            "word_timestamps": self.word_timestamps,
+            "hotwords": self.hotwords,
+            "enable_diarization": self.enable_diarization,
+            "max_speakers": self.max_speakers,
+        }
+
+        def initialize_client_with_defaults(websocket, options, *args, **kwargs):
+            for key, value in server_defaults.items():
+                options.setdefault(key, value)
+            return original_init_client(websocket, options, *args, **kwargs)
+
+        server.initialize_client = initialize_client_with_defaults
+
         server.run(
             host=self.host,
             port=self.port,
             backend=self.backend,
-            faster_whisper_custom_model_path=self.model,
+            # Only pass as "custom path" when the model name actually looks
+            # like one (HF org/repo or local path). Canonical short names
+            # like "large-v3" flow through the per-client options dict.
+            faster_whisper_custom_model_path=self.model if is_custom_model else None,
             enable_rest=self.enable_rest_api,
             rest_port=self.rest_port,
             segment_post_processor=post_processor,
@@ -92,8 +119,4 @@ class AavaazServer:
             metrics_port=self.metrics_port,
             api_key=self.api_key,
             rate_limit_rpm=self.rate_limit_rpm,
-            word_timestamps=self.word_timestamps,
-            hotwords=self.hotwords,
-            enable_diarization=self.enable_diarization,
-            max_speakers=self.max_speakers,
         )
