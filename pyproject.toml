@@ -36,6 +36,13 @@ dependencies = [
 [project.optional-dependencies]
 whisper = [
     "whisper-live>=0.9.0",
+    # CTranslate2 (faster-whisper's backend) loads CUDA via the system
+    # dynamic loader and can't find torch's bundled copies under
+    # site-packages/nvidia/. These wheels install the libraries in a
+    # location CTranslate2 actually searches; without them GPU inference
+    # dies with "Library libcublas.so.12 is not found".
+    "nvidia-cublas-cu12; sys_platform == 'linux'",
+    "nvidia-cudnn-cu12; sys_platform == 'linux'",
 ]
 dev = [
     "pytest>=8.0",

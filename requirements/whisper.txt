@@ -10,3 +10,13 @@ torchaudio
 faster-whisper>=1.2
 websockets
 scipy
+
+# CUDA runtime libraries needed by CTranslate2 (faster-whisper's backend).
+# torch bundles its own copies under site-packages/nvidia/, but CTranslate2
+# uses the system dynamic loader and can't find them there. Without these
+# wheels you get at transcription time:
+#   ERROR: Failed to transcribe audio chunk:
+#   Library libcublas.so.12 is not found or cannot be loaded
+# Skip these only if you're forcing CPU inference (compute_type=int8 on CPU).
+nvidia-cublas-cu12
+nvidia-cudnn-cu12
