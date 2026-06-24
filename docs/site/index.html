@@ -262,6 +262,7 @@
             font-size: 0.82rem;
             line-height: 1.9;
             text-align: left;
+            white-space: pre; overflow-x: auto;
         }
         .demo-body .p { color: var(--green); }
         .demo-body .c { color: var(--text-muted); }
@@ -1111,8 +1112,7 @@
                 <div class="demo-title">aavaaz &mdash; server</div>
                 <div style="width: 38px;"></div>
             </div>
-            <div class="demo-body">
-<span class="c"># Start with all features enabled</span>
+            <div class="demo-body"><span class="c"># Start with all features enabled</span>
 <span class="p">$</span> <span class="w">aavaaz serve</span> <span class="f">--port</span> <span class="v">9090</span> <span class="f">--backend</span> <span class="v">faster_whisper</span> \
     <span class="f">--api-key</span> <span class="v">"sk-..."</span> \
     <span class="f">--batch-inference</span> <span class="f">--metrics-port</span> <span class="v">9091</span>
@@ -1122,8 +1122,7 @@
 <span class="o">INFO  REST API &rarr; http://0.0.0.0:8000</span>
 <span class="o">INFO  Swagger  &rarr; http://0.0.0.0:8000/docs</span>
 <span class="o">INFO  Metrics  &rarr; :9091/metrics</span>
-<span class="s">&#10003; Ready &mdash; accepting connections on :9090</span>
-            </div>
+<span class="s">&#10003; Ready &mdash; accepting connections on :9090</span></div>
         </div>
 
         <div class="stats-row">
