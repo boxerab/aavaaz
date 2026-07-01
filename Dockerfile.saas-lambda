@@ -1,13 +1,9 @@
 # Dockerfile for the SaaS API Lambda function
 FROM public.ecr.aws/lambda/python:3.12
 
-COPY requirements/base.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt && \
-    pip install --no-cache-dir mangum boto3 stripe PyJWT[crypto]
-
+COPY pyproject.toml README.md ${LAMBDA_TASK_ROOT}/
 COPY aavaaz/ ${LAMBDA_TASK_ROOT}/aavaaz/
-COPY pyproject.toml ${LAMBDA_TASK_ROOT}/
 
-RUN pip install --no-cache-dir --no-deps ${LAMBDA_TASK_ROOT}
+RUN pip install --no-cache-dir "${LAMBDA_TASK_ROOT}[saas]"
 
 CMD ["aavaaz.serverless.saas_lambda.handler"]

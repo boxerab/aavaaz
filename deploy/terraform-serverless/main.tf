@@ -377,7 +377,9 @@ resource "aws_lambda_function" "saas_api" {
   }
 
   lifecycle {
-    ignore_changes = [image_uri]
+    # Stripe secrets are added to the environment out of band; don't let a
+    # re-apply revert them (image_uri is likewise pushed by CI).
+    ignore_changes = [image_uri, environment]
   }
 }
 

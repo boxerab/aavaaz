@@ -16,24 +16,11 @@ spec:
     spec:
       containers:
         - name: dashboard
+          # NEXT_PUBLIC_* are inlined into the static export at build time, so
+          # they are baked into this image via docker build args, not set here.
           image: <ACCOUNT>.dkr.ecr.us-east-1.amazonaws.com/aavaaz-dashboard:latest
           ports:
             - containerPort: 3000
-          env:
-            - name: NEXT_PUBLIC_COGNITO_USER_POOL_ID
-              valueFrom:
-                configMapKeyRef:
-                  name: aavaaz-dashboard-config
-                  key: cognito-user-pool-id
-            - name: NEXT_PUBLIC_COGNITO_CLIENT_ID
-              valueFrom:
-                configMapKeyRef:
-                  name: aavaaz-dashboard-config
-                  key: cognito-client-id
-            - name: NEXT_PUBLIC_API_URL
-              value: "https://api.aavaaz.dev"
-            - name: NEXT_PUBLIC_WS_URL
-              value: "wss://api.aavaaz.dev/ws"
           resources:
             requests:
               memory: "256Mi"

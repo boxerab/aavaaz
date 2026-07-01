@@ -10,10 +10,6 @@ model: large-v3
 batchInference: true
 metricsPort: 9091
 
-gpu:
-  enabled: true
-  count: 1
-
 # GPU pods should schedule on Karpenter-provisioned GPU nodes
 nodeSelector:
   workload: gpu-transcription

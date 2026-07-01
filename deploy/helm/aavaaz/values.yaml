@@ -10,9 +10,9 @@ apiKey: ""
 metricsPort: 0
 batchInference: false
 
-gpu:
-  enabled: true
-  count: 1
+nodeSelector: {}
+tolerations: []
+env: []
 
 service:
   type: ClusterIP
@@ -22,11 +22,18 @@ service:
 ingress:
   enabled: false
   className: ""
+  annotations: {}
   hosts:
     - host: aavaaz.local
       paths:
         - path: /
           pathType: Prefix
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
 
 resources:
   requests:

@@ -51,6 +51,16 @@ dev = [
     "numpy",
     "ruff",
 ]
+# Hosted SaaS API (Lambda handler + Stripe billing)
+saas = [
+    "stripe>=8",
+    "mangum>=0.19",
+]
+# Bundled Python client SDK (aavaaz.sdks.python)
+sdk = [
+    "httpx",
+    "websockets",
+]
 
 [project.scripts]
 aavaaz = "aavaaz.cli:main"

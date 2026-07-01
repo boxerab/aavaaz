@@ -19,7 +19,7 @@ resource "aws_amplify_app" "dashboard" {
           commands:
             - npm run build
       artifacts:
-        baseDirectory: dashboard/.next
+        baseDirectory: dashboard/out
         files:
           - '**/*'
       cache:
@@ -46,7 +46,7 @@ resource "aws_amplify_branch" "main" {
   app_id      = aws_amplify_app.dashboard.id
   branch_name = "main"
 
-  framework = "Next.js - SSR"
+  framework = "Next.js - SSG"
 
   environment_variables = {
     NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = var.stripe_publishable_key

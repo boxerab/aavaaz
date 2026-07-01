@@ -198,6 +198,7 @@ resource "aws_db_instance" "aavaaz" {
   instance_class       = "db.t4g.medium"
   allocated_storage    = 50
   max_allocated_storage = 200
+  storage_encrypted    = true
 
   db_name  = "aavaaz"
   username = "aavaaz"
