@@ -18,6 +18,7 @@ import os
 import secrets
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -112,6 +113,10 @@ def validate_api_key(raw_key: str) -> str | None:
 
     item = items[0]
 
+    expires_at = item.get("expires_at")
+    if expires_at and expires_at < datetime.now(UTC).isoformat():
+        return None
+
     # Update last_used timestamp (fire and forget)
     with contextlib.suppress(Exception):
         _table_api_keys.update_item(
@@ -134,7 +139,7 @@ def record_usage(user_id: str, audio_minutes: float):
         Key={"user_id": user_id, "date": today},
         UpdateExpression="ADD audio_minutes :mins, requests :one",
         ExpressionAttributeValues={
-            ":mins": round(audio_minutes, 4),
+            ":mins": Decimal(str(round(audio_minutes, 4))),
             ":one": 1,
         },
     )
@@ -184,16 +189,23 @@ def get_subscription(user_id: str) -> dict:
 
 
 def update_subscription(user_id: str, updates: dict):
-    """Update subscription fields."""
+    """Update subscription fields.
+
+    Uses ExpressionAttributeNames placeholders because fields like 'plan' and
+    'status' are DynamoDB reserved words and cannot appear raw in an expression.
+    """
     expressions = []
+    names = {}
     values = {}
-    for key, value in updates.items():
-        expressions.append(f"{key} = :{key}")
-        values[f":{key}"] = value
+    for i, (key, value) in enumerate(updates.items()):
+        expressions.append(f"#k{i} = :v{i}")
+        names[f"#k{i}"] = key
+        values[f":v{i}"] = value
 
     _table_subscriptions.update_item(
         Key={"user_id": user_id},
         UpdateExpression="SET " + ", ".join(expressions),
+        ExpressionAttributeNames=names,
         ExpressionAttributeValues=values,
     )
 

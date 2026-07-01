@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from aavaaz.api import plans
 from aavaaz.api.auth import require_auth
 
 logger = logging.getLogger(__name__)
@@ -31,9 +32,6 @@ STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_PRICE_PRO = os.environ.get("STRIPE_PRICE_PRO", "")
 SAAS_DOMAIN = os.environ.get("SAAS_DOMAIN", "https://app.aavaaz.dev")
-
-# Price per audio minute for metered billing
-PRICE_PER_MINUTE = float(os.environ.get("AAVAAZ_PRICE_PER_MINUTE", "0.006"))
 
 
 # ─── Data Models ─────────────────────────────────────────────────────────────
@@ -71,13 +69,11 @@ class UserSubscription:
 
     @property
     def included_minutes(self) -> int:
-        return {"free": 60, "pro": 1000, "enterprise": 999999}.get(self.plan, 60)
+        return plans.included_minutes(self.plan)
 
     @property
     def price_per_minute(self) -> float:
-        return {"free": 0.0, "pro": PRICE_PER_MINUTE, "enterprise": 0.004}.get(
-            self.plan, PRICE_PER_MINUTE
-        )
+        return plans.price_per_minute(self.plan)
 
 
 # ─── In-memory store (replace with PostgreSQL for production) ────────────────
@@ -184,8 +180,10 @@ async def get_usage(claims: dict = Depends(require_auth)):
     sub = _subscriptions.get(user_id, UserSubscription(user_id=user_id))
     entries = _usage.get(user_id, [])
 
-    total_minutes = sum(e.audio_minutes for e in entries)
-    total_requests = sum(e.requests for e in entries)
+    this_month = datetime.now(UTC).strftime("%Y-%m")
+    month_entries = [e for e in entries if e.date.startswith(this_month)]
+    total_minutes = sum(e.audio_minutes for e in month_entries)
+    total_requests = sum(e.requests for e in month_entries)
     total_cost = total_minutes * sub.price_per_minute
 
     return {
@@ -232,6 +230,11 @@ async def get_subscription(claims: dict = Depends(require_auth)):
 async def create_checkout(body: CheckoutRequest, claims: dict = Depends(require_auth)):
     """Create a Stripe Checkout session for plan upgrade."""
     user_id = claims["sub"]
+
+    if body.plan not in plans.PURCHASABLE_PLANS:
+        raise HTTPException(
+            status_code=400, detail=f"Plan '{body.plan}' is not available for checkout"
+        )
 
     if not STRIPE_SECRET_KEY:
         raise HTTPException(
@@ -305,7 +308,7 @@ async def stripe_webhook(request: Request):
         event = stripe.Webhook.construct_event(
             payload, sig_header, STRIPE_WEBHOOK_SECRET
         )
-    except (ValueError, stripe.error.SignatureVerificationError):
+    except (ValueError, stripe.SignatureVerificationError):
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     if event["type"] == "checkout.session.completed":
@@ -364,11 +367,11 @@ async def get_transcript(transcript_id: str, claims: dict = Depends(require_auth
     raise HTTPException(status_code=404, detail="Transcript not found")
 
 
-# ─── Usage Recording (called internally by transcription pipeline) ───────────
+# ─── Usage Recording (call from the transcription pipeline once metering is wired) ─
 
 
 def record_usage(user_id: str, audio_minutes: float):
-    """Record audio usage for a user. Called after each transcription."""
+    """Record audio usage for a user. Call after each transcription."""
     today = datetime.now(UTC).strftime("%Y-%m-%d")
     entries = _usage.setdefault(user_id, [])
 

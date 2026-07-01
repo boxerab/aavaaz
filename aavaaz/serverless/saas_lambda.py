@@ -25,6 +25,7 @@ from mangum import Mangum
 from pydantic import BaseModel
 
 from aavaaz.api import dynamo_store as db
+from aavaaz.api import plans
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +35,9 @@ STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_PRICE_PRO = os.environ.get("STRIPE_PRICE_PRO", "")
 SAAS_DOMAIN = os.environ.get("SAAS_DOMAIN", "https://app.aavaaz.dev")
-PRICE_PER_MINUTE = float(os.environ.get("AAVAAZ_PRICE_PER_MINUTE", "0.006"))
 COGNITO_REGION = os.environ.get("AAVAAZ_COGNITO_REGION", "us-east-1")
 COGNITO_POOL_ID = os.environ.get("AAVAAZ_COGNITO_POOL_ID", "")
+COGNITO_CLIENT_ID = os.environ.get("AAVAAZ_COGNITO_CLIENT_ID", "")
 
 # ─── Cognito JWT Validation ──────────────────────────────────────────────────
 
@@ -71,21 +72,25 @@ async def require_auth(request: Request) -> dict:
             raise HTTPException(status_code=401, detail="Invalid API key")
         return {"sub": user_id}
 
-    # Validate Cognito JWT
+    # Validate Cognito JWT (the dashboard sends the Cognito id token)
     try:
         import jwt as pyjwt
 
         client = _get_jwks_client()
         signing_key = client.get_signing_key_from_jwt(token)
-        claims = pyjwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256"],
-            issuer=f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_POOL_ID}",
-        )
-        return {"sub": claims["sub"], "email": claims.get("email", "")}
+        decode_kwargs = {
+            "algorithms": ["RS256"],
+            "issuer": f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_POOL_ID}",
+        }
+        if COGNITO_CLIENT_ID:
+            decode_kwargs["audience"] = COGNITO_CLIENT_ID
+        claims = pyjwt.decode(token, signing_key.key, **decode_kwargs)
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
+
+    if claims.get("token_use") != "id":
+        raise HTTPException(status_code=401, detail="Wrong token type")
+    return {"sub": claims["sub"], "email": claims.get("email", "")}
 
 
 # ─── FastAPI App ─────────────────────────────────────────────────────────────
@@ -152,13 +157,11 @@ async def revoke_api_key(key_id: str, claims: dict = Depends(require_auth)):
 async def get_usage(claims: dict = Depends(require_auth)):
     user_id = claims["sub"]
     sub = db.get_subscription(user_id)
-    entries = db.get_usage(user_id, days=30)
+    entries = db.get_usage(user_id, days=datetime.now(UTC).day - 1)
 
     plan = sub.get("plan", "free")
-    included_minutes = {"free": 60, "pro": 1000, "enterprise": 999999}.get(plan, 60)
-    price = {"free": 0.0, "pro": PRICE_PER_MINUTE, "enterprise": 0.004}.get(
-        plan, PRICE_PER_MINUTE
-    )
+    included_minutes = plans.included_minutes(plan)
+    price = plans.price_per_minute(plan)
 
     total_minutes = sum(e["audio_minutes"] for e in entries)
     total_requests = sum(e["requests"] for e in entries)
@@ -194,10 +197,8 @@ async def get_subscription(claims: dict = Depends(require_auth)):
     user_id = claims["sub"]
     sub = db.get_subscription(user_id)
     plan = sub.get("plan", "free")
-    included_minutes = {"free": 60, "pro": 1000, "enterprise": 999999}.get(plan, 60)
-    price = {"free": 0.0, "pro": PRICE_PER_MINUTE, "enterprise": 0.004}.get(
-        plan, PRICE_PER_MINUTE
-    )
+    included_minutes = plans.included_minutes(plan)
+    price = plans.price_per_minute(plan)
 
     return {
         "plan": plan,
@@ -211,6 +212,11 @@ async def get_subscription(claims: dict = Depends(require_auth)):
 
 @app.post("/v1/saas/checkout")
 async def create_checkout(body: CheckoutRequest, claims: dict = Depends(require_auth)):
+    if body.plan not in plans.PURCHASABLE_PLANS:
+        raise HTTPException(
+            status_code=400, detail=f"Plan '{body.plan}' is not available for checkout"
+        )
+
     if not STRIPE_SECRET_KEY:
         raise HTTPException(status_code=503, detail="Billing not configured")
 
@@ -280,7 +286,7 @@ async def stripe_webhook(request: Request):
         event = stripe.Webhook.construct_event(
             payload, sig_header, STRIPE_WEBHOOK_SECRET
         )
-    except (ValueError, stripe.error.SignatureVerificationError):
+    except (ValueError, stripe.SignatureVerificationError):
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     if event["type"] == "checkout.session.completed":

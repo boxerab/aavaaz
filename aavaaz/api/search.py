@@ -1,17 +1,8 @@
 """
-Full-text search over stored transcripts.
-
-Wraps WhisperLive's search module and provides REST API endpoints.
+Full-text search over transcript segments.
 """
 
-import logging
 import re
-
-from fastapi import APIRouter
-
-logger = logging.getLogger(__name__)
-
-router = APIRouter(prefix="/v1/search", tags=["search"])
 
 
 def search_segments(
@@ -36,7 +27,9 @@ def search_segments(
         text = seg.get("text", "")
         matches = list(pattern.finditer(text))
         if matches:
-            highlighted = pattern.sub(f"**{query}**", text)
+            # use the matched text (preserves casing) and avoids treating the
+            # query as a replacement template with backslash escapes
+            highlighted = pattern.sub(lambda m: f"**{m.group(0)}**", text)
             results.append(
                 {
                     **seg,
