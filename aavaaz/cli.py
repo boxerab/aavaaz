@@ -85,9 +85,6 @@ def main():
         help="Max speakers for diarization (default: 10)",
     )
     serve_parser.add_argument(
-        "--log-json", action="store_true", help="Use JSON structured logging"
-    )
-    serve_parser.add_argument(
         "-v", "--verbose", action="store_true", help="Debug logging"
     )
 

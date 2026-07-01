@@ -47,18 +47,14 @@ def send_webhook(
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            response = urllib.request.urlopen(req, timeout=timeout)
-            status = response.getcode()
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                status = response.getcode()
 
-            if 200 <= status < 300:
-                logger.info(
-                    f"Webhook delivered to {url} (attempt {attempt + 1}, status {status})"
-                )
-                return True
-            else:
-                logger.warning(
-                    f"Webhook to {url} returned {status} (attempt {attempt + 1})"
-                )
+            # urlopen raises HTTPError for non-2xx, so reaching here means success
+            logger.info(
+                f"Webhook delivered to {url} (attempt {attempt + 1}, status {status})"
+            )
+            return True
 
         except urllib.error.HTTPError as e:
             status = e.code

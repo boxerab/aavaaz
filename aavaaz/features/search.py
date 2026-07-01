@@ -249,9 +249,9 @@ class UsageTracker:
             period.total_requests += 1
             period.total_audio_minutes += event["audio_minutes"]
             period.total_characters += event["characters"]
-            model = event.get("model", "unknown")
+            model = event.get("model") or "unknown"
             period.by_model[model] = period.by_model.get(model, 0) + 1
-            lang = event.get("language", "unknown")
+            lang = event.get("language") or "unknown"
             period.by_language[lang] = period.by_language.get(lang, 0) + 1
 
         return period

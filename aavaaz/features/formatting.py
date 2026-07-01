@@ -93,14 +93,19 @@ def _replace_spoken_numbers(text):
         lower = words[i].lower().rstrip(".,!?;:")
         trailing_punct = words[i][len(lower) :]
         if lower in _NUMBER_WORDS and lower != "and":
-            # Collect consecutive number words
+            # Collect consecutive number words, stopping at the first one that
+            # carries trailing punctuation so a number never spans a boundary
+            # ("two. Three" must not merge into 23).
             num_words = []
             j = i
             while j < len(words):
-                w = words[j].lower().rstrip(".,!?;:")
+                raw = words[j]
+                w = raw.lower().rstrip(".,!?;:")
                 if w in _NUMBER_WORDS:
                     num_words.append(w)
                     j += 1
+                    if raw != w:
+                        break
                 else:
                     break
             # Grab trailing punctuation from last number word
@@ -270,10 +275,18 @@ def _format_times(text):
 
 
 def _format_ordinals(text):
-    """Convert spoken ordinals to numeric: 'twenty first' → '21st'."""
-    for word, num in _ORDINAL_MAP.items():
-        text = re.sub(r"\b" + word + r"\b", num, text, flags=re.IGNORECASE)
-    return text
+    """Convert spoken ordinals to numeric only in date-like contexts (after a
+    month, a digit, or 'the'/'on'), so common words such as 'second' or 'first'
+    in ordinary prose are left untouched."""
+    ordinal_alt = "|".join(_ORDINAL_MAP.keys())
+    month_alt = "|".join(_MONTHS.keys())
+    pattern = re.compile(
+        r"\b(the|on|" + month_alt + r"|\d{1,2})\s+(" + ordinal_alt + r")\b",
+        re.IGNORECASE,
+    )
+    return pattern.sub(
+        lambda m: f"{m.group(1)} {_ORDINAL_MAP[m.group(2).lower()]}", text
+    )
 
 
 def _format_dates(text):

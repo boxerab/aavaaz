@@ -15,6 +15,11 @@ import time
 logger = logging.getLogger(__name__)
 
 
+def _safe_job_id(job_id: str) -> str:
+    """Keep only the final path component so a job_id cannot escape base_dir."""
+    return os.path.basename(job_id.replace("\\", "/"))
+
+
 class LocalStorage:
     """Store files on the local filesystem (default for dev/testing)."""
 
@@ -23,19 +28,19 @@ class LocalStorage:
         os.makedirs(self.base_dir, exist_ok=True)
 
     def save_audio(self, job_id: str, data: bytes, suffix: str = ".wav") -> str:
-        path = os.path.join(self.base_dir, f"{job_id}{suffix}")
+        path = os.path.join(self.base_dir, f"{_safe_job_id(job_id)}{suffix}")
         with open(path, "wb") as f:
             f.write(data)
         return path
 
     def save_result(self, job_id: str, result: dict) -> str:
-        path = os.path.join(self.base_dir, f"{job_id}.json")
+        path = os.path.join(self.base_dir, f"{_safe_job_id(job_id)}.json")
         with open(path, "w") as f:
             json.dump(result, f)
         return path
 
     def get_result(self, job_id: str) -> dict | None:
-        path = os.path.join(self.base_dir, f"{job_id}.json")
+        path = os.path.join(self.base_dir, f"{_safe_job_id(job_id)}.json")
         if not os.path.exists(path):
             return None
         with open(path) as f:
@@ -43,7 +48,7 @@ class LocalStorage:
 
     def delete_job(self, job_id: str):
         for ext in [".wav", ".mp3", ".flac", ".ogg", ".m4a", ".json"]:
-            path = os.path.join(self.base_dir, f"{job_id}{ext}")
+            path = os.path.join(self.base_dir, f"{_safe_job_id(job_id)}{ext}")
             if os.path.exists(path):
                 os.unlink(path)
 
@@ -65,7 +70,7 @@ class LocalStorage:
             fpath = os.path.join(self.base_dir, fname)
             if (
                 os.path.isfile(fpath)
-                and (now - os.path.getmtime(fpath)) > max_age_seconds
+                and (now - os.path.getmtime(fpath)) >= max_age_seconds
             ):
                 os.unlink(fpath)
                 count += 1
@@ -134,16 +139,14 @@ class S3Storage:
             return json.loads(resp["Body"].read())
         except self._s3.exceptions.NoSuchKey:
             return None
-        except Exception as e:
-            logger.error(f"Failed to get result for {job_id}: {e}")
-            return None
 
     def delete_job(self, job_id: str):
         for prefix_path in ["audio/", "results/"]:
-            # List objects with the job_id prefix
+            # Trailing dot anchors on the filename boundary so deleting "job1"
+            # cannot also match "job10"; keys are "{job_id}.{ext}".
             resp = self._s3.list_objects_v2(
                 Bucket=self.bucket,
-                Prefix=self._key(f"{prefix_path}{job_id}"),
+                Prefix=self._key(f"{prefix_path}{job_id}."),
             )
             for obj in resp.get("Contents", []):
                 self._s3.delete_object(Bucket=self.bucket, Key=obj["Key"])

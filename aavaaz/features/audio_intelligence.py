@@ -602,8 +602,12 @@ def remove_filler_words(text: str, aggressive: bool = False) -> str:
 
     # Clean up double spaces and leading/trailing whitespace
     result = re.sub(r" {2,}", " ", result).strip()
-    # Fix capitalization after removal at sentence start
+    # Fix capitalization at the start and after sentence punctuation, since a
+    # removed filler can expose a lowercased sentence start mid-text.
     result = re.sub(r"^([a-z])", lambda m: m.group(1).upper(), result)
+    result = re.sub(
+        r"([.!?]\s+)([a-z])", lambda m: m.group(1) + m.group(2).upper(), result
+    )
 
     return result
 

@@ -23,16 +23,21 @@ class TranslationRelay:
     in real-time via their WebSocket connections.
     """
 
-    def __init__(self):
+    def __init__(self, translator=None):
         self._channels: dict[str, RelayChannel] = {}
+        self._translator = translator
         self._lock = threading.Lock()
 
-    def create_channel(self, channel_id: str, source_language: str = "en"):
+    def create_channel(
+        self, channel_id: str, source_language: str = "en", translator=None
+    ):
         """Create a new relay channel.
 
         Args:
             channel_id: Unique identifier for the channel.
             source_language: Source language code (e.g. "en").
+            translator: Optional per-channel translate function; falls back to
+                the relay-wide translator.
 
         Raises:
             ValueError: If channel already exists.
@@ -40,7 +45,9 @@ class TranslationRelay:
         with self._lock:
             if channel_id in self._channels:
                 raise ValueError(f"Channel '{channel_id}' already exists")
-            self._channels[channel_id] = RelayChannel(channel_id, source_language)
+            self._channels[channel_id] = RelayChannel(
+                channel_id, source_language, translator or self._translator
+            )
             logging.info(
                 f"Translation relay channel created: {channel_id} ({source_language})"
             )

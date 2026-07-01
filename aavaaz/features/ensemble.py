@@ -160,7 +160,8 @@ class EnsembleTranscriber:
     def _merge_confidence(self, model_results):
         """Pick the model output with the highest average confidence."""
         best_name = ""
-        best_conf = -1.0
+        # confidence may be a log-prob (<= 0), so start below any real value
+        best_conf = float("-inf")
         for name, segments in model_results.items():
             if not segments:
                 continue

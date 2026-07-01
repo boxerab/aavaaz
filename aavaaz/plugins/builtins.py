@@ -2,8 +2,9 @@
 Built-in Aavaaz plugins for the post-processing pipeline.
 
 These plugins register with the PluginRegistry and run in the
-segment post-processing pipeline. Each plugin is optional — it only
-activates when the corresponding feature is enabled in the client config.
+segment post-processing pipeline. They are registered disabled so raw
+transcripts are never silently altered; enable the ones you want with
+registry.enable(name).
 """
 
 import logging
@@ -76,12 +77,11 @@ def _make_intelligence_plugin():
     return intelligence_plugin
 
 
-# Register all built-in plugins with ascending priority
-registry.add("formatting", _make_formatting_plugin(), priority=10)
-registry.add("pii_redaction", _make_pii_plugin(), priority=20)
-registry.add("profanity_filter", _make_profanity_plugin(), priority=30)
+# Register all built-in plugins with ascending priority, disabled by default
+registry.add("formatting", _make_formatting_plugin(), priority=10, enabled=False)
+registry.add("pii_redaction", _make_pii_plugin(), priority=20, enabled=False)
+registry.add("profanity_filter", _make_profanity_plugin(), priority=30, enabled=False)
 
-# Intelligence plugin is heavier — disabled by default
 try:
     registry.add(
         "audio_intelligence", _make_intelligence_plugin(), priority=90, enabled=False

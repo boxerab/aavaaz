@@ -132,7 +132,3 @@ class PluginRegistry:
 
     def __contains__(self, name: str):
         return name in self._plugins
-
-
-# Global default registry
-default_registry = PluginRegistry()

@@ -43,6 +43,10 @@ def transcribe_file(
                     "start": seg.start,
                     "end": seg.end,
                     "text": seg.text.strip(),
+                    "words": [
+                        {"start": w.start, "end": w.end, "word": w.word}
+                        for w in (seg.words or [])
+                    ],
                 }
                 for seg in segments
             ],
@@ -59,15 +63,15 @@ def transcribe_file(
     elif output_format == "vtt":
         print("WEBVTT\n")
         for seg in segments:
-            print(f"{_ts(seg.start)} --> {_ts(seg.end)}")
+            print(f"{_ts(seg.start, '.')} --> {_ts(seg.end, '.')}")
             print(seg.text.strip())
             print()
 
 
-def _ts(seconds: float) -> str:
-    """Format seconds as SRT/VTT timestamp."""
+def _ts(seconds: float, sep: str = ",") -> str:
+    """Format seconds as an SRT/VTT timestamp. SRT uses a comma, VTT a period."""
     h = int(seconds // 3600)
     m = int((seconds % 3600) // 60)
     s = int(seconds % 60)
     ms = int((seconds % 1) * 1000)
-    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+    return f"{h:02d}:{m:02d}:{s:02d}{sep}{ms:03d}"
