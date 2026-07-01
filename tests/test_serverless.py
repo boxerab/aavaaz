@@ -2,7 +2,6 @@
 
 import base64
 import json
-import os
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -55,7 +54,7 @@ def _fake_info():
 
 
 @patch("faster_whisper.WhisperModel")
-def test_handler_dispatches_s3(mock_whisper, _env, tmp_path):
+def test_handler_dispatches_s3(mock_whisper, _env, tmp_path, monkeypatch):
     """S3 events should be routed to the S3 handler."""
     model = MagicMock()
     model.transcribe.return_value = (_fake_segments(), _fake_info())
@@ -80,9 +79,8 @@ def test_handler_dispatches_s3(mock_whisper, _env, tmp_path):
         # download_file copies the file locally — create a dummy
         s3.download_file.side_effect = lambda b, k, p: open(p, "wb").close()
 
-        os.environ["AAVAAZ_OUTPUT_BUCKET"] = "output-bucket"
+        monkeypatch.setenv("AAVAAZ_OUTPUT_BUCKET", "output-bucket")
         result = handler(event, None)
-        del os.environ["AAVAAZ_OUTPUT_BUCKET"]
 
     assert result["statusCode"] == 200
     body = json.loads(result["body"])

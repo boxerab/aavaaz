@@ -33,6 +33,14 @@ class TestRateLimiting:
         server = AavaazServer(rate_limit_rpm=0)
         assert server.rate_limit_rpm == 0
 
+    def test_rate_limit_blocks_when_exceeded(self, tmp_path):
+        """Exceeding the per-minute limit is blocked (the enforcement branch)."""
+        store = UserStore(path=str(tmp_path / "users.json"))
+        user, _ = store.create_user("burst", rate_limit_rpm=2)
+        assert store.check_rate_limit(user.user_id) is True
+        assert store.check_rate_limit(user.user_id) is True
+        assert store.check_rate_limit(user.user_id) is False
+
 
 class TestQuotaTracking:
     """4.7 - Quota tracking and enforcement."""

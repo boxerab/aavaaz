@@ -4,8 +4,6 @@ Tests for post-processing pipeline integration (Test Matrix §5.10-5.11).
 Tests the pipeline ordering: format → PII → profanity, and edge cases.
 """
 
-import pytest
-
 from aavaaz.features.formatting import format_transcript
 from aavaaz.features.pii_redaction import redact_pii
 from aavaaz.features.plugins import PluginRegistry
@@ -119,10 +117,9 @@ class TestPipelineEdgeCases:
         reg.add("bad", bad_plugin, priority=1)
 
         segment = {"text": "hello"}
-        # Should handle gracefully (use original segment)
+        # a plugin returning None leaves the segment unchanged
         result = reg.apply(segment)
-        # Result depends on implementation — should not raise
-        assert result is not None or segment is not None
+        assert result == {"text": "hello"}
 
     def test_plugin_raising_exception(self):
         """Plugin exception should not crash the pipeline."""
@@ -139,10 +136,6 @@ class TestPipelineEdgeCases:
         reg.add("good", good_plugin, priority=10)
 
         segment = {"text": "hello"}
-        # Should not raise — pipeline should be fault-tolerant
-        try:
-            reg.apply(segment)
-        except ValueError:
-            pytest.skip(
-                "Pipeline does not isolate plugin failures (implementation choice)"
-            )
+        # the crashing plugin is isolated; the later plugin still runs
+        result = reg.apply(segment)
+        assert result["text"] == "HELLO"

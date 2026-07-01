@@ -49,25 +49,19 @@ class TestHelmChart:
     def test_helm_chart_yaml_exists(self):
         """Chart.yaml should exist."""
         chart_path = PROJECT_ROOT / "deploy" / "helm" / "aavaaz" / "Chart.yaml"
-        if not chart_path.exists():
-            # Try alternate path
-            chart_path = PROJECT_ROOT / "deploy" / "helm" / "Chart.yaml"
-        assert chart_path.exists() or True  # Skip if no helm chart
+        assert chart_path.exists()
 
     def test_helm_values_exists(self):
         """values.yaml should exist."""
         values_path = PROJECT_ROOT / "deploy" / "helm" / "aavaaz" / "values.yaml"
-        if values_path.exists():
-            content = values_path.read_text()
-            assert len(content) > 0
+        assert values_path.exists()
+        assert len(values_path.read_text()) > 0
 
     def test_helm_templates_directory(self):
-        """templates/ directory should exist."""
+        """templates/ directory should exist and be non-empty."""
         templates = PROJECT_ROOT / "deploy" / "helm" / "aavaaz" / "templates"
-        if templates.exists():
-            assert templates.is_dir()
-            files = list(templates.iterdir())
-            assert len(files) > 0
+        assert templates.is_dir()
+        assert len(list(templates.iterdir())) > 0
 
 
 class TestModalConfigs:
@@ -149,10 +143,9 @@ class TestLambdaHandler:
     def test_lambda_env_vars_documented(self):
         """Lambda handler should document expected env vars."""
         handler_path = PROJECT_ROOT / "aavaaz" / "serverless" / "lambda_handler.py"
-        if handler_path.exists():
-            content = handler_path.read_text()
-            # Should reference AAVAAZ_MODEL at minimum
-            assert "AAVAAZ_MODEL" in content
+        assert handler_path.exists()
+        # Should reference AAVAAZ_MODEL at minimum
+        assert "AAVAAZ_MODEL" in handler_path.read_text()
 
 
 class TestHealthEndpointConsistency:

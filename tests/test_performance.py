@@ -84,22 +84,6 @@ class TestConcurrentClients:
 class TestMemoryManagement:
     """21.4 - Memory usage under sustained load."""
 
-    def test_audio_buffer_doesnt_grow_unbounded(self):
-        """Audio frame accumulation should have bounds."""
-        buffer = []
-        max_buffer_duration = 30.0
-        sample_rate = 16000
-        frame_size = 4096
-        max_frames = int(max_buffer_duration * sample_rate / frame_size)
-
-        for i in range(max_frames + 100):
-            frame = np.zeros(frame_size, dtype=np.float32)
-            buffer.append(frame)
-            if len(buffer) > max_frames:
-                buffer = buffer[-max_frames:]
-
-        assert len(buffer) <= max_frames
-
     def test_transcript_index_handles_many_entries(self):
         """Search index should handle 1000+ entries without issues."""
         from aavaaz.features.search import TranscriptIndex, TranscriptMetadata

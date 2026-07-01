@@ -9,10 +9,12 @@ import pytest
 class TestNoiseReducer:
     def test_import_error_when_missing(self):
         """NoiseReducer raises ImportError if noisereduce not installed."""
-        with patch.dict("sys.modules", {"noisereduce": None}):
-            # Re-import to trigger the ImportError path
-            # Can't easily test this without reimporting; test the is_available check instead
-            pass
+        import aavaaz.features.noise_reduction as nr_mod
+
+        with patch.object(nr_mod, "_HAS_NOISEREDUCE", False):
+            assert nr_mod.is_available() is False
+            with pytest.raises(ImportError, match="noisereduce is required"):
+                nr_mod.NoiseReducer(mode="near_field")
 
     def test_is_available(self):
         from aavaaz.features.noise_reduction import is_available

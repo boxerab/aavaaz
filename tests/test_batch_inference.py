@@ -80,8 +80,10 @@ class TestBatchInferenceWorker:
             req.future.wait(timeout=5)
 
             assert req.future.is_set()
-            # Either result is set or error is set
-            assert req.result is not None or req.error is not None
+            # the single-request path delegates to the (mocked) transcriber, so it
+            # must succeed, not fall through to the error branch
+            assert req.error is None
+            assert req.result is not None
         finally:
             worker.stop()
 
