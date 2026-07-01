@@ -206,6 +206,9 @@ export class AavaazClient {
     const resp = await fetch(`${this.baseUrl}/health`, {
       headers: this.headers(),
     });
+    if (!resp.ok) {
+      throw new Error(`Health check failed (${resp.status})`);
+    }
     return await resp.json();
   }
 
@@ -216,6 +219,9 @@ export class AavaazClient {
     const resp = await fetch(`${this.baseUrl}/v1/models`, {
       headers: this.headers(),
     });
+    if (!resp.ok) {
+      throw new Error(`List models failed (${resp.status})`);
+    }
     const data = await resp.json();
     return data.models;
   }
@@ -242,10 +248,11 @@ export class AavaazWebSocket {
       smartFormatting?: boolean;
       piiRedaction?: string | boolean;
       profanityFilter?: string | boolean;
+      secure?: boolean;
       apiKey?: string;
     } = {}
   ) {
-    const protocol = 'ws';
+    const protocol = config.secure ? 'wss' : 'ws';
     const tokenParam = config.apiKey ? `?token=${config.apiKey}` : '';
     this.url = `${protocol}://${host}:${port}${tokenParam}`;
     this.config = {
@@ -297,7 +304,9 @@ export class AavaazWebSocket {
 
   close(): void {
     if (this.ws) {
-      this.ws.send(new TextEncoder().encode('END_OF_AUDIO'));
+      if (this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(new TextEncoder().encode('END_OF_AUDIO'));
+      }
       this.ws.close();
       this.ws = null;
     }

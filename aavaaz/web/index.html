@@ -285,7 +285,10 @@
                 // Step 3: Poll for transcription result
                 progress.textContent = 'Transcribing (this may take some time)...';
                 progressBar.style.display = 'none';
-                const encodedKey = btoa(key).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                // UTF-8 encode before base64 so non-Latin1 filenames don't throw
+                let binKey = '';
+                new TextEncoder().encode(key).forEach(b => binKey += String.fromCharCode(b));
+                const encodedKey = btoa(binKey).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
                 const transcript = await pollForResult(encodedKey);
 
                 progress.textContent = 'Transcription complete!';
@@ -315,6 +318,9 @@
                     const data = await resp.json();
                     if (data.status === 'completed') {
                         return data.transcript;
+                    }
+                    if (data.status === 'failed' || data.status === 'canceled') {
+                        throw new Error(`Transcription ${data.status}`);
                     }
                 }
                 // 202 means still processing — continue polling

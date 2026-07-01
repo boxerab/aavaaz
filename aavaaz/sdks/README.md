@@ -7,11 +7,11 @@ Client SDKs for integrating with the Aavaaz transcription API.
 ### JavaScript / TypeScript
 
 ```bash
-# Copy sdks/javascript/whisperlive.ts into your project
+# Copy sdks/javascript/aavaaz.ts into your project
 ```
 
 ```typescript
-import { AavaazClient, AavaazWebSocket } from './whisperlive';
+import { AavaazClient, AavaazWebSocket } from './aavaaz';
 
 // REST API client
 const client = new AavaazClient('http://localhost:8000', { apiKey: 'your-key' });
@@ -38,7 +38,7 @@ ws.sendAudio(audioBuffer);
 ### Go
 
 ```bash
-go get github.com/collabora/Aavaaz/sdks/go
+go get github.com/collabora/aavaaz/aavaaz/sdks/go
 ```
 
 ```go
@@ -46,7 +46,7 @@ package main
 
 import (
     "fmt"
-    wl "github.com/collabora/Aavaaz/sdks/go"
+    wl "github.com/collabora/aavaaz/aavaaz/sdks/go"
 )
 
 func main() {

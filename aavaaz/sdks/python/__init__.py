@@ -171,7 +171,7 @@ class AavaazLiveClient:
 
         async def main():
             client = AavaazLiveClient("wss://your-endpoint/ws")
-            async for segment in client.stream_microphone():
+            async for segment in client.stream_audio(audio_chunks):
                 print(segment["text"])
 
         asyncio.run(main())
