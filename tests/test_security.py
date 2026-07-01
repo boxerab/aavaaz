@@ -4,7 +4,6 @@ Tests for security concerns (Test Matrix §22).
 Covers path traversal, injection, XSS, credential leaking, and privacy.
 """
 
-import json
 import os
 import sys
 from unittest.mock import MagicMock
@@ -23,9 +22,6 @@ from aavaaz.features.storage import LocalStorage  # noqa: E402
 class TestPathTraversal:
     """22.1 - Path traversal blocked (storage)."""
 
-    @pytest.mark.xfail(
-        reason="KNOWN VULNERABILITY: LocalStorage has no path traversal protection"
-    )
     def test_path_traversal_in_job_id(self):
         """Job IDs with ../ should not escape storage directory."""
         storage = LocalStorage()
@@ -98,49 +94,6 @@ class TestSearchInjection:
         index.add(TranscriptMetadata(job_id="job1", text="Secret data"))
         results = index.search(query="")
         assert isinstance(results, list)
-
-
-class TestXSS:
-    """22.3 - XSS in transcription output."""
-
-    def test_html_in_transcript_not_executed(self):
-        """Transcription text with HTML should be treated as plain text."""
-        malicious_text = '<script>alert("XSS")</script>'
-        # When sending as JSON, the text should be escaped
-        response = json.dumps({"segments": [{"text": malicious_text}]})
-        parsed = json.loads(response)
-        # The text should be preserved as-is (not interpreted as HTML)
-        assert parsed["segments"][0]["text"] == malicious_text
-        # Frontend should use textContent, not innerHTML
-
-    def test_transcript_with_html_entities(self):
-        """HTML entities in text should not be double-encoded."""
-        text = "Temperature is > 100 & < 200"
-        response = json.dumps({"text": text})
-        parsed = json.loads(response)
-        assert parsed["text"] == text
-
-
-class TestCredentialProtection:
-    """22.6-22.7 - API key and secrets not leaked."""
-
-    def test_api_key_not_in_error_messages(self):
-        """Error responses should not contain API keys."""
-        api_key = "sk-very-secret-key-12345"
-        error_msg = "Authentication failed for request"
-        # Should NOT include the key in error messages
-        assert api_key not in error_msg
-
-    def test_webhook_secret_not_in_payload(self):
-        """Webhook payloads should not contain signing secrets."""
-        secret = "whsec_very_secret"
-        payload = {
-            "event": "transcription.complete",
-            "data": {"text": "Hello"},
-            "timestamp": 1234567890,
-        }
-        payload_str = json.dumps(payload)
-        assert secret not in payload_str
 
 
 class TestPrivacy:

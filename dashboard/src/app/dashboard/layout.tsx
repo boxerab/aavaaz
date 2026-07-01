@@ -10,7 +10,6 @@ import {
   Key,
   BarChart3,
   CreditCard,
-  FileAudio,
   Mic,
   Settings,
   Upload,
@@ -38,7 +37,6 @@ const navItems = [
   { href: "/dashboard/logs", label: "Request Logs", icon: ScrollText },
   { href: "/dashboard/usage", label: "Usage", icon: BarChart3 },
   { href: "/dashboard/billing", label: "Billing", icon: CreditCard },
-  { href: "/dashboard/transcripts", label: "Transcripts", icon: FileAudio },
   { href: "/dashboard/status", label: "Status", icon: Activity },
 ];
 
@@ -51,10 +49,9 @@ export default function DashboardLayout({
   const router = useRouter();
 
   useEffect(() => {
-    // Auth guard disabled for local preview (re-enable for production)
-    // if (!loading && !user) {
-    //   router.push("/login");
-    // }
+    if (!loading && !user) {
+      router.push("/login");
+    }
   }, [user, loading, router]);
 
   if (loading) {

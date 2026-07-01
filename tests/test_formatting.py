@@ -30,6 +30,10 @@ class TestSpokenNumbers:
         result = _replace_spoken_numbers("I have twenty one.")
         assert "21" in result
 
+    def test_no_merge_across_sentence(self):
+        # a number must not span a sentence boundary
+        assert _replace_spoken_numbers("I have two. Three cats") == "I have 2. 3 cats"
+
     def test_words_to_number_empty(self):
         assert _words_to_number([]) is None
 
@@ -86,3 +90,10 @@ class TestSmartFormat:
     def test_percentage(self):
         result = smart_format("50 percent")
         assert "50%" in result
+
+    def test_ordinal_prose_unchanged(self):
+        # 'second' as a common word must survive smart formatting
+        assert smart_format("give me a second") == "give me a second"
+
+    def test_ordinal_in_date(self):
+        assert "2nd" in smart_format("May second")

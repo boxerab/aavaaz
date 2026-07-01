@@ -76,6 +76,10 @@ export default function BillingPage() {
       window.open("mailto:sales@aavaaz.dev?subject=Enterprise Plan", "_blank");
       return;
     }
+    if (planId === "free") {
+      // downgrades to Free are handled through the Stripe billing portal
+      return handleManageBilling();
+    }
     const token = await getToken();
     if (token) {
       try {

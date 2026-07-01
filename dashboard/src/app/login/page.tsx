@@ -19,8 +19,18 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(email, password);
-      router.push("/dashboard");
+      const result = await login(email, password);
+      if (result.isSignedIn) {
+        router.push("/dashboard");
+      } else if (result.nextStep?.signInStep === "CONFIRM_SIGN_UP") {
+        router.push(`/confirm?email=${encodeURIComponent(email)}`);
+      } else {
+        setError(
+          `Additional sign-in step required: ${
+            result.nextStep?.signInStep ?? "unknown"
+          }`
+        );
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

@@ -24,7 +24,7 @@ class TestPythonSDK:
 
     def test_sdk_has_transcribe_function(self):
         """SDK should expose a transcribe function or class."""
-        sdk_files = list(SDKS_DIR.glob("*.py"))
+        sdk_files = list(SDKS_DIR.glob("**/*.py"))
         if not sdk_files:
             pytest.skip("No Python SDK files found")
         found_transcribe = False

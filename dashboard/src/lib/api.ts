@@ -1,4 +1,6 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// SaaS management API (api-keys, usage, billing). Local default matches
+// run_saas_api's port 8001, not the transcription server on 8000.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 interface ApiOptions {
   token?: string | null;
