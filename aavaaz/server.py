@@ -40,6 +40,10 @@ class AavaazServer:
         hotwords: str | None = None,
         enable_diarization: bool = False,
         max_speakers: int = 10,
+        enable_formatting: bool = False,
+        enable_pii: bool = False,
+        enable_profanity: bool = False,
+        enable_intelligence: bool = False,
     ):
         self.host = host
         self.port = port
@@ -58,9 +62,40 @@ class AavaazServer:
         self.hotwords = hotwords
         self.enable_diarization = enable_diarization
         self.max_speakers = max_speakers
+        self.enable_formatting = enable_formatting
+        self.enable_pii = enable_pii
+        self.enable_profanity = enable_profanity
+        self.enable_intelligence = enable_intelligence
+
+    # built-in plugin name -> the AavaazServer flag that enables it
+    _FEATURE_PLUGINS = {
+        "formatting": "enable_formatting",
+        "pii_redaction": "enable_pii",
+        "profanity_filter": "enable_profanity",
+        "audio_intelligence": "enable_intelligence",
+    }
+
+    def configure_plugins(self):
+        """Enable the built-in post-processing plugins selected via feature flags.
+
+        Built-ins are registered disabled so raw transcripts are never silently
+        altered; this turns on the ones the operator asked for.
+        """
+        for plugin_name, flag in self._FEATURE_PLUGINS.items():
+            if getattr(self, flag):
+                self.plugin_registry.enable(plugin_name)
+
+    def serve(self, **overrides):
+        """Apply keyword overrides (e.g. word_timestamps=True) then start the server."""
+        for key, value in overrides.items():
+            if not hasattr(self, key):
+                raise TypeError(f"serve() got an unexpected keyword argument '{key}'")
+            setattr(self, key, value)
+        self.run()
 
     def run(self):
         """Start the Aavaaz server (WhisperLive + plugins + REST API)."""
+        self.configure_plugins()
         server = TranscriptionServer()
 
         logger.info(

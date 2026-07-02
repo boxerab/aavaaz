@@ -85,6 +85,22 @@ def main():
         help="Max speakers for diarization (default: 10)",
     )
     serve_parser.add_argument(
+        "--smart-format",
+        action="store_true",
+        help="Enable smart formatting post-processing",
+    )
+    serve_parser.add_argument(
+        "--pii-redaction", action="store_true", help="Enable PII redaction"
+    )
+    serve_parser.add_argument(
+        "--profanity-filter", action="store_true", help="Enable profanity filtering"
+    )
+    serve_parser.add_argument(
+        "--intelligence",
+        action="store_true",
+        help="Enable audio intelligence (sentiment, topics, entities)",
+    )
+    serve_parser.add_argument(
         "-v", "--verbose", action="store_true", help="Debug logging"
     )
 
@@ -153,6 +169,10 @@ def main():
             hotwords=args.hotwords,
             enable_diarization=args.enable_diarization,
             max_speakers=args.max_speakers,
+            enable_formatting=args.smart_format,
+            enable_pii=args.pii_redaction,
+            enable_profanity=args.profanity_filter,
+            enable_intelligence=args.intelligence,
         )
         server.run()
 
