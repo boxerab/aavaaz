@@ -8,14 +8,11 @@ Extends the base Aavaaz server with SaaS-specific endpoints:
 - Subscription management
 
 Start with:
-    aavaaz serve --mode saas
-    # or directly:
     python -m aavaaz.saas_server
 """
 
 import logging
 import os
-import threading
 
 import uvicorn
 from fastapi import FastAPI
@@ -61,13 +58,6 @@ def run_saas_api(port: int = 8001):
     app = create_saas_app()
     logger.info("Starting Aavaaz SaaS API on port %d", port)
     uvicorn.run(app, host="0.0.0.0", port=port)
-
-
-def run_saas_api_background(port: int = 8001):
-    """Run the SaaS management API in a background thread."""
-    thread = threading.Thread(target=run_saas_api, args=(port,), daemon=True)
-    thread.start()
-    return thread
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@
 import base64
 import json
 import sys
+import types
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,6 +11,16 @@ import pytest
 # Mock heavy dependencies that aren't available in CI
 _mock_fw = MagicMock()
 sys.modules.setdefault("faster_whisper", _mock_fw)
+
+# lambda_handler tries `from whisper_live.transcriber.transcriber_faster_whisper
+# import WhisperModel` first; make that submodule a real, empty ModuleType so the
+# import raises ImportError and the handler falls back to the mocked faster_whisper.
+sys.modules.setdefault("whisper_live", MagicMock())
+sys.modules.setdefault("whisper_live.transcriber", MagicMock())
+sys.modules.setdefault(
+    "whisper_live.transcriber.transcriber_faster_whisper",
+    types.ModuleType("whisper_live.transcriber.transcriber_faster_whisper"),
+)
 
 
 @pytest.fixture(autouse=True)
