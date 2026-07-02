@@ -268,7 +268,13 @@ class Transcriber:
         # Submit to WhisperLive batch inference worker
         req = BatchRequest(audio=audio, language=self.language)
         self.batch_worker.submit(req)
-        req.future.wait(timeout=300)
+        completed = req.future.wait(timeout=300)
+
+        if not completed:
+            logger.error("Transcription timed out after 300s")
+            raise fastapi.HTTPException(
+                status_code=504, detail="Transcription timed out"
+            )
 
         if req.error:
             logger.error("Transcription failed: %s", req.error)
