@@ -248,6 +248,73 @@ def test_handler_s3_failure_writes_failed_status(_env, monkeypatch):
 
 
 @patch("faster_whisper.WhisperModel")
+def test_handler_adds_paragraphs_when_enabled(mock_whisper, _env, monkeypatch):
+    """AAVAAZ_ENABLE_PARAGRAPHS should add paragraph segmentation to the output."""
+    model = MagicMock()
+    model.transcribe.return_value = (_fake_segments(), _fake_info())
+    mock_whisper.return_value = model
+    monkeypatch.setenv("AAVAAZ_ENABLE_PARAGRAPHS", "1")
+
+    from aavaaz.serverless.lambda_handler import handler
+
+    event = {
+        "body": json.dumps(
+            {"audio_base64": base64.b64encode(b"x").decode(), "filename": "a.wav"}
+        )
+    }
+    body = json.loads(handler(event, None)["body"])
+    assert "paragraphs" in body
+    assert body["paragraphs"][0]["text"] == "Hello world"
+
+
+@patch("faster_whisper.WhisperModel")
+def test_handler_adds_intelligence_when_enabled(mock_whisper, _env, monkeypatch):
+    """AAVAAZ_ENABLE_INTELLIGENCE should attach analysis to the output."""
+    model = MagicMock()
+    model.transcribe.return_value = (_fake_segments(), _fake_info())
+    mock_whisper.return_value = model
+    monkeypatch.setenv("AAVAAZ_ENABLE_INTELLIGENCE", "1")
+
+    from aavaaz.serverless.lambda_handler import handler
+
+    event = {
+        "body": json.dumps(
+            {"audio_base64": base64.b64encode(b"x").decode(), "filename": "a.wav"}
+        )
+    }
+    body = json.loads(handler(event, None)["body"])
+    assert "intelligence" in body
+    assert "sentiment" in body["intelligence"]
+
+
+@patch("faster_whisper.WhisperModel")
+def test_handler_fires_webhook_callback(mock_whisper, _env):
+    """A callback_url in the request should trigger a webhook POST of the result."""
+    model = MagicMock()
+    model.transcribe.return_value = (_fake_segments(), _fake_info())
+    mock_whisper.return_value = model
+
+    from aavaaz.serverless.lambda_handler import handler
+
+    event = {
+        "body": json.dumps(
+            {
+                "audio_base64": base64.b64encode(b"x").decode(),
+                "filename": "a.wav",
+                "callback_url": "https://example.com/hook",
+            }
+        )
+    }
+    with patch("aavaaz.features.webhook.send_webhook") as mock_send:
+        result = handler(event, None)
+
+    assert result["statusCode"] == 200
+    mock_send.assert_called_once()
+    assert mock_send.call_args.args[0] == "https://example.com/hook"
+    assert mock_send.call_args.args[1]["segments"][0]["text"] == "Hello world"
+
+
+@patch("faster_whisper.WhisperModel")
 def test_model_cached_across_calls(mock_whisper, _env):
     """Model should be loaded once and reused (warm start)."""
     model = MagicMock()

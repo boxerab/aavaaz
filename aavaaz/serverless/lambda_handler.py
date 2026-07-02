@@ -19,6 +19,8 @@ AAVAAZ_OUTPUT_BUCKET  S3 bucket for transcript output (S3 trigger mode)
 AAVAAZ_OUTPUT_PREFIX  Key prefix inside output bucket (default: ``transcripts/``)
 AAVAAZ_ENABLE_PII     ``1`` to enable PII redaction (default: ``0``)
 AAVAAZ_ENABLE_FORMAT  ``1`` to enable smart formatting (default: ``1``)
+AAVAAZ_ENABLE_PARAGRAPHS     ``1`` to add paragraph segmentation (default: ``0``)
+AAVAAZ_ENABLE_INTELLIGENCE   ``1`` to add sentiment/topics/entities (default: ``0``)
 AAVAAZ_STORE_AUDIO    ``1`` to store uploaded audio in S3 (default: ``0``)
 AAVAAZ_AUDIO_BUCKET   S3 bucket for stored audio (defaults to output bucket)
 AAVAAZ_AUDIO_PREFIX   Key prefix for stored audio (default: ``audio/``)
@@ -290,12 +292,27 @@ def _transcribe(audio_path: str, progress_callback=None) -> dict:
         elapsed,
     )
 
-    return {
+    result = {
         "language": info.language,
         "language_probability": info.language_probability,
         "duration": info.duration,
         "segments": results,
     }
+    _enrich_result(result)
+    return result
+
+
+def _enrich_result(result: dict) -> None:
+    """Attach optional paragraph segmentation and intelligence analysis, in place."""
+    if os.environ.get("AAVAAZ_ENABLE_PARAGRAPHS", "0") == "1":
+        from aavaaz.features.utterance import segment_into_paragraphs
+
+        result["paragraphs"] = segment_into_paragraphs(result["segments"])
+    if os.environ.get("AAVAAZ_ENABLE_INTELLIGENCE", "0") == "1":
+        from aavaaz.features.audio_intelligence import analyze_transcript
+
+        full_text = " ".join(s["text"] for s in result["segments"])
+        result["intelligence"] = analyze_transcript(full_text)
 
 
 def _format_output(result: dict) -> str:
@@ -788,6 +805,12 @@ def _handle_api(event: dict, context: Any) -> dict:
 
         _store_audio(local_path)
         result = _transcribe(local_path)
+
+    callback_url = payload.get("callback_url")
+    if callback_url:
+        from aavaaz.features.webhook import send_webhook
+
+        send_webhook(callback_url, result)
 
     output = _format_output(result)
     fmt = os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json")
