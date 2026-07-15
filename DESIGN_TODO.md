@@ -25,8 +25,8 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 
 ## Upstream (WhisperLive) — not fixable in this repo
 
-- [ ] **Batch 30s truncation** — the batched inference path truncates audio to 30s. The code runs from the WhisperLive checkout mounted by Modal, not this repo. Fix upstream, or add a long-audio guard in `deploy/modal/app.py` that routes >30s files to the non-batched path.
-- [ ] **Modal per-client feature race** — `deploy/modal/app_live.py` mutates the shared server's `segment_post_processor` per client under `@modal.concurrent`. Needs per-connection dispatch (a WhisperLive change) or `max_inputs=1`.
+- [x] **Batch 30s truncation** — fixed in the WhisperLive batch worker: `_process_batch` now routes items longer than one 30s window to the single (windowed) `transcribe()` path instead of the batched mel encode that `pad_or_trim`s to 30s. Only the multi-item batched path truncated; single requests were already fine. Test added upstream.
+- [x] **Modal per-client feature race** — `app_live.py` now sets `segment_post_processor` on the per-connection client object (WhisperLive already supports per-client processors) instead of mutating the shared server, so concurrent clients under `@modal.concurrent` no longer cross-contaminate. No WhisperLive change needed.
 - [x] **Streaming paragraph segmentation** — done via a new WhisperLive `transcript_finalizer` hook (parallel to `segment_post_processor`): `ServeClientBase.finalize()` calls it with the accumulated transcript when the stream ends while the socket is still open (fired after the recv loop breaks, before `cleanup`), and sends any returned dict to the client. `AavaazServer._paragraph_finalizer` uses it under `--paragraphs`. This is a WhisperLive-repo change (a generic hook, not aavaaz-specific), committed separately in the WhisperLive checkout.
 
 ## Docs

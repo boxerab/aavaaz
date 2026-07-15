@@ -435,12 +435,15 @@ class LiveTranscriber:
             ):
                 return
 
-            # Apply per-client feature config if provided
+            # Apply per-client feature config on THIS client only. Setting it on
+            # the shared server raced across concurrent connections; WhisperLive
+            # already supports a per-client segment_post_processor.
             features = captured_options.get("features")
             if features:
                 processor = self._build_post_processor(features=features)
-                if processor:
-                    self.server.segment_post_processor = processor
+                client = self.server.client_manager.get_client(websocket)
+                if processor and client:
+                    client.segment_post_processor = processor
                     logger.info(
                         "Applied per-client feature config: %s",
                         [
@@ -460,5 +463,3 @@ class LiveTranscriber:
         finally:
             if self.server.client_manager.get_client(websocket):
                 self.server.client_manager.remove_client(websocket)
-            # Reset to default post-processor after client disconnects
-            self.server.segment_post_processor = self._build_post_processor()
