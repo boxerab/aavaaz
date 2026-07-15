@@ -429,6 +429,7 @@
         .tag-ai { background: rgba(167, 139, 250, 0.15); color: var(--purple); }
         .tag-security { background: rgba(251, 113, 133, 0.15); color: var(--rose); }
         .tag-enterprise { background: rgba(56, 189, 248, 0.15); color: var(--blue); }
+        .tag-planned { background: rgba(251, 191, 36, 0.15); color: #FBBF24; }
 
         /* ── ENTERPRISE ── */
         #enterprise { border-bottom: 1px solid var(--border); }
@@ -1305,18 +1306,14 @@
                 <h3>Live Translation Relay</h3>
                 <p>Pub/sub multilingual meeting translation. Broadcast transcriptions to subscribers in their preferred language.</p>
                 <span class="feature-tag tag-ai">AI</span>
-            </div>
-            <div class="feature-card">
-                <span class="f-icon">&#129302;</span>
-                <h3>Multi-Model Ensemble</h3>
-                <p>Run multiple Whisper models in parallel. Merge via confidence scoring, longest output, or majority voting.</p>
-                <span class="feature-tag tag-ai">AI</span>
+                <span class="feature-tag tag-planned">Planned</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#128263;</span>
                 <h3>Audio Noise Reduction</h3>
                 <p>Built-in preprocessing with near-field (stationary) and far-field (non-stationary) noise reduction modes.</p>
                 <span class="feature-tag tag-core">Core</span>
+                <span class="feature-tag tag-planned">Planned</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#129324;</span>
@@ -1347,6 +1344,7 @@
                 <h3>Model Hot-Swap</h3>
                 <p>Switch Whisper models per-request. LRU cache keeps recently-used models warm in memory.</p>
                 <span class="feature-tag tag-enterprise">Enterprise</span>
+                <span class="feature-tag tag-planned">Planned</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#128268;</span>
@@ -1365,6 +1363,7 @@
                 <h3>Multi-Channel Audio</h3>
                 <p>Split stereo/multi-channel audio per-channel. Merge transcriptions into a unified timeline.</p>
                 <span class="feature-tag tag-core">Core</span>
+                <span class="feature-tag tag-planned">Planned</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#127760;</span>
@@ -1377,12 +1376,14 @@
                 <h3>Auto-Highlights</h3>
                 <p>Extract key phrases and important terms from transcripts using TF-scored n-gram analysis.</p>
                 <span class="feature-tag tag-ai">AI</span>
+                <span class="feature-tag tag-planned">Planned</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#128218;</span>
                 <h3>Auto-Chapters</h3>
                 <p>Segment long transcripts into titled chapters with auto-generated summaries based on topic shifts.</p>
                 <span class="feature-tag tag-ai">AI</span>
+                <span class="feature-tag tag-planned">Planned</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#128172;</span>
@@ -1407,24 +1408,28 @@
                 <h3>Find &amp; Replace</h3>
                 <p>Custom term substitutions with plain text or regex patterns. Fix domain-specific terminology automatically.</p>
                 <span class="feature-tag tag-core">Core</span>
+                <span class="feature-tag tag-planned">Planned</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#128221;</span>
                 <h3>Spelling Hints</h3>
                 <p>Correct ASR mis-spellings of proper nouns and technical terms. &ldquo;cube ernestes&rdquo; &rarr; Kubernetes.</p>
                 <span class="feature-tag tag-core">Core</span>
+                <span class="feature-tag tag-planned">Planned</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#128269;</span>
                 <h3>Transcript Search</h3>
                 <p>Full-text search across stored transcriptions. Filter by user, language, model, tags, and time range.</p>
                 <span class="feature-tag tag-enterprise">Enterprise</span>
+                <span class="feature-tag tag-planned">Planned</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#127991;</span>
                 <h3>Tagging</h3>
                 <p>Add key-value metadata tags to any transcript for organization, filtering, and project tracking.</p>
                 <span class="feature-tag tag-enterprise">Enterprise</span>
+                <span class="feature-tag tag-planned">Planned</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#128200;</span>
@@ -1477,7 +1482,7 @@
                 <p>Dockerfiles for GPU, CPU, TensorRT, OpenVINO, Edge, and Jetson. One command from zero to production.</p>
             </div>
             <div class="ent-card">
-                <h3>&#128101; Multi-User ACL</h3>
+                <h3>&#128101; Multi-User ACL (Planned)</h3>
                 <p>Role-based access control (admin/user/readonly), per-user API keys with SHA-256 hashing, rate limits, and monthly quotas.</p>
             </div>
             <div class="ent-card">
@@ -1489,7 +1494,7 @@
                 <p>Async transcription callbacks with exponential backoff retry. Smart retry &mdash; no retry on 4xx, retry on 5xx and 429.</p>
             </div>
             <div class="ent-card">
-                <h3>&#128451; S3 / MinIO Storage</h3>
+                <h3>&#128451; S3 / MinIO Storage (Planned)</h3>
                 <p>Pluggable storage backends for audio and results. S3, MinIO, or local filesystem. GDPR deletion endpoints included.</p>
             </div>
             <div class="ent-card">
@@ -1635,7 +1640,6 @@ client = TranscriptionClient(
     model=<span class="str">"small"</span>,
     word_timestamps=<span class="kw">True</span>,
     enable_diarization=<span class="kw">True</span>,
-    noise_reduction=<span class="str">"near_field"</span>,
 )
 
 client(<span class="str">"audio.wav"</span>)   <span class="cmt"># transcribe a file</span>
@@ -1696,22 +1700,16 @@ docker run --runtime nvidia -p <span class="num">9090</span>:<span class="num">9
 <pre><span class="cmt"># Requires a running aavaaz server (see Python tab to start one)</span>
 
 <span class="cmt"># Transcribe a file</span>
-curl -X POST http://localhost:<span class="num">8000</span>/v1/transcriptions \
+curl -X POST http://localhost:<span class="num">8000</span>/v1/audio/transcriptions \
   -H <span class="str">"Authorization: Bearer sk-..."</span> \
   -F <span class="str">"file=@audio.wav"</span> \
   -F <span class="str">"model=small"</span>
 
 <span class="cmt"># Stream with SSE</span>
-curl -X POST http://localhost:<span class="num">8000</span>/v1/transcriptions \
+curl -X POST http://localhost:<span class="num">8000</span>/v1/audio/transcriptions \
   -H <span class="str">"Authorization: Bearer sk-..."</span> \
   -F <span class="str">"file=@audio.wav"</span> \
-  -F <span class="str">"stream=true"</span>
-
-<span class="cmt"># List loaded models</span>
-curl http://localhost:<span class="num">8000</span>/v1/models
-
-<span class="cmt"># Health check</span>
-curl http://localhost:<span class="num">8000</span>/health</pre>
+  -F <span class="str">"stream=true"</span></pre>
                 </div>
             </div>
         </div>

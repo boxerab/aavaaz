@@ -33,9 +33,9 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 
 ## Docs
 
-- [ ] README / `docs/site` advertise the unwired modules above as if complete; align the marketing surface with `DESIGN.md`.
-- [ ] `docs/site/index.html` shows a `noise_reduction="near_field"` client kwarg and REST paths that do not exist; `docs/USER_MANAGEMENT.md` imports `whisper_live.acl` (should be `aavaaz.features.acl`).
-- [ ] `docs/TEST_MATRIX.md` references deleted test files.
+- [x] Broken code/API references fixed: JS SDK `analyze()`/`listModels()` (hit nonexistent `/v1/audio/intelligence`, `/v1/models`) removed; `sdks/README.md` endpoint table trimmed to real routes; `docs/site` REST path corrected to `/v1/audio/transcriptions`, `/v1/models` curl and `noise_reduction="near_field"` kwarg removed; `docs/USER_MANAGEMENT.md` import fixed to `aavaaz.features.acl`.
+- [x] Library-only features in the `docs/site` feature grid now carry a `Planned` tag (translation relay, noise reduction, multichannel, model hot-swap, search, auto-highlights/chapters, find&replace, spelling hints; ACL/storage in the enterprise list marked "(Planned)"). The zero-code Multi-Model Ensemble card and the broken README Auto-Reconnect example were removed. Note: only the primary feature grid was swept; repeated mentions in the showcase/comparison sections may still overstate.
+- [x] `docs/TEST_MATRIX.md` remapped to real coverage: ensemble rows → Not implemented; diarization/batch rows → ⚠️ passthrough-only (`test_server.py`, behavior in WhisperLive); storage → `test_security.py`; webhook delivery → `test_serverless.py`; HMAC signature → Not implemented.
 
 ## Deploy / infra (unverified — no cloud build in CI)
 

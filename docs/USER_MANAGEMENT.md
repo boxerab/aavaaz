@@ -19,7 +19,7 @@ is empty — you'll bootstrap your first admin user with the helper script below
 
 ```bash
 python -c "
-from whisper_live.acl import UserStore, Role
+from aavaaz.features.acl import UserStore, Role
 store = UserStore('users.json')
 user, key = store.create_user('Admin', Role.ADMIN)
 print(f'User ID:  {user.user_id}')
@@ -89,7 +89,7 @@ Reset monthly usage for all users:
 
 ```bash
 python -c "
-from whisper_live.acl import UserStore
+from aavaaz.features.acl import UserStore
 store = UserStore('users.json')
 store.reset_monthly_usage()
 print('Done')

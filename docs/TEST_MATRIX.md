@@ -128,9 +128,9 @@ Comprehensive testing plan covering all features, deployment targets, and integr
 
 | # | Test Case | Priority | Status | Notes |
 |---|-----------|----------|--------|-------|
-| 7.1 | Two-speaker identification | P1 | ✅ | `test_diarization.py` |
+| 7.1 | Two-speaker identification | P1 | ⚠️ | `test_server.py` (flag passthrough; diarization behavior in WhisperLive) |
 | 7.2 | Multi-speaker (3+) identification | P1 | ⚠️ | Unit tested |
-| 7.3 | Max speakers limit enforcement | P1 | ✅ | `test_diarization.py` |
+| 7.3 | Max speakers limit enforcement | P1 | ⚠️ | `test_server.py` (flag passthrough; behavior in WhisperLive) |
 | 7.4 | Speaker labels in output segments | P1 | ❌ | |
 | 7.5 | Diarization with real audio (integration) | P1 | ❌ | |
 | 7.6 | Single speaker (should not split) | P2 | ❌ | |
@@ -153,10 +153,10 @@ Comprehensive testing plan covering all features, deployment targets, and integr
 
 | # | Test Case | Priority | Status | Notes |
 |---|-----------|----------|--------|-------|
-| 9.1 | Voting strategy (majority wins) | P1 | ✅ | `test_ensemble.py` |
-| 9.2 | Confidence strategy (highest confidence) | P1 | ✅ | `test_ensemble.py` |
-| 9.3 | Longest strategy | P1 | ✅ | `test_ensemble.py` |
-| 9.4 | Model registration and deregistration | P1 | ✅ | `test_ensemble.py` |
+| 9.1 | Voting strategy (majority wins) | P1 | ❌ | Not implemented |
+| 9.2 | Confidence strategy (highest confidence) | P1 | ❌ | Not implemented |
+| 9.3 | Longest strategy | P1 | ❌ | Not implemented |
+| 9.4 | Model registration and deregistration | P1 | ❌ | Not implemented |
 | 9.5 | Ensemble with model failure (graceful degradation) | P1 | ❌ | |
 | 9.6 | Real multi-model ensemble (integration) | P2 | ❌ | |
 
@@ -166,8 +166,8 @@ Comprehensive testing plan covering all features, deployment targets, and integr
 
 | # | Test Case | Priority | Status | Notes |
 |---|-----------|----------|--------|-------|
-| 10.1 | Single request processing | P0 | ✅ | `test_batch_inference.py` |
-| 10.2 | Batch grouping (multiple clients) | P1 | ✅ | `test_batch_inference.py` |
+| 10.1 | Single request processing | P0 | ⚠️ | `test_server.py` (flag passthrough; batching in WhisperLive) |
+| 10.2 | Batch grouping (multiple clients) | P1 | ⚠️ | `test_server.py` (flag passthrough; batching in WhisperLive) |
 | 10.3 | Queue timeout handling | P1 | ⚠️ | |
 | 10.4 | Batch under concurrent load | P1 | ❌ | |
 | 10.5 | Batch size limit enforcement | P1 | ❌ | |
@@ -201,9 +201,9 @@ Comprehensive testing plan covering all features, deployment targets, and integr
 
 | # | Test Case | Priority | Status | Notes |
 |---|-----------|----------|--------|-------|
-| 13.1 | Local storage save/load | P1 | ✅ | `test_storage.py` |
+| 13.1 | Local storage save/load | P1 | ✅ | `test_security.py` |
 | 13.2 | S3 storage backend | P1 | ❌ | Needs mock or localstack |
-| 13.3 | Path traversal protection | P0 | ✅ | `test_storage.py` |
+| 13.3 | Path traversal protection | P0 | ✅ | `test_security.py` |
 | 13.4 | Transcript search (full-text) | P1 | ✅ | `test_search.py` |
 | 13.5 | Search with tags | P2 | ✅ | `test_search.py` |
 | 13.6 | Storage quota enforcement | P2 | ❌ | |
@@ -214,8 +214,8 @@ Comprehensive testing plan covering all features, deployment targets, and integr
 
 | # | Test Case | Priority | Status | Notes |
 |---|-----------|----------|--------|-------|
-| 14.1 | Webhook delivery on transcription complete | P1 | ✅ | `test_webhooks.py` |
-| 14.2 | HMAC signature verification | P1 | ✅ | `test_webhooks.py` |
+| 14.1 | Webhook delivery on transcription complete | P1 | ✅ | `test_serverless.py` |
+| 14.2 | HMAC signature verification | P1 | ❌ | Not implemented |
 | 14.3 | Exponential backoff retry on failure | P1 | ⚠️ | |
 | 14.4 | Webhook timeout handling | P2 | ❌ | |
 | 14.5 | Multiple webhook endpoints | P2 | ❌ | |
@@ -322,7 +322,7 @@ Comprehensive testing plan covering all features, deployment targets, and integr
 
 | # | Test Case | Priority | Status | Notes |
 |---|-----------|----------|--------|-------|
-| 22.1 | Path traversal blocked (storage) | P0 | ✅ | `test_storage.py` |
+| 22.1 | Path traversal blocked (storage) | P0 | ✅ | `test_security.py` |
 | 22.2 | SQL/NoSQL injection in search | P0 | ❌ | |
 | 22.3 | XSS in transcription output | P0 | ❌ | |
 | 22.4 | CORS headers on REST API | P1 | ❌ | |

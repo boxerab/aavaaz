@@ -198,18 +198,6 @@ aavaaz serve --model large-v3 --rate-limit-rpm 60
 ```
 Clients exceeding the limit receive HTTP 429.
 
-### Auto-Reconnect
-Automatically reconnect when the WebSocket connection drops unexpectedly:
-```python
-from whisper_live.client import TranscriptionClient
-
-client = TranscriptionClient(
-  "localhost", 9090,
-  max_retries=5,
-  retry_delay=3,
-)
-```
-
 ### Batch Inference
 Batch multiple client sessions into single GPU calls for higher throughput:
 ```bash

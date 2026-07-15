@@ -31,17 +31,6 @@ export interface TranscriptionResult {
   language_probability?: number;
 }
 
-export interface IntelligenceOptions {
-  model?: string;
-  language?: string;
-  sentiment?: boolean;
-  topics?: boolean;
-  entities?: boolean;
-  summary?: boolean;
-  summarySentences?: number;
-  topicCount?: number;
-}
-
 export interface HealthResponse {
   status: string;
   clients: number;
@@ -170,36 +159,6 @@ export class AavaazClient {
   }
 
   /**
-   * Analyze transcript with audio intelligence.
-   */
-  async analyze(
-    file: File | Blob,
-    options: IntelligenceOptions = {}
-  ): Promise<Record<string, unknown>> {
-    const form = new FormData();
-    form.append('file', file);
-    form.append('model', options.model || 'whisper-1');
-    if (options.language) form.append('language', options.language);
-    if (options.sentiment !== undefined) form.append('sentiment', String(options.sentiment));
-    if (options.topics !== undefined) form.append('topics', String(options.topics));
-    if (options.entities !== undefined) form.append('entities', String(options.entities));
-    if (options.summary !== undefined) form.append('summary', String(options.summary));
-
-    const resp = await fetch(`${this.baseUrl}/v1/audio/intelligence`, {
-      method: 'POST',
-      headers: this.headers(),
-      body: form,
-    });
-
-    if (!resp.ok) {
-      const body = await resp.text();
-      throw new Error(`Intelligence failed (${resp.status}): ${body}`);
-    }
-
-    return await resp.json();
-  }
-
-  /**
    * Check server health.
    */
   async health(): Promise<HealthResponse> {
@@ -210,20 +169,6 @@ export class AavaazClient {
       throw new Error(`Health check failed (${resp.status})`);
     }
     return await resp.json();
-  }
-
-  /**
-   * List loaded models.
-   */
-  async listModels(): Promise<Record<string, unknown>[]> {
-    const resp = await fetch(`${this.baseUrl}/v1/models`, {
-      headers: this.headers(),
-    });
-    if (!resp.ok) {
-      throw new Error(`List models failed (${resp.status})`);
-    }
-    const data = await resp.json();
-    return data.models;
   }
 }
 

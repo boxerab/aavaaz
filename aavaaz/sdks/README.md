@@ -88,10 +88,7 @@ client()
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/v1/audio/transcriptions` | POST | Transcribe audio file |
-| `/v1/audio/intelligence` | POST | Transcribe + NLP analysis |
-| `/v1/models` | GET | List loaded models |
-| `/v1/plugins` | GET | List registered plugins |
-| `/health` | GET | Server health check |
+| `/health` | GET | Server health check (serverless deployments) |
 | `/docs` | GET | Swagger UI documentation |
 | `/redoc` | GET | ReDoc documentation |
 | `/openapi.json` | GET | OpenAPI specification |
