@@ -8,6 +8,9 @@ step on incoming audio frames.
 Install: pip install noisereduce
 """
 
+import logging
+import os
+
 import numpy as np
 
 try:
@@ -16,6 +19,8 @@ try:
     _HAS_NOISEREDUCE = True
 except ImportError:
     _HAS_NOISEREDUCE = False
+
+logger = logging.getLogger(__name__)
 
 
 class NoiseReducer:
@@ -116,3 +121,46 @@ class NoiseReducer:
 def is_available() -> bool:
     """Check if noisereduce library is installed."""
     return _HAS_NOISEREDUCE
+
+
+def _resolve(features: dict | None) -> tuple[bool, str, float]:
+    """Resolve (enabled, mode, prop_decrease) from per-request features or env."""
+    if features is None:
+        enabled = os.environ.get("AAVAAZ_ENABLE_NOISE_REDUCTION", "0") == "1"
+        mode = os.environ.get("AAVAAZ_NOISE_MODE", "near_field")
+        prop = float(os.environ.get("AAVAAZ_NOISE_PROP_DECREASE", "0.8"))
+    else:
+        cfg = features.get("noiseReduction") or {}
+        enabled = bool(cfg.get("enabled"))
+        mode = cfg.get("mode", "near_field")
+        prop = float(cfg.get("propDecrease", 0.8))
+    return enabled, mode, prop
+
+
+def is_enabled(features: dict | None = None) -> bool:
+    """Whether noise reduction is requested (per-request features or env)."""
+    return _resolve(features)[0]
+
+
+def maybe_reduce_noise(
+    audio: np.ndarray, features: dict | None = None, sample_rate: int = 16000
+) -> np.ndarray:
+    """Apply noise reduction if enabled, else return the audio unchanged.
+
+    Gracefully returns the input when noisereduce isn't installed or reduction
+    fails, so an optional dependency never breaks transcription.
+    """
+    enabled, mode, prop = _resolve(features)
+    if not enabled:
+        return audio
+    if not is_available():
+        logger.warning(
+            "noise reduction requested but noisereduce is not installed; skipping"
+        )
+        return audio
+    try:
+        reducer = NoiseReducer(mode=mode, sample_rate=sample_rate, prop_decrease=prop)
+        return reducer.reduce(audio)
+    except Exception:
+        logger.exception("noise reduction failed; using original audio")
+        return audio

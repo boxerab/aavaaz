@@ -75,3 +75,53 @@ class TestNoiseReducer:
             assert nr2.prop_decrease == 0.0
         except ImportError:
             pytest.skip("noisereduce not installed")
+
+
+class TestMaybeReduceNoise:
+    """The wiring helpers used by the batch paths (no noisereduce needed)."""
+
+    def test_is_enabled_from_features(self):
+        from aavaaz.features.noise_reduction import is_enabled
+
+        assert is_enabled({"noiseReduction": {"enabled": True}}) is True
+        assert is_enabled({"noiseReduction": {"enabled": False}}) is False
+        assert is_enabled({}) is False
+
+    def test_is_enabled_from_env(self, monkeypatch):
+        from aavaaz.features.noise_reduction import is_enabled
+
+        monkeypatch.delenv("AAVAAZ_ENABLE_NOISE_REDUCTION", raising=False)
+        assert is_enabled(None) is False
+        monkeypatch.setenv("AAVAAZ_ENABLE_NOISE_REDUCTION", "1")
+        assert is_enabled(None) is True
+
+    def test_disabled_returns_input_unchanged(self):
+        from aavaaz.features import noise_reduction
+
+        audio = np.ones(100, dtype=np.float32)
+        out = noise_reduction.maybe_reduce_noise(audio, {"noiseReduction": {"enabled": False}})
+        assert out is audio
+
+    def test_enabled_but_unavailable_skips_gracefully(self):
+        from aavaaz.features import noise_reduction
+
+        audio = np.ones(100, dtype=np.float32)
+        with patch.object(noise_reduction, "_HAS_NOISEREDUCE", False):
+            out = noise_reduction.maybe_reduce_noise(
+                audio, {"noiseReduction": {"enabled": True}}
+            )
+        assert out is audio  # unchanged when the dep is missing
+
+    def test_enabled_and_available_reduces(self):
+        from aavaaz.features import noise_reduction
+
+        audio = np.ones(100, dtype=np.float32)
+        fake = type("FakeReducer", (), {"reduce": lambda self, a: a * 0.5})()
+        with (
+            patch.object(noise_reduction, "_HAS_NOISEREDUCE", True),
+            patch.object(noise_reduction, "NoiseReducer", lambda **kw: fake),
+        ):
+            out = noise_reduction.maybe_reduce_noise(
+                audio, {"noiseReduction": {"enabled": True}}
+            )
+        assert np.allclose(out, audio * 0.5)

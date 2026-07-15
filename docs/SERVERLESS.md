@@ -93,6 +93,8 @@ All configuration is via environment variables on the Lambda function:
 | `AAVAAZ_ENABLE_PII` | `0` | Set to `1` to enable PII redaction |
 | `AAVAAZ_ENABLE_FORMAT` | `1` | Set to `1` to enable smart formatting |
 | `AAVAAZ_REQUIRE_API_KEY` | `0` | Set to `1` to require a valid SaaS API key (Bearer token, validated against DynamoDB) on the API paths. The web-demo UI and `/health` stay open. |
+| `AAVAAZ_ENABLE_NOISE_REDUCTION` | `0` | Set to `1` to denoise audio before transcription (no-op if `noisereduce` isn't installed). |
+| `AAVAAZ_NOISE_MODE` | `near_field` | `near_field` (stationary) or `far_field` (non-stationary). |
 
 ## Per-request options
 
@@ -101,7 +103,7 @@ defaults for that request:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `features` | object | Feature config (dashboard `FeaturesConfig` shape): `formatting`, `pii`, `profanity`, `intelligence`. Overrides the `AAVAAZ_ENABLE_*` defaults. |
+| `features` | object | Feature config (dashboard `FeaturesConfig` shape): `formatting`, `pii`, `profanity`, `intelligence`, `noiseReduction`. Overrides the `AAVAAZ_ENABLE_*` defaults. |
 | `hotwords` | string | Custom-vocabulary terms to bias recognition. |
 | `callback_url` | string | Webhook URL POSTed with the transcript on completion. |
 

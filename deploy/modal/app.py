@@ -301,6 +301,11 @@ class Transcriber:
         # Decode audio to raw float32 samples at 16kHz
         audio = decode_audio(audio_path)
 
+        # Optional noise reduction preprocessing (no-op unless enabled)
+        from aavaaz.features.noise_reduction import maybe_reduce_noise
+
+        audio = maybe_reduce_noise(audio, features)
+
         # Submit to WhisperLive batch inference worker
         req = BatchRequest(audio=audio, language=self.language)
         self.batch_worker.submit(req)

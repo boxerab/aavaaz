@@ -43,6 +43,8 @@ whisper = [
     # dies with "Library libcublas.so.12 is not found".
     "nvidia-cublas-cu12; sys_platform == 'linux'",
     "nvidia-cudnn-cu12; sys_platform == 'linux'",
+    # optional audio noise-reduction preprocessing; code skips gracefully if absent
+    "noisereduce",
 ]
 dev = [
     "pytest>=8.0",

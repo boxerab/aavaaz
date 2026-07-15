@@ -19,6 +19,9 @@ AAVAAZ_OUTPUT_BUCKET  S3 bucket for transcript output (S3 trigger mode)
 AAVAAZ_OUTPUT_PREFIX  Key prefix inside output bucket (default: ``transcripts/``)
 AAVAAZ_ENABLE_PII     ``1`` to enable PII redaction (default: ``0``)
 AAVAAZ_ENABLE_FORMAT  ``1`` to enable smart formatting (default: ``1``)
+AAVAAZ_ENABLE_NOISE_REDUCTION  ``1`` to denoise audio before transcription
+                               (default: ``0``; no-op if noisereduce absent)
+AAVAAZ_NOISE_MODE     ``near_field`` | ``far_field`` (default: ``near_field``)
 AAVAAZ_ENABLE_PARAGRAPHS     ``1`` to add paragraph segmentation (default: ``0``)
 AAVAAZ_ENABLE_INTELLIGENCE   ``1`` to add sentiment/topics/entities (default: ``0``)
 AAVAAZ_STORE_AUDIO    ``1`` to store uploaded audio in S3 (default: ``0``)
@@ -244,8 +247,20 @@ def _transcribe(
     if language is None:
         language = _detect_stable_language(model, audio_path)
 
+    from aavaaz.features import noise_reduction
+
+    transcribe_input: Any = audio_path
+    if noise_reduction.is_enabled(features):
+        from faster_whisper.audio import decode_audio
+
+        audio = decode_audio(audio_path, sampling_rate=16000)
+        transcribe_input = noise_reduction.maybe_reduce_noise(audio, features)
+
     segments, info = model.transcribe(
-        audio_path, language=language, word_timestamps=True, hotwords=hotwords or None
+        transcribe_input,
+        language=language,
+        word_timestamps=True,
+        hotwords=hotwords or None,
     )
 
     pipeline = build_pipeline(features)
