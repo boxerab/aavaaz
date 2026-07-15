@@ -440,6 +440,7 @@ def _record_usage(user_id: str | None, result: dict, source_name: str | None) ->
     from aavaaz.api import dynamo_store
 
     duration = float(result.get("duration") or 0.0)
+    text = " ".join(s.get("text", "") for s in result.get("segments", []))
     with contextlib.suppress(Exception):
         dynamo_store.record_usage(user_id, duration / 60.0)
         dynamo_store.save_transcript(
@@ -449,6 +450,8 @@ def _record_usage(user_id: str | None, result: dict, source_name: str | None) ->
                 "filename": source_name or "audio",
                 "duration": Decimal(str(round(duration, 2))),
                 "language": result.get("language") or "",
+                "text": text,
+                "tags": {},
             },
         )
 

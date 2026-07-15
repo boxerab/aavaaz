@@ -42,7 +42,7 @@ Wired = reachable through a running entry point. Library = importable but not co
 | `plugins` | Wired (core) | server pipeline |
 | `noise_reduction` | Wired (batch) | lambda + modal audio preprocess (`maybe_reduce_noise`) |
 | `multichannel` | Wired (batch) | lambda per-channel split/merge |
-| `search` (TranscriptIndex) | Library | — (SaaS search endpoint pending) |
+| `search` (TranscriptIndex) | Wired (SaaS self-host) | `/v1/saas/transcripts` search+tag; serverless uses DynamoDB filter |
 
 ## Auth
 

@@ -19,7 +19,7 @@ import logging
 import os
 from datetime import UTC, datetime
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 from pydantic import BaseModel
@@ -123,6 +123,10 @@ class InviteMemberRequest(BaseModel):
 
 class UpdateMemberRequest(BaseModel):
     role: str
+
+
+class SetTagsRequest(BaseModel):
+    tags: dict[str, str]
 
 
 class CheckoutRequest(BaseModel):
@@ -383,7 +387,17 @@ async def stripe_webhook(request: Request):
 
 
 @app.get("/v1/saas/transcripts")
-async def list_transcripts(claims: dict = Depends(require_auth)):
+async def list_transcripts(
+    claims: dict = Depends(require_auth),
+    q: str | None = Query(None, description="full-text substring filter"),
+    language: str | None = Query(None),
+    tag: list[str] = Query(default_factory=list, description="key:value tag filters"),
+):
+    if q or language or tag:
+        tags = dict(t.split(":", 1) for t in tag if ":" in t)
+        return db.search_transcripts(
+            claims["sub"], query=q, language=language, tags=tags or None
+        )
     return db.list_transcripts(claims["sub"])
 
 
@@ -391,6 +405,18 @@ async def list_transcripts(claims: dict = Depends(require_auth)):
 async def get_transcript(transcript_id: str, claims: dict = Depends(require_auth)):
     # transcript_id is the created_at timestamp (range key)
     result = db.get_transcript(claims["sub"], transcript_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+    return result
+
+
+@app.patch("/v1/saas/transcripts/{transcript_id}/tags")
+async def set_transcript_tags(
+    transcript_id: str,
+    body: SetTagsRequest,
+    claims: dict = Depends(require_auth),
+):
+    result = db.set_transcript_tags(claims["sub"], transcript_id, body.tags)
     if not result:
         raise HTTPException(status_code=404, detail="Transcript not found")
     return result

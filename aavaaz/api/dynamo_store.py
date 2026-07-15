@@ -254,6 +254,58 @@ def get_transcript(user_id: str, created_at: str) -> dict | None:
     return response.get("Item")
 
 
+def search_transcripts(
+    user_id: str,
+    query: str | None = None,
+    language: str | None = None,
+    tags: dict[str, str] | None = None,
+    limit: int = 50,
+) -> list[dict]:
+    """Filter a user's transcripts by text substring, language, and tags.
+
+    DynamoDB has no full-text search, so the user's records are queried by
+    partition key and filtered in-process (fine for per-user volumes).
+    """
+    items = _table_transcripts.query(
+        KeyConditionExpression=Key("user_id").eq(user_id),
+        ScanIndexForward=False,
+    ).get("Items", [])
+
+    q = (query or "").lower()
+    results = []
+    for item in items:
+        if q and q not in str(item.get("text", "")).lower():
+            continue
+        if language and item.get("language") != language:
+            continue
+        if tags and not all(
+            str((item.get("tags") or {}).get(k)) == v for k, v in tags.items()
+        ):
+            continue
+        results.append(item)
+        if len(results) >= limit:
+            break
+    return results
+
+
+def set_transcript_tags(user_id: str, created_at: str, tags: dict) -> dict | None:
+    """Set the tags on a transcript. Returns the updated item, or None if absent."""
+    try:
+        response = _table_transcripts.update_item(
+            Key={"user_id": user_id, "created_at": created_at},
+            UpdateExpression="SET #t = :tags",
+            ConditionExpression="attribute_exists(created_at)",
+            ExpressionAttributeNames={"#t": "tags"},
+            ExpressionAttributeValues={":tags": tags},
+            ReturnValues="ALL_NEW",
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            return None
+        raise
+    return response["Attributes"]
+
+
 # ─── Team Members ────────────────────────────────────────────────────────────
 
 

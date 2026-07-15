@@ -16,7 +16,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from aavaaz.api import plans
@@ -106,6 +106,10 @@ class InviteMemberRequest(BaseModel):
 
 class UpdateMemberRequest(BaseModel):
     role: str
+
+
+class SetTagsRequest(BaseModel):
+    tags: dict[str, str]
 
 
 class CheckoutRequest(BaseModel):
@@ -419,9 +423,32 @@ _transcripts: dict[str, list[dict]] = {}  # user_id -> [job dicts]
 
 
 @router.get("/transcripts")
-async def list_transcripts(claims: dict = Depends(require_auth)):
-    user_id = claims["sub"]
-    return _transcripts.get(user_id, [])
+async def list_transcripts(
+    claims: dict = Depends(require_auth),
+    q: str | None = Query(None),
+    language: str | None = Query(None),
+    tag: list[str] = Query(default_factory=list),
+):
+    jobs = _transcripts.get(claims["sub"], [])
+    if not (q or language or tag):
+        return jobs
+
+    from aavaaz.features.search import TranscriptIndex, TranscriptMetadata
+
+    index = TranscriptIndex()
+    for job in jobs:
+        index.add(
+            TranscriptMetadata(
+                job_id=job.get("id", ""),
+                text=job.get("text", ""),
+                language=job.get("language", ""),
+                tags=job.get("tags") or {},
+            )
+        )
+    tags = dict(t.split(":", 1) for t in tag if ":" in t)
+    hits = index.search(query=q or "", language=language, tags=tags or None)
+    by_id = {job.get("id"): job for job in jobs}
+    return [by_id[m.job_id] for m in hits if m.job_id in by_id]
 
 
 @router.get("/transcripts/{transcript_id}")
@@ -430,6 +457,17 @@ async def get_transcript(transcript_id: str, claims: dict = Depends(require_auth
     jobs = _transcripts.get(user_id, [])
     for job in jobs:
         if job["id"] == transcript_id:
+            return job
+    raise HTTPException(status_code=404, detail="Transcript not found")
+
+
+@router.patch("/transcripts/{transcript_id}/tags")
+async def set_transcript_tags(
+    transcript_id: str, body: SetTagsRequest, claims: dict = Depends(require_auth)
+):
+    for job in _transcripts.get(claims["sub"], []):
+        if job["id"] == transcript_id:
+            job["tags"] = body.tags
             return job
     raise HTTPException(status_code=404, detail="Transcript not found")
 

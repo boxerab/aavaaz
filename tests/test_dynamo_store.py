@@ -200,3 +200,29 @@ def test_team_remove_missing_returns_false(db):
 def test_team_isolated_per_owner(db):
     db.add_member("owner-1", "a@x.com", "member")
     assert db.list_members("owner-2") == []
+
+
+def test_search_transcripts(db):
+    db.save_transcript(
+        "u1",
+        {"id": "1", "text": "hello kubernetes world", "language": "en",
+         "tags": {"project": "x"}},
+    )
+    db.save_transcript(
+        "u1", {"id": "2", "text": "bonjour le monde", "language": "fr", "tags": {}}
+    )
+    assert len(db.search_transcripts("u1")) == 2
+    assert [t["id"] for t in db.search_transcripts("u1", query="kubernetes")] == ["1"]
+    assert [t["id"] for t in db.search_transcripts("u1", language="fr")] == ["2"]
+    assert [
+        t["id"] for t in db.search_transcripts("u1", tags={"project": "x"})
+    ] == ["1"]
+    assert db.search_transcripts("u1", query="nope") == []
+
+
+def test_set_transcript_tags(db):
+    db.save_transcript("u1", {"id": "1", "text": "hi", "language": "en"})
+    created_at = db.list_transcripts("u1")[0]["created_at"]
+    updated = db.set_transcript_tags("u1", created_at, {"team": "a"})
+    assert updated["tags"] == {"team": "a"}
+    assert db.set_transcript_tags("u1", "does-not-exist", {"x": "y"}) is None
