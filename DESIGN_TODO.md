@@ -17,7 +17,7 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 ## Partially wired
 
 - [x] **Paragraph segmentation** — now in Lambda and Modal (both via the shared `aavaaz.features.enrichment`). Streaming pipeline still lacks it (needs a final-flush pass, since it groups across segments).
-- [ ] **Webhook delivery** — wired in Lambda only (synchronous, on `callback_url`). Add the async S3-trigger path (store the callback URL at upload, fire on completion) and mirror in Modal.
+- [x] **Webhook delivery (Lambda)** — synchronous on the JSON API path, and now async on the S3 large-file path: the callback URL is stored at upload (`callback_url_b64` → object metadata) and fired in `_handle_s3` on completion. Still not mirrored in Modal.
 - [x] **Intelligence / formatting / PII / profanity / filler** — the batch enrichment pipeline is now shared between Lambda and Modal via `aavaaz/features/enrichment.py` (`build_pipeline`/`enrich_result`), env-gated with per-request `features` override. Modal `app.py` reads `features` from the JSON body or a `features` form field. Hotwords stay Lambda-only (Modal's batch worker takes `initial_prompt`, not hotwords). Streaming server still has its own plugin path.
 - [x] **Per-request features in the batch Lambda** — `_handle_api` now reads `payload["features"]` (dashboard FeaturesConfig shape) and the S3-trigger path reads the same config from object metadata (`features_b64` → presign → `head_object`). Both override the env defaults. Diarization/translation/ensemble/noise-reduction are intentionally ignored here (not available in the faster-whisper batch path).
 

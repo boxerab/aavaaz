@@ -103,11 +103,13 @@ defaults for that request:
 |-------|------|-------------|
 | `features` | object | Feature config (dashboard `FeaturesConfig` shape): `formatting`, `pii`, `profanity`, `intelligence`. Overrides the `AAVAAZ_ENABLE_*` defaults. |
 | `hotwords` | string | Custom-vocabulary terms to bias recognition. |
+| `callback_url` | string | Webhook URL POSTed with the transcript on completion. |
 
 The S3-trigger path has no request body, so the large-file upload flow carries
 the same options as url-safe base64 in `/v1/upload-url` query params
-(`features_b64`, `hotwords_b64`); they are stored as S3 object metadata and read
-back when the upload event fires.
+(`features_b64`, `hotwords_b64`, `callback_url_b64`); they are stored as S3 object
+metadata and read back when the upload event fires. The webhook is delivered
+asynchronously once the S3-triggered transcription finishes.
 
 When `AAVAAZ_REQUIRE_API_KEY=1`, send `Authorization: Bearer <key>` on all API
 requests. Authenticated requests are metered: each completed transcription records

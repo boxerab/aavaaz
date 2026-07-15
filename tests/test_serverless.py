@@ -531,3 +531,36 @@ def test_s3_records_usage_with_user_metadata(mock_whisper, _env, monkeypatch):
     assert result["statusCode"] == 200
     record_usage.assert_called_once()
     assert record_usage.call_args.args[0] == "user-9"
+
+
+@patch("faster_whisper.WhisperModel")
+def test_s3_fires_webhook_from_metadata(mock_whisper, _env, monkeypatch):
+    """The S3 path fires the callback_url stored in object metadata on completion."""
+    model = MagicMock()
+    model.transcribe.return_value = (_fake_segments(), _fake_info())
+    mock_whisper.return_value = model
+
+    from aavaaz.serverless.lambda_handler import handler
+
+    cb_b64 = (
+        base64.urlsafe_b64encode(b"https://example.com/hook").decode().rstrip("=")
+    )
+    event = {
+        "Records": [{"s3": {"bucket": {"name": "in"}, "object": {"key": "clip.wav"}}}]
+    }
+
+    with (
+        patch("aavaaz.serverless.lambda_handler._s3_client") as mock_s3,
+        patch("aavaaz.features.webhook.send_webhook") as send,
+    ):
+        s3 = MagicMock()
+        mock_s3.return_value = s3
+        s3.download_file.side_effect = lambda b, k, p: open(p, "wb").close()
+        s3.head_object.return_value = {"Metadata": {"callback_url": cb_b64}}
+        monkeypatch.setenv("AAVAAZ_OUTPUT_BUCKET", "out")
+        result = handler(event, None)
+
+    assert result["statusCode"] == 200
+    send.assert_called_once()
+    assert send.call_args.args[0] == "https://example.com/hook"
+    assert send.call_args.args[1]["segments"][0]["text"] == "Hello world"

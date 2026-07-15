@@ -450,6 +450,11 @@ def _handle_upload_url(event: dict, user_id: str | None = None) -> dict:
     Query params:
       filename — original filename (used as S3 key suffix)
       content_type — MIME type (default: application/octet-stream)
+      features_b64, hotwords_b64, callback_url_b64 — optional url-safe base64 values
+        stored as S3 object metadata and applied when the S3-trigger transcription
+        runs (the S3 path has no request body of its own).
+
+    Returns the presigned URL plus `required_headers` the client must echo on the PUT.
     """
     params = event.get("queryStringParameters") or {}
     filename = params.get("filename", f"{uuid.uuid4().hex}.wav")
@@ -476,7 +481,11 @@ def _handle_upload_url(event: dict, user_id: str | None = None) -> dict:
     required_headers = {"Content-Type": content_type}
     metadata = {
         name: params[q]
-        for name, q in (("features", "features_b64"), ("hotwords", "hotwords_b64"))
+        for name, q in (
+            ("features", "features_b64"),
+            ("hotwords", "hotwords_b64"),
+            ("callback_url", "callback_url_b64"),
+        )
         if params.get(q)
     }
     if user_id:
@@ -640,22 +649,25 @@ def _decode_features_metadata(raw: str | None) -> dict | None:
         return None
 
 
-def _read_object_config(
-    s3: Any, bucket: str, key: str
-) -> tuple[dict | None, str | None, str | None]:
-    """Read optional per-request features + hotwords + user_id from S3 object metadata."""
+def _read_object_config(s3: Any, bucket: str, key: str) -> dict:
+    """Read optional per-request config from S3 object metadata.
+
+    Keys: features (dict), hotwords (str), user_id (str), callback_url (str).
+    Returns an empty dict when metadata can't be read.
+    """
     try:
         head = s3.head_object(Bucket=bucket, Key=key)
     except Exception:
         logger.warning("Could not read metadata for s3://%s/%s", bucket, key)
-        return None, None, None
+        return {}
     meta = head.get("Metadata") or {}
     user_id = meta.get("user_id")
-    return (
-        _decode_features_metadata(meta.get("features")),
-        _decode_b64(meta.get("hotwords")),
-        user_id if isinstance(user_id, str) else None,
-    )
+    return {
+        "features": _decode_features_metadata(meta.get("features")),
+        "hotwords": _decode_b64(meta.get("hotwords")),
+        "user_id": user_id if isinstance(user_id, str) else None,
+        "callback_url": _decode_b64(meta.get("callback_url")),
+    }
 
 
 def _handle_s3(event: dict, context: Any) -> dict:
@@ -698,7 +710,7 @@ def _handle_s3(event: dict, context: Any) -> dict:
             _write_status("processing", pct)
 
         try:
-            features, hotwords, user_id = _read_object_config(s3, bucket, key)
+            cfg = _read_object_config(s3, bucket, key)
             with tempfile.TemporaryDirectory() as tmpdir:
                 local_path = os.path.join(tmpdir, os.path.basename(key))
                 s3.download_file(bucket, key, local_path)
@@ -706,8 +718,8 @@ def _handle_s3(event: dict, context: Any) -> dict:
                 result = _transcribe(
                     local_path,
                     progress_callback=_report_progress if output_bucket else None,
-                    features=features,
-                    hotwords=hotwords,
+                    features=cfg.get("features"),
+                    hotwords=cfg.get("hotwords"),
                 )
 
             if output_bucket:
@@ -718,7 +730,13 @@ def _handle_s3(event: dict, context: Any) -> dict:
                     )
                     continue
 
-            _record_usage(user_id, result, os.path.basename(key))
+            _record_usage(cfg.get("user_id"), result, os.path.basename(key))
+
+            callback_url = cfg.get("callback_url")
+            if callback_url:
+                from aavaaz.features.webhook import send_webhook
+
+                send_webhook(callback_url, result)
 
             output = _format_output(result)
             ext = (
