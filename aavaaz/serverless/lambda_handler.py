@@ -24,6 +24,8 @@ AAVAAZ_ENABLE_INTELLIGENCE   ``1`` to add sentiment/topics/entities (default: ``
 AAVAAZ_STORE_AUDIO    ``1`` to store uploaded audio in S3 (default: ``0``)
 AAVAAZ_AUDIO_BUCKET   S3 bucket for stored audio (defaults to output bucket)
 AAVAAZ_AUDIO_PREFIX   Key prefix for stored audio (default: ``audio/``)
+AAVAAZ_REQUIRE_API_KEY  ``1`` to require a valid SaaS API key on the API paths
+                        (default: ``0``; the web-demo UI and health stay open)
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 import tempfile
 import time
 import uuid
@@ -90,21 +93,83 @@ def _get_model() -> Any:
 # ---------------------------------------------------------------------------
 
 
-def _build_pipeline() -> list[Any]:
-    """Return a list of segment transform functions based on env config."""
-    fns: list[Any] = []
+def _build_pipeline(features: dict | None = None) -> list[Any]:
+    """Return per-segment text transforms.
 
-    if os.environ.get("AAVAAZ_ENABLE_FORMAT", "1") == "1":
-        from aavaaz.features.formatting import smart_format
+    With no features dict the pipeline is configured from AAVAAZ_* env vars (the
+    deployment default). A per-request features dict (the dashboard FeaturesConfig
+    shape) overrides that env config.
+    """
+    if features is None:
+        fns: list[Any] = []
+        if os.environ.get("AAVAAZ_ENABLE_FORMAT", "1") == "1":
+            from aavaaz.features.formatting import smart_format
 
-        fns.append(smart_format)
+            fns.append(smart_format)
+        if os.environ.get("AAVAAZ_ENABLE_PII", "0") == "1":
+            from aavaaz.features.pii_redaction import redact_pii
 
-    if os.environ.get("AAVAAZ_ENABLE_PII", "0") == "1":
+            fns.append(redact_pii)
+        return fns
+
+    fns = []
+
+    fmt = features.get("formatting") or {}
+    if fmt.get("enabled"):
+        from aavaaz.features.formatting import format_transcript
+
+        capitalize = bool(fmt.get("capitalize", True))
+        numbers = bool(fmt.get("numbers", True))
+        smart = bool(fmt.get("smart", False))
+        fns.append(
+            lambda t: format_transcript(
+                t, capitalize=capitalize, numbers=numbers, smart=smart
+            )
+        )
+
+    pii = features.get("pii") or {}
+    if pii.get("enabled"):
         from aavaaz.features.pii_redaction import redact_pii
 
-        fns.append(redact_pii)
+        pii_types = set(pii.get("types") or []) or None
+        custom = _compile_custom_pii(pii.get("customPatterns") or [])
+        fns.append(
+            lambda t: redact_pii(t, pii_types=pii_types, custom_patterns=custom)
+        )
+
+    prof = features.get("profanity") or {}
+    if prof.get("enabled"):
+        from aavaaz.features.profanity_filter import filter_profanity
+
+        mode = prof.get("mode", "partial")
+        extra = set(prof.get("extraWords") or []) or None
+        fns.append(lambda t: filter_profanity(t, mode=mode, extra_words=extra))
+
+    intel = features.get("intelligence") or {}
+    if intel.get("fillerRemoval"):
+        from aavaaz.features.audio_intelligence import remove_filler_words
+
+        aggressive = bool(intel.get("fillerAggressive", False))
+        fns.append(lambda t: remove_filler_words(t, aggressive=aggressive))
 
     return fns
+
+
+def _compile_custom_pii(patterns: list[dict]) -> dict | None:
+    """Compile dashboard customPatterns into redact_pii's {label: (regex, repl)} form."""
+    compiled: dict[str, Any] = {}
+    for p in patterns:
+        pattern = p.get("pattern")
+        if not pattern:
+            continue
+        try:
+            compiled[p.get("label", pattern)] = (
+                re.compile(pattern),
+                p.get("replacement", "[REDACTED]"),
+            )
+        except re.error:
+            logger.warning("Skipping invalid custom PII pattern: %s", pattern)
+    return compiled or None
 
 
 def _apply_pipeline(segment: dict, pipeline: list[Any]) -> dict:
@@ -229,12 +294,19 @@ def _store_audio(audio_path: str, filename: str | None = None) -> str | None:
         return None
 
 
-def _transcribe(audio_path: str, progress_callback=None) -> dict:
+def _transcribe(
+    audio_path: str,
+    progress_callback=None,
+    features: dict | None = None,
+    hotwords: str | None = None,
+) -> dict:
     """Transcribe a local audio file and return a result dict.
 
     Args:
         audio_path: Path to the audio file.
         progress_callback: Optional callable(percent: int) called as segments complete.
+        features: Optional per-request feature config overriding the env defaults.
+        hotwords: Optional custom-vocabulary string to bias recognition.
     """
     file_size = os.path.getsize(audio_path)
     logger.info(
@@ -251,10 +323,10 @@ def _transcribe(audio_path: str, progress_callback=None) -> dict:
         language = _detect_stable_language(model, audio_path)
 
     segments, info = model.transcribe(
-        audio_path, language=language, word_timestamps=True
+        audio_path, language=language, word_timestamps=True, hotwords=hotwords or None
     )
 
-    pipeline = _build_pipeline()
+    pipeline = _build_pipeline(features)
     results = []
     last_progress_pct = 0
     for seg in segments:
@@ -298,21 +370,49 @@ def _transcribe(audio_path: str, progress_callback=None) -> dict:
         "duration": info.duration,
         "segments": results,
     }
-    _enrich_result(result)
+    _enrich_result(result, features)
     return result
 
 
-def _enrich_result(result: dict) -> None:
+def _enrich_result(result: dict, features: dict | None = None) -> None:
     """Attach optional paragraph segmentation and intelligence analysis, in place."""
+    # paragraphs stay env-gated: the dashboard config carries no paragraph toggle
     if os.environ.get("AAVAAZ_ENABLE_PARAGRAPHS", "0") == "1":
         from aavaaz.features.utterance import segment_into_paragraphs
 
         result["paragraphs"] = segment_into_paragraphs(result["segments"])
-    if os.environ.get("AAVAAZ_ENABLE_INTELLIGENCE", "0") == "1":
+
+    intel_opts = _intelligence_options(features)
+    if intel_opts is not None:
         from aavaaz.features.audio_intelligence import analyze_transcript
 
         full_text = " ".join(s["text"] for s in result["segments"])
-        result["intelligence"] = analyze_transcript(full_text)
+        result["intelligence"] = analyze_transcript(full_text, **intel_opts)
+
+
+def _intelligence_options(features: dict | None) -> dict | None:
+    """Resolve analyze_transcript kwargs from features/env, or None if disabled."""
+    if features is None:
+        if os.environ.get("AAVAAZ_ENABLE_INTELLIGENCE", "0") == "1":
+            return {}
+        return None
+
+    intel = features.get("intelligence") or {}
+    if not any(
+        intel.get(k)
+        for k in ("sentiment", "topics", "entities", "summarize", "highlights")
+    ):
+        return None
+    return {
+        "sentiment": bool(intel.get("sentiment")),
+        "topics": bool(intel.get("topics")),
+        "entities": bool(intel.get("entities")),
+        "summary": bool(intel.get("summarize")),
+        "highlights": bool(intel.get("highlights")),
+        "summary_sentences": int(intel.get("summarySentences", 3)),
+        "topic_count": int(intel.get("topicsTopN", 5)),
+        "max_highlights": int(intel.get("maxHighlights", 10)),
+    }
 
 
 def _format_output(result: dict) -> str:
@@ -361,6 +461,35 @@ def _s3_client():
     return _s3
 
 
+def _extract_bearer(event: dict) -> str | None:
+    """Return the Bearer token from the Authorization header, if present."""
+    headers = event.get("headers") or {}
+    for k, v in headers.items():
+        if k.lower() == "authorization" and isinstance(v, str):
+            parts = v.split(None, 1)
+            if len(parts) == 2 and parts[0].lower() == "bearer":
+                return parts[1].strip()
+    return None
+
+
+def _auth_error(event: dict) -> dict | None:
+    """Return a 401 response when API-key auth is required and the key is missing/invalid.
+
+    Auth is opt-in via AAVAAZ_REQUIRE_API_KEY=1 and validates the Bearer token against
+    the SaaS DynamoDB store. Returns None when the request is allowed.
+    """
+    if os.environ.get("AAVAAZ_REQUIRE_API_KEY", "0") != "1":
+        return None
+    token = _extract_bearer(event)
+    if not token:
+        return _response(401, json.dumps({"error": "Missing API key"}))
+    from aavaaz.api import dynamo_store
+
+    if dynamo_store.validate_api_key(token) is None:
+        return _response(401, json.dumps({"error": "Invalid API key"}))
+    return None
+
+
 def handler(event: dict, context: Any) -> dict:
     """Main Lambda entry point — dispatches to S3, web UI, or API handler."""
     request_id = (
@@ -387,15 +516,15 @@ def handler(event: dict, context: Any) -> dict:
             if path == "/health":
                 return _response(200, json.dumps({"status": "ok", "mode": "batch"}))
             if path == "/v1/upload-url":
-                return _handle_upload_url(event)
+                return _auth_error(event) or _handle_upload_url(event)
             if path.startswith("/v1/transcription/"):
-                return _handle_transcription_status(event, path)
+                return _auth_error(event) or _handle_transcription_status(event, path)
             return _handle_web_ui(event, path)
 
         if method == "DELETE" and path.startswith("/v1/transcription/"):
-            return _handle_transcription_cancel(path)
+            return _auth_error(event) or _handle_transcription_cancel(path)
 
-        return _handle_api(event, context)
+        return _auth_error(event) or _handle_api(event, context)
     except Exception:
         logger.exception("Unhandled error: request_id=%s", request_id)
         return _response(500, json.dumps({"error": "Internal server error"}))
@@ -423,20 +552,38 @@ def _handle_upload_url(event: dict) -> dict:
     safe_name = Path(filename).name
     key = f"uploads/{uuid.uuid4().hex}_{safe_name}"
 
+    # Optional per-request feature config, url-safe base64 so it survives as ASCII
+    # S3 object metadata and gets read back in the S3-trigger transcription path.
+    put_params: dict[str, Any] = {
+        "Bucket": bucket,
+        "Key": key,
+        "ContentType": content_type,
+    }
+    required_headers = {"Content-Type": content_type}
+    metadata = {
+        name: params[q]
+        for name, q in (("features", "features_b64"), ("hotwords", "hotwords_b64"))
+        if params.get(q)
+    }
+    if metadata:
+        put_params["Metadata"] = metadata
+        required_headers.update({f"x-amz-meta-{k}": v for k, v in metadata.items()})
+
     s3 = _s3_client()
     presigned_url = s3.generate_presigned_url(
-        "put_object",
-        Params={
-            "Bucket": bucket,
-            "Key": key,
-            "ContentType": content_type,
-        },
-        ExpiresIn=3600,
+        "put_object", Params=put_params, ExpiresIn=3600
     )
 
     return _response(
         200,
-        json.dumps({"upload_url": presigned_url, "key": key, "bucket": bucket}),
+        json.dumps(
+            {
+                "upload_url": presigned_url,
+                "key": key,
+                "bucket": bucket,
+                "required_headers": required_headers,
+            }
+        ),
         {"Content-Type": "application/json"},
     )
 
@@ -554,6 +701,40 @@ def _handle_transcription_cancel(path: str) -> dict:
     )
 
 
+def _decode_b64(raw: str | None) -> str | None:
+    """Decode a url-safe base64 string stored in S3 object metadata."""
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        padded = raw + "=" * (-len(raw) % 4)
+        return base64.urlsafe_b64decode(padded).decode()
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
+def _decode_features_metadata(raw: str | None) -> dict | None:
+    """Decode the url-safe base64 features config stored in S3 object metadata."""
+    decoded = _decode_b64(raw)
+    if decoded is None:
+        return None
+    try:
+        return json.loads(decoded)
+    except json.JSONDecodeError:
+        logger.warning("Ignoring unparseable features metadata")
+        return None
+
+
+def _read_object_config(s3: Any, bucket: str, key: str) -> tuple[dict | None, str | None]:
+    """Read the optional per-request features + hotwords from S3 object metadata."""
+    try:
+        head = s3.head_object(Bucket=bucket, Key=key)
+    except Exception:
+        logger.warning("Could not read metadata for s3://%s/%s", bucket, key)
+        return None, None
+    meta = head.get("Metadata") or {}
+    return _decode_features_metadata(meta.get("features")), _decode_b64(meta.get("hotwords"))
+
+
 def _handle_s3(event: dict, context: Any) -> dict:
     """Process S3 put events — download, transcribe, upload result."""
     output_bucket = os.environ.get("AAVAAZ_OUTPUT_BUCKET", "")
@@ -594,6 +775,7 @@ def _handle_s3(event: dict, context: Any) -> dict:
             _write_status("processing", pct)
 
         try:
+            features, hotwords = _read_object_config(s3, bucket, key)
             with tempfile.TemporaryDirectory() as tmpdir:
                 local_path = os.path.join(tmpdir, os.path.basename(key))
                 s3.download_file(bucket, key, local_path)
@@ -601,6 +783,8 @@ def _handle_s3(event: dict, context: Any) -> dict:
                 result = _transcribe(
                     local_path,
                     progress_callback=_report_progress if output_bucket else None,
+                    features=features,
+                    hotwords=hotwords,
                 )
 
             if output_bucket:
@@ -804,7 +988,9 @@ def _handle_api(event: dict, context: Any) -> dict:
             )
 
         _store_audio(local_path)
-        result = _transcribe(local_path)
+        features = payload.get("features") if isinstance(payload, dict) else None
+        hotwords = payload.get("hotwords") if isinstance(payload, dict) else None
+        result = _transcribe(local_path, features=features, hotwords=hotwords)
 
     callback_url = payload.get("callback_url")
     if callback_url:

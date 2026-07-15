@@ -19,6 +19,7 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 - [ ] **Paragraph segmentation** — wired in Lambda only (`AAVAAZ_ENABLE_PARAGRAPHS`). Extend to Modal (`app.py`) and, if wanted, the streaming pipeline (needs a final-flush pass, since it groups across segments).
 - [ ] **Webhook delivery** — wired in Lambda only (synchronous, on `callback_url`). Add the async S3-trigger path (store the callback URL at upload, fire on completion) and mirror in Modal.
 - [ ] **Intelligence / formatting / PII / profanity** — wired in the streaming server (flags) and Lambda; mirror the same env-gated enrichment in Modal `app.py` for parity.
+- [x] **Per-request features in the batch Lambda** — `_handle_api` now reads `payload["features"]` (dashboard FeaturesConfig shape) and the S3-trigger path reads the same config from object metadata (`features_b64` → presign → `head_object`). Both override the env defaults. Diarization/translation/ensemble/noise-reduction are intentionally ignored here (not available in the faster-whisper batch path).
 
 ## SaaS
 
@@ -39,8 +40,11 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 ## Deploy / infra (unverified — no cloud build in CI)
 
 - [ ] Docker/Helm/Terraform changes made during the audit are unverified by an actual build/deploy. Add a CI job that at least builds the images and `helm template`s the chart.
-- [ ] Transcribe Lambda Function URL is unauthenticated by design (`deploy/terraform-lambda`); decide whether that is acceptable.
+- [x] Transcribe Lambda auth — opt-in `AAVAAZ_REQUIRE_API_KEY=1` gates the API paths on a valid SaaS key (Bearer, validated against DynamoDB); default off keeps the public web demo working. Usage metering still not wired (the S3 large-file path authenticates at presign time but transcribes later with no user context; attribution there needs user_id carried through object metadata).
 
 ## Dashboard
 
-- [ ] Team page is a client-only mock; custom vocabulary is collected but never sent; upload output-format selector is a no-op; status page reports "operational" for any response (`no-cors`). See the audit for the full list.
+- [ ] Team page is a client-only mock; status page reports "operational" for any response (`no-cors`); integrations page connects nothing. See the audit for the full list.
+- [x] Custom vocabulary — the upload page now sends `aavaaz-custom-vocab` as hotwords (JSON body + S3 metadata); the batch Lambda passes them to `model.transcribe`. Per-word boost is UI-only (faster-whisper hotwords has no weighting; words are ordered highest-boost first).
+- [x] Upload output-format selector — SRT/VTT now generate real cues instead of plain text with a fake extension.
+- [x] API key persistence — created keys are saved to `aavaaz-api-key` so batch requests carry `Authorization` (note: the transcribe Lambda still doesn't enforce it; unauthenticated by design).

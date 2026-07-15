@@ -327,3 +327,168 @@ def test_model_cached_across_calls(mock_whisper, _env):
     m2 = _get_model()
     assert m1 is m2
     mock_whisper.assert_called_once()
+
+
+def _pii_segments():
+    seg = MagicMock()
+    seg.start = 0.0
+    seg.end = 1.0
+    seg.text = "email me at john@example.com"
+    seg.words = []
+    return [seg]
+
+
+@patch("faster_whisper.WhisperModel")
+def test_handler_api_applies_request_features(mock_whisper, _env):
+    """Per-request features in the JSON body override env and run the pipeline."""
+    model = MagicMock()
+    model.transcribe.return_value = (_pii_segments(), _fake_info())
+    mock_whisper.return_value = model
+
+    from aavaaz.serverless.lambda_handler import handler
+
+    event = {
+        "body": json.dumps(
+            {
+                "audio_base64": base64.b64encode(b"x").decode(),
+                "filename": "a.wav",
+                "features": {
+                    "pii": {"enabled": True, "types": ["email"]},
+                    "intelligence": {"sentiment": True},
+                },
+            }
+        )
+    }
+    result = handler(event, None)
+
+    assert result["statusCode"] == 200
+    body = json.loads(result["body"])
+    text = body["segments"][0]["text"]
+    assert "john@example.com" not in text
+    assert "[EMAIL_REDACTED]" in text
+    # env has AAVAAZ_ENABLE_INTELLIGENCE unset, so this only runs via the request
+    assert "sentiment" in body.get("intelligence", {})
+
+
+def test_handler_api_requires_key_when_enabled(_env, monkeypatch):
+    """With auth on and no key, the transcription API is rejected."""
+    monkeypatch.setenv("AAVAAZ_REQUIRE_API_KEY", "1")
+    from aavaaz.serverless.lambda_handler import handler
+
+    event = {
+        "body": json.dumps(
+            {"audio_base64": base64.b64encode(b"x").decode(), "filename": "a.wav"}
+        )
+    }
+    result = handler(event, None)
+    assert result["statusCode"] == 401
+
+
+@patch("faster_whisper.WhisperModel")
+def test_handler_api_valid_key_allows(mock_whisper, _env, monkeypatch):
+    """A valid SaaS key passes the gate and transcription proceeds."""
+    model = MagicMock()
+    model.transcribe.return_value = (_fake_segments(), _fake_info())
+    mock_whisper.return_value = model
+    monkeypatch.setenv("AAVAAZ_REQUIRE_API_KEY", "1")
+
+    from aavaaz.serverless.lambda_handler import handler
+
+    event = {
+        "headers": {"Authorization": "Bearer good-key"},
+        "body": json.dumps(
+            {"audio_base64": base64.b64encode(b"x").decode(), "filename": "a.wav"}
+        ),
+    }
+    with patch(
+        "aavaaz.api.dynamo_store.validate_api_key", return_value="user-1"
+    ) as validate:
+        result = handler(event, None)
+
+    assert result["statusCode"] == 200
+    validate.assert_called_once_with("good-key")
+
+
+def test_handler_api_invalid_key_rejected(_env, monkeypatch):
+    """An unrecognized key is rejected with 401."""
+    monkeypatch.setenv("AAVAAZ_REQUIRE_API_KEY", "1")
+    from aavaaz.serverless.lambda_handler import handler
+
+    event = {
+        "headers": {"Authorization": "Bearer bad"},
+        "body": json.dumps(
+            {"audio_base64": base64.b64encode(b"x").decode(), "filename": "a.wav"}
+        ),
+    }
+    with patch("aavaaz.api.dynamo_store.validate_api_key", return_value=None):
+        result = handler(event, None)
+    assert result["statusCode"] == 401
+
+
+@patch("faster_whisper.WhisperModel")
+def test_handler_api_passes_hotwords(mock_whisper, _env):
+    """Custom-vocabulary hotwords in the JSON body reach the transcribe call."""
+    model = MagicMock()
+    model.transcribe.return_value = (_fake_segments(), _fake_info())
+    mock_whisper.return_value = model
+
+    from aavaaz.serverless.lambda_handler import handler
+
+    event = {
+        "body": json.dumps(
+            {
+                "audio_base64": base64.b64encode(b"x").decode(),
+                "filename": "a.wav",
+                "hotwords": "Kubernetes, Anthropic",
+            }
+        )
+    }
+    result = handler(event, None)
+
+    assert result["statusCode"] == 200
+    assert model.transcribe.call_args.kwargs.get("hotwords") == "Kubernetes, Anthropic"
+
+
+@patch("faster_whisper.WhisperModel")
+def test_s3_features_from_object_metadata(mock_whisper, _env, monkeypatch):
+    """The S3-trigger path reads per-request features from object metadata."""
+    model = MagicMock()
+    model.transcribe.return_value = (_pii_segments(), _fake_info())
+    mock_whisper.return_value = model
+
+    from aavaaz.serverless.lambda_handler import handler
+
+    features_b64 = (
+        base64.urlsafe_b64encode(
+            json.dumps({"pii": {"enabled": True, "types": ["email"]}}).encode()
+        )
+        .decode()
+        .rstrip("=")
+    )
+
+    event = {
+        "Records": [
+            {"s3": {"bucket": {"name": "in"}, "object": {"key": "clip.wav"}}}
+        ]
+    }
+
+    with patch("aavaaz.serverless.lambda_handler._s3_client") as mock_s3:
+        s3 = MagicMock()
+        mock_s3.return_value = s3
+        s3.download_file.side_effect = lambda b, k, p: open(p, "wb").close()
+        s3.head_object.return_value = {"Metadata": {"features": features_b64}}
+
+        monkeypatch.setenv("AAVAAZ_OUTPUT_BUCKET", "out")
+        result = handler(event, None)
+
+    assert result["statusCode"] == 200
+    transcript_call = next(
+        c
+        for c in s3.put_object.call_args_list
+        if c.kwargs.get("Key", "").endswith(".json")
+        and not c.kwargs.get("Key", "").endswith(".progress.json")
+    )
+    written = json.loads(transcript_call.kwargs["Body"].decode())
+    text = written["segments"][0]["text"]
+    assert "john@example.com" not in text
+    assert "[EMAIL_REDACTED]" in text

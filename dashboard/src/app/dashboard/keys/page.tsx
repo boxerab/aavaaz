@@ -39,6 +39,9 @@ export default function ApiKeysPage() {
       if (token) {
         const result = await apiKeys.create(token, newKeyName);
         setNewKeySecret(result.secret);
+        // the secret is only returned once; store it so upload/batch requests
+        // from this browser can authenticate.
+        localStorage.setItem("aavaaz-api-key", result.secret);
         setKeys((prev) => [...prev, result.key]);
         setNewKeyName("");
       }
@@ -77,7 +80,8 @@ export default function ApiKeysPage() {
       {newKeySecret && (
         <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
           <p className="text-sm font-medium mb-2">
-            Your new API key (copy it now — it won&apos;t be shown again):
+            Your new API key (copy it now — it won&apos;t be shown again). Saved as the
+            active key for requests from this browser.
           </p>
           <div className="flex items-center gap-2">
             <code className="flex-1 bg-muted rounded px-3 py-2 text-sm font-mono">

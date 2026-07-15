@@ -18,6 +18,30 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+// custom vocabulary (saved by the vocabulary page) → hotwords string,
+// highest-boost words first since faster-whisper hotwords has no per-word weight.
+function loadHotwords(): string {
+  try {
+    const stored = localStorage.getItem("aavaaz-custom-vocab");
+    if (!stored) return "";
+    const entries = JSON.parse(stored) as { word: string; boost: number }[];
+    return entries
+      .slice()
+      .sort((a, b) => b.boost - a.boost)
+      .map((e) => e.word)
+      .join(", ");
+  } catch {
+    return "";
+  }
+}
+
+function toUrlSafeB64(value: string): string {
+  return btoa(unescape(encodeURIComponent(value)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
 export default function UploadPage() {
   const {
     file, setFile,
@@ -70,13 +94,14 @@ export default function UploadPage() {
       } catch { /* ignore */ }
 
       const apiKey = localStorage.getItem("aavaaz-api-key") || "";
+      const hotwords = loadHotwords();
 
       // For files > 4MB, use S3 presigned URL upload path
       // For smaller files, use direct base64 JSON (faster, no S3 round-trip)
       if (file.size > 4 * 1024 * 1024) {
-        await transcribeLargeFile(file, features, apiKey, t0);
+        await transcribeLargeFile(file, features, apiKey, hotwords, t0);
       } else {
-        await transcribeSmallFile(file, features, apiKey, t0);
+        await transcribeSmallFile(file, features, apiKey, hotwords, t0);
       }
     } catch (err) {
       if (cancelRequestedRef.current) {
@@ -135,6 +160,7 @@ export default function UploadPage() {
     file: File,
     features: Record<string, unknown> | null,
     apiKey: string,
+    hotwords: string,
     t0: number
   ) {
     // Step 1: Get presigned upload URL
@@ -144,6 +170,10 @@ export default function UploadPage() {
       filename: file.name,
       content_type: file.type || "application/octet-stream",
     });
+    // pass feature config + hotwords through S3 object metadata so the S3-trigger
+    // transcription applies them (the S3 path has no request body of its own).
+    if (features) urlParams.set("features_b64", toUrlSafeB64(JSON.stringify(features)));
+    if (hotwords) urlParams.set("hotwords_b64", toUrlSafeB64(hotwords));
     const headers: Record<string, string> = {};
     if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
@@ -154,7 +184,7 @@ export default function UploadPage() {
     if (!urlRes.ok) {
       throw new Error(`Failed to get upload URL: ${await urlRes.text()}`);
     }
-    const { upload_url, key } = await urlRes.json();
+    const { upload_url, key, required_headers } = await urlRes.json();
     activeUploadKeyRef.current = key;
 
     // Step 2: Upload file directly to S3 via presigned URL (no size limit)
@@ -165,7 +195,10 @@ export default function UploadPage() {
       const xhr = new XMLHttpRequest();
       activeXhrRef.current = xhr;
       xhr.open("PUT", upload_url);
-      xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+      const putHeaders: Record<string, string> = required_headers || {
+        "Content-Type": file.type || "application/octet-stream",
+      };
+      Object.entries(putHeaders).forEach(([h, v]) => xhr.setRequestHeader(h, v as string));
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
@@ -264,6 +297,7 @@ export default function UploadPage() {
     file: File,
     features: Record<string, unknown> | null,
     apiKey: string,
+    hotwords: string,
     t0: number
   ) {
     // Direct base64 upload (faster for small files)
@@ -285,6 +319,7 @@ export default function UploadPage() {
       response_format: format,
     };
     if (features) body.features = features;
+    if (hotwords) body.hotwords = hotwords;
 
     // Use XMLHttpRequest for upload progress
     const response = await new Promise<string>((resolve, reject) => {
@@ -371,14 +406,53 @@ export default function UploadPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  function subtitleTimestamp(seconds: number, sep: "," | "."): string {
+    const pad = (n: number, w = 2) => Math.floor(n).toString().padStart(w, "0");
+    const h = seconds / 3600;
+    const m = (seconds % 3600) / 60;
+    const s = seconds % 60;
+    const ms = Math.floor((seconds % 1) * 1000);
+    return `${pad(h)}:${pad(m)}:${pad(s)}${sep}${pad(ms, 3)}`;
+  }
+
+  function buildSubtitles(kind: "srt" | "vtt"): string {
+    const sep = kind === "srt" ? "," : ".";
+    const lines: string[] = [];
+    if (kind === "vtt") lines.push("WEBVTT", "");
+    (result?.segments ?? []).forEach((seg, i) => {
+      if (kind === "srt") lines.push(String(i + 1));
+      lines.push(`${subtitleTimestamp(seg.start, sep)} --> ${subtitleTimestamp(seg.end, sep)}`);
+      lines.push(seg.text);
+      lines.push("");
+    });
+    return lines.join("\n");
+  }
+
   function downloadResult() {
-    const text = format === "json" ? JSON.stringify(result, null, 2) : getFullText();
-    const ext = format === "json" ? "json" : format === "srt" ? "srt" : format === "vtt" ? "vtt" : "txt";
-    const blob = new Blob([text], { type: "text/plain" });
+    const hasSegments = (result?.segments?.length ?? 0) > 0;
+    let text: string;
+    let ext: string;
+    let mime: string;
+    if (format === "json") {
+      text = JSON.stringify(result, null, 2);
+      ext = "json";
+      mime = "application/json";
+    } else if ((format === "srt" || format === "vtt") && hasSegments) {
+      text = buildSubtitles(format);
+      ext = format;
+      mime = format === "vtt" ? "text/vtt" : "application/x-subrip";
+    } else {
+      // plain text, or subtitle format requested without timestamped segments
+      text = getFullText();
+      ext = "txt";
+      mime = "text/plain";
+    }
+    const base = (file?.name || "transcript").replace(/\.[^/.]+$/, "");
+    const blob = new Blob([text], { type: mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${file?.name || "transcript"}.${ext}`;
+    a.download = `${base}.${ext}`;
     a.click();
     URL.revokeObjectURL(url);
   }

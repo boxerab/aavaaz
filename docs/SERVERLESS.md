@@ -92,6 +92,25 @@ All configuration is via environment variables on the Lambda function:
 | `AAVAAZ_OUTPUT_PREFIX` | `transcripts/` | Key prefix in the output bucket |
 | `AAVAAZ_ENABLE_PII` | `0` | Set to `1` to enable PII redaction |
 | `AAVAAZ_ENABLE_FORMAT` | `1` | Set to `1` to enable smart formatting |
+| `AAVAAZ_REQUIRE_API_KEY` | `0` | Set to `1` to require a valid SaaS API key (Bearer token, validated against DynamoDB) on the API paths. The web-demo UI and `/health` stay open. |
+
+## Per-request options
+
+The REST API accepts optional fields in the JSON body that override the env
+defaults for that request:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `features` | object | Feature config (dashboard `FeaturesConfig` shape): `formatting`, `pii`, `profanity`, `intelligence`. Overrides the `AAVAAZ_ENABLE_*` defaults. |
+| `hotwords` | string | Custom-vocabulary terms to bias recognition. |
+
+The S3-trigger path has no request body, so the large-file upload flow carries
+the same options as url-safe base64 in `/v1/upload-url` query params
+(`features_b64`, `hotwords_b64`); they are stored as S3 object metadata and read
+back when the upload event fires.
+
+When `AAVAAZ_REQUIRE_API_KEY=1`, send `Authorization: Bearer <key>` on all API
+requests.
 
 ## Terraform Variables
 
