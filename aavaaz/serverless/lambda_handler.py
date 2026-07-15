@@ -472,22 +472,51 @@ def _extract_bearer(event: dict) -> str | None:
     return None
 
 
-def _auth_error(event: dict) -> dict | None:
-    """Return a 401 response when API-key auth is required and the key is missing/invalid.
+def _authenticate(event: dict) -> tuple[str | None, dict | None]:
+    """Resolve the caller's user_id, or a 401 response.
 
-    Auth is opt-in via AAVAAZ_REQUIRE_API_KEY=1 and validates the Bearer token against
-    the SaaS DynamoDB store. Returns None when the request is allowed.
+    Returns (user_id, None) when allowed, (None, response) when rejected. Auth is
+    opt-in via AAVAAZ_REQUIRE_API_KEY=1 and validates the Bearer token against the
+    SaaS DynamoDB store. When off, returns (None, None): the request proceeds
+    unauthenticated (and therefore unmetered).
     """
     if os.environ.get("AAVAAZ_REQUIRE_API_KEY", "0") != "1":
-        return None
+        return None, None
     token = _extract_bearer(event)
     if not token:
-        return _response(401, json.dumps({"error": "Missing API key"}))
+        return None, _response(401, json.dumps({"error": "Missing API key"}))
     from aavaaz.api import dynamo_store
 
-    if dynamo_store.validate_api_key(token) is None:
-        return _response(401, json.dumps({"error": "Invalid API key"}))
-    return None
+    user_id = dynamo_store.validate_api_key(token)
+    if user_id is None:
+        return None, _response(401, json.dumps({"error": "Invalid API key"}))
+    return user_id, None
+
+
+def _record_usage(user_id: str | None, result: dict, source_name: str | None) -> None:
+    """Record SaaS usage + a transcript record for an authenticated request.
+
+    No-op when unauthenticated. Failures are swallowed so metering never breaks the
+    transcription response.
+    """
+    if not user_id:
+        return
+    from decimal import Decimal
+
+    from aavaaz.api import dynamo_store
+
+    duration = float(result.get("duration") or 0.0)
+    with contextlib.suppress(Exception):
+        dynamo_store.record_usage(user_id, duration / 60.0)
+        dynamo_store.save_transcript(
+            user_id,
+            {
+                "id": uuid.uuid4().hex,
+                "filename": source_name or "audio",
+                "duration": Decimal(str(round(duration, 2))),
+                "language": result.get("language") or "",
+            },
+        )
 
 
 def handler(event: dict, context: Any) -> dict:
@@ -516,21 +545,25 @@ def handler(event: dict, context: Any) -> dict:
             if path == "/health":
                 return _response(200, json.dumps({"status": "ok", "mode": "batch"}))
             if path == "/v1/upload-url":
-                return _auth_error(event) or _handle_upload_url(event)
+                user_id, err = _authenticate(event)
+                return err or _handle_upload_url(event, user_id)
             if path.startswith("/v1/transcription/"):
-                return _auth_error(event) or _handle_transcription_status(event, path)
+                _, err = _authenticate(event)
+                return err or _handle_transcription_status(event, path)
             return _handle_web_ui(event, path)
 
         if method == "DELETE" and path.startswith("/v1/transcription/"):
-            return _auth_error(event) or _handle_transcription_cancel(path)
+            _, err = _authenticate(event)
+            return err or _handle_transcription_cancel(path)
 
-        return _auth_error(event) or _handle_api(event, context)
+        user_id, err = _authenticate(event)
+        return err or _handle_api(event, context, user_id)
     except Exception:
         logger.exception("Unhandled error: request_id=%s", request_id)
         return _response(500, json.dumps({"error": "Internal server error"}))
 
 
-def _handle_upload_url(event: dict) -> dict:
+def _handle_upload_url(event: dict, user_id: str | None = None) -> dict:
     """Generate a presigned S3 PUT URL for direct browser upload.
 
     Query params:
@@ -565,6 +598,8 @@ def _handle_upload_url(event: dict) -> dict:
         for name, q in (("features", "features_b64"), ("hotwords", "hotwords_b64"))
         if params.get(q)
     }
+    if user_id:
+        metadata["user_id"] = user_id
     if metadata:
         put_params["Metadata"] = metadata
         required_headers.update({f"x-amz-meta-{k}": v for k, v in metadata.items()})
@@ -724,15 +759,22 @@ def _decode_features_metadata(raw: str | None) -> dict | None:
         return None
 
 
-def _read_object_config(s3: Any, bucket: str, key: str) -> tuple[dict | None, str | None]:
-    """Read the optional per-request features + hotwords from S3 object metadata."""
+def _read_object_config(
+    s3: Any, bucket: str, key: str
+) -> tuple[dict | None, str | None, str | None]:
+    """Read optional per-request features + hotwords + user_id from S3 object metadata."""
     try:
         head = s3.head_object(Bucket=bucket, Key=key)
     except Exception:
         logger.warning("Could not read metadata for s3://%s/%s", bucket, key)
-        return None, None
+        return None, None, None
     meta = head.get("Metadata") or {}
-    return _decode_features_metadata(meta.get("features")), _decode_b64(meta.get("hotwords"))
+    user_id = meta.get("user_id")
+    return (
+        _decode_features_metadata(meta.get("features")),
+        _decode_b64(meta.get("hotwords")),
+        user_id if isinstance(user_id, str) else None,
+    )
 
 
 def _handle_s3(event: dict, context: Any) -> dict:
@@ -775,7 +817,7 @@ def _handle_s3(event: dict, context: Any) -> dict:
             _write_status("processing", pct)
 
         try:
-            features, hotwords = _read_object_config(s3, bucket, key)
+            features, hotwords, user_id = _read_object_config(s3, bucket, key)
             with tempfile.TemporaryDirectory() as tmpdir:
                 local_path = os.path.join(tmpdir, os.path.basename(key))
                 s3.download_file(bucket, key, local_path)
@@ -794,6 +836,8 @@ def _handle_s3(event: dict, context: Any) -> dict:
                         "Skipping canceled transcription for s3://%s/%s", bucket, key
                     )
                     continue
+
+            _record_usage(user_id, result, os.path.basename(key))
 
             output = _format_output(result)
             ext = (
@@ -933,7 +977,7 @@ def _parse_multipart(event: dict) -> tuple[bytes | None, str | None, str | None]
     return file_bytes, filename, response_format
 
 
-def _handle_api(event: dict, context: Any) -> dict:
+def _handle_api(event: dict, context: Any, user_id: str | None = None) -> dict:
     """Process API Gateway (REST or HTTP API) requests.
 
     Accepts:
@@ -950,7 +994,7 @@ def _handle_api(event: dict, context: Any) -> dict:
             break
 
     if "multipart/form-data" in content_type:
-        return _handle_multipart(event)
+        return _handle_multipart(event, user_id)
 
     try:
         body = event.get("body", "{}")
@@ -991,6 +1035,9 @@ def _handle_api(event: dict, context: Any) -> dict:
         features = payload.get("features") if isinstance(payload, dict) else None
         hotwords = payload.get("hotwords") if isinstance(payload, dict) else None
         result = _transcribe(local_path, features=features, hotwords=hotwords)
+        source_name = os.path.basename(local_path)
+
+    _record_usage(user_id, result, source_name)
 
     callback_url = payload.get("callback_url")
     if callback_url:
@@ -1005,7 +1052,7 @@ def _handle_api(event: dict, context: Any) -> dict:
     return _response(200, output, {"Content-Type": content_type})
 
 
-def _handle_multipart(event: dict) -> dict:
+def _handle_multipart(event: dict, user_id: str | None = None) -> dict:
     """Handle multipart/form-data file upload from the web demo."""
     file_bytes, filename, response_format = _parse_multipart(event)
     if file_bytes is None:
@@ -1026,6 +1073,8 @@ def _handle_multipart(event: dict) -> dict:
         )
         _store_audio(local_path, safe_name)
         result = _transcribe(local_path)
+
+    _record_usage(user_id, result, safe_name)
 
     fmt = response_format or os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json")
     if fmt == "text":

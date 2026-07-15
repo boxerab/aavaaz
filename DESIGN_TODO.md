@@ -23,7 +23,7 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 
 ## SaaS
 
-- [ ] **Usage metering is disconnected** — `record_usage` / `record_transcript` are never called from any transcription path, so `/v1/saas/usage` and `/v1/saas/transcripts` always report zero / empty. Wire them into the transcription completion path (Lambda handler and/or SaaS-authenticated requests).
+- [x] **Usage metering** — the batch Lambda now records usage + a transcript record on the transcription completion path for authenticated requests. `_handle_api`/`_handle_multipart` use the resolved `user_id`; the S3 large-file path carries `user_id` through object metadata (set at presign time) and meters in `_handle_s3`. Metering is a no-op when unauthenticated (public demo). Requires `AAVAAZ_REQUIRE_API_KEY=1` to have a user to attribute to.
 - [ ] Consider collapsing the dual SaaS implementation (`api/saas.py` vs `serverless/saas_lambda.py`) behind a shared route factory + store interface. Deferred; the shared `api/plans.py` mitigates the worst drift for now.
 
 ## Upstream (WhisperLive) — not fixable in this repo
@@ -40,7 +40,7 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 ## Deploy / infra (unverified — no cloud build in CI)
 
 - [ ] Docker/Helm/Terraform changes made during the audit are unverified by an actual build/deploy. Add a CI job that at least builds the images and `helm template`s the chart.
-- [x] Transcribe Lambda auth — opt-in `AAVAAZ_REQUIRE_API_KEY=1` gates the API paths on a valid SaaS key (Bearer, validated against DynamoDB); default off keeps the public web demo working. Usage metering still not wired (the S3 large-file path authenticates at presign time but transcribes later with no user context; attribution there needs user_id carried through object metadata).
+- [x] Transcribe Lambda auth — opt-in `AAVAAZ_REQUIRE_API_KEY=1` gates the API paths on a valid SaaS key (Bearer, validated against DynamoDB); default off keeps the public web demo working. Usage metering is wired on top of this (see SaaS section).
 
 ## Dashboard
 

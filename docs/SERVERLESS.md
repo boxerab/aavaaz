@@ -110,7 +110,10 @@ the same options as url-safe base64 in `/v1/upload-url` query params
 back when the upload event fires.
 
 When `AAVAAZ_REQUIRE_API_KEY=1`, send `Authorization: Bearer <key>` on all API
-requests.
+requests. Authenticated requests are metered: each completed transcription records
+usage and a transcript record for the key's user (readable via the SaaS
+`/v1/saas/usage` and `/v1/saas/transcripts` endpoints). Unauthenticated requests
+are not metered.
 
 ## Terraform Variables
 

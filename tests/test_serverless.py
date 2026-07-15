@@ -400,13 +400,22 @@ def test_handler_api_valid_key_allows(mock_whisper, _env, monkeypatch):
             {"audio_base64": base64.b64encode(b"x").decode(), "filename": "a.wav"}
         ),
     }
-    with patch(
-        "aavaaz.api.dynamo_store.validate_api_key", return_value="user-1"
-    ) as validate:
+    with (
+        patch(
+            "aavaaz.api.dynamo_store.validate_api_key", return_value="user-1"
+        ) as validate,
+        patch("aavaaz.api.dynamo_store.record_usage") as record_usage,
+        patch("aavaaz.api.dynamo_store.save_transcript") as save_transcript,
+    ):
         result = handler(event, None)
 
     assert result["statusCode"] == 200
     validate.assert_called_once_with("good-key")
+    # metering runs for the authenticated user
+    record_usage.assert_called_once()
+    assert record_usage.call_args.args[0] == "user-1"
+    save_transcript.assert_called_once()
+    assert save_transcript.call_args.args[0] == "user-1"
 
 
 def test_handler_api_invalid_key_rejected(_env, monkeypatch):
@@ -492,3 +501,33 @@ def test_s3_features_from_object_metadata(mock_whisper, _env, monkeypatch):
     text = written["segments"][0]["text"]
     assert "john@example.com" not in text
     assert "[EMAIL_REDACTED]" in text
+
+
+@patch("faster_whisper.WhisperModel")
+def test_s3_records_usage_with_user_metadata(mock_whisper, _env, monkeypatch):
+    """The S3 path meters usage when object metadata carries a user_id."""
+    model = MagicMock()
+    model.transcribe.return_value = (_fake_segments(), _fake_info())
+    mock_whisper.return_value = model
+
+    from aavaaz.serverless.lambda_handler import handler
+
+    event = {
+        "Records": [{"s3": {"bucket": {"name": "in"}, "object": {"key": "clip.wav"}}}]
+    }
+
+    with (
+        patch("aavaaz.serverless.lambda_handler._s3_client") as mock_s3,
+        patch("aavaaz.api.dynamo_store.record_usage") as record_usage,
+        patch("aavaaz.api.dynamo_store.save_transcript"),
+    ):
+        s3 = MagicMock()
+        mock_s3.return_value = s3
+        s3.download_file.side_effect = lambda b, k, p: open(p, "wb").close()
+        s3.head_object.return_value = {"Metadata": {"user_id": "user-9"}}
+        monkeypatch.setenv("AAVAAZ_OUTPUT_BUCKET", "out")
+        result = handler(event, None)
+
+    assert result["statusCode"] == 200
+    record_usage.assert_called_once()
+    assert record_usage.call_args.args[0] == "user-9"
