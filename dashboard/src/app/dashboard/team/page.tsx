@@ -1,87 +1,94 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { UserPlus, Shield, Trash2, Mail, Crown } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { team, TeamMember, TeamRole } from "@/lib/api";
 
-type Role = "owner" | "admin" | "member" | "viewer";
+type DisplayRole = "owner" | TeamRole;
 
-interface TeamMember {
-  id: string;
-  email: string;
-  name: string;
-  role: Role;
-  joinedAt: string;
-  lastActive: string;
-}
-
-const DEMO_MEMBERS: TeamMember[] = [
-  {
-    id: "1",
-    email: "you@company.com",
-    name: "You",
-    role: "owner",
-    joinedAt: "2024-01-15",
-    lastActive: "Just now",
-  },
-  {
-    id: "2",
-    email: "alice@company.com",
-    name: "Alice Chen",
-    role: "admin",
-    joinedAt: "2024-02-01",
-    lastActive: "2h ago",
-  },
-  {
-    id: "3",
-    email: "bob@company.com",
-    name: "Bob Smith",
-    role: "member",
-    joinedAt: "2024-03-10",
-    lastActive: "1d ago",
-  },
-];
-
-const ROLE_COLORS: Record<Role, string> = {
+const ROLE_COLORS: Record<DisplayRole, string> = {
   owner: "bg-amber-500/10 text-amber-400",
   admin: "bg-purple-500/10 text-purple-400",
   member: "bg-blue-500/10 text-blue-400",
   viewer: "bg-muted text-muted-foreground",
 };
 
-const ROLE_PERMISSIONS: Record<Role, string> = {
+const ROLE_PERMISSIONS: Record<DisplayRole, string> = {
   owner: "Full access, billing, delete workspace",
   admin: "Manage team, API keys, settings",
   member: "Use API, view transcripts, upload files",
   viewer: "View transcripts and logs only",
 };
 
+function nameFromEmail(email: string): string {
+  return email.split("@")[0] || email;
+}
+
 export default function TeamPage() {
-  const [members, setMembers] = useState<TeamMember[]>(DEMO_MEMBERS);
+  const { user, getToken } = useAuth();
+  const [members, setMembers] = useState<TeamMember[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<Role>("member");
+  const [inviteRole, setInviteRole] = useState<TeamRole>("member");
   const [showInvite, setShowInvite] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  function inviteMember() {
-    if (!inviteEmail.trim()) return;
-    const newMember: TeamMember = {
-      id: crypto.randomUUID(),
-      email: inviteEmail.trim(),
-      name: inviteEmail.split("@")[0],
-      role: inviteRole,
-      joinedAt: new Date().toISOString().split("T")[0],
-      lastActive: "Invited",
-    };
-    setMembers([...members, newMember]);
-    setInviteEmail("");
-    setShowInvite(false);
+  const load = useCallback(async () => {
+    const token = await getToken();
+    if (!token) return;
+    try {
+      setMembers(await team.list(token));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load team");
+    }
+  }, [getToken]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function inviteMember() {
+    const email = inviteEmail.trim();
+    if (!email) return;
+    setBusy(true);
+    setError("");
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const member = await team.invite(token, email, inviteRole);
+      setMembers((prev) => [...prev, member]);
+      setInviteEmail("");
+      setShowInvite(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to invite member");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function removeMember(id: string) {
-    setMembers(members.filter((m) => m.id !== id));
+  async function removeMember(id: string) {
+    const token = await getToken();
+    if (!token) return;
+    try {
+      await team.remove(token, id);
+      setMembers((prev) => prev.filter((m) => m.id !== id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to remove member");
+    }
   }
 
-  function changeRole(id: string, role: Role) {
-    setMembers(members.map((m) => (m.id === id ? { ...m, role } : m)));
+  async function changeRole(id: string, role: TeamRole) {
+    const token = await getToken();
+    if (!token) return;
+    const prev = members;
+    setMembers((ms) => ms.map((m) => (m.id === id ? { ...m, role } : m)));
+    try {
+      await team.updateRole(token, id, role);
+    } catch (e) {
+      setMembers(prev); // revert on failure
+      setError(e instanceof Error ? e.message : "Failed to update role");
+    }
   }
 
   return (
@@ -102,6 +109,12 @@ export default function TeamPage() {
         </button>
       </div>
 
+      {error && (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
+
       {/* Invite form */}
       {showInvite && (
         <div className="rounded-lg border bg-card p-5 space-y-4">
@@ -119,7 +132,7 @@ export default function TeamPage() {
             </div>
             <select
               value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value as Role)}
+              onChange={(e) => setInviteRole(e.target.value as TeamRole)}
               className="rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
               <option value="admin">Admin</option>
@@ -128,7 +141,7 @@ export default function TeamPage() {
             </select>
             <button
               onClick={inviteMember}
-              disabled={!inviteEmail.trim()}
+              disabled={!inviteEmail.trim() || busy}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
               <Mail className="h-3.5 w-3.5" />
@@ -146,54 +159,69 @@ export default function TeamPage() {
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Member</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Role</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Joined</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Last Active</th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
+            {/* current user is always the owner */}
+            {user && (
+              <tr className="hover:bg-muted/30 transition-colors">
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
+                      {nameFromEmail(user.email).charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">{nameFromEmail(user.email)}</p>
+                      <p className="text-xs text-muted-foreground">{user.email}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS.owner}`}>
+                    <Crown className="h-3 w-3" />
+                    Owner
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-muted-foreground text-xs">&mdash;</td>
+                <td className="px-4 py-3" />
+              </tr>
+            )}
             {members.map((member) => (
               <tr key={member.id} className="hover:bg-muted/30 transition-colors">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
-                      {member.name.charAt(0).toUpperCase()}
+                      {nameFromEmail(member.email).charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="font-medium text-foreground">{member.name}</p>
+                      <p className="font-medium text-foreground">{nameFromEmail(member.email)}</p>
                       <p className="text-xs text-muted-foreground">{member.email}</p>
                     </div>
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  {member.role === "owner" ? (
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[member.role]}`}>
-                      <Crown className="h-3 w-3" />
-                      Owner
-                    </span>
-                  ) : (
-                    <select
-                      value={member.role}
-                      onChange={(e) => changeRole(member.id, e.target.value as Role)}
-                      className={`text-xs font-medium px-2 py-0.5 rounded border-0 bg-transparent cursor-pointer ${ROLE_COLORS[member.role]}`}
-                    >
-                      <option value="admin">Admin</option>
-                      <option value="member">Member</option>
-                      <option value="viewer">Viewer</option>
-                    </select>
-                  )}
+                  <select
+                    value={member.role}
+                    onChange={(e) => changeRole(member.id, e.target.value as TeamRole)}
+                    className={`text-xs font-medium px-2 py-0.5 rounded border-0 bg-transparent cursor-pointer ${ROLE_COLORS[member.role]}`}
+                  >
+                    <option value="admin">Admin</option>
+                    <option value="member">Member</option>
+                    <option value="viewer">Viewer</option>
+                  </select>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground text-xs">{member.joinedAt}</td>
-                <td className="px-4 py-3 text-muted-foreground text-xs">{member.lastActive}</td>
+                <td className="px-4 py-3 text-muted-foreground text-xs">
+                  {member.created_at ? member.created_at.slice(0, 10) : "—"}
+                </td>
                 <td className="px-4 py-3 text-right">
-                  {member.role !== "owner" && (
-                    <button
-                      onClick={() => removeMember(member.id)}
-                      className="p-1.5 rounded text-muted-foreground hover:text-red-400 transition-colors"
-                      title="Remove member"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => removeMember(member.id)}
+                    className="p-1.5 rounded text-muted-foreground hover:text-red-400 transition-colors"
+                    title="Remove member"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </td>
               </tr>
             ))}
@@ -208,7 +236,7 @@ export default function TeamPage() {
           <h3 className="font-semibold">Role Permissions</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {(Object.entries(ROLE_PERMISSIONS) as [Role, string][]).map(([role, desc]) => (
+          {(Object.entries(ROLE_PERMISSIONS) as [DisplayRole, string][]).map(([role, desc]) => (
             <div key={role} className="flex items-start gap-2">
               <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium mt-0.5 ${ROLE_COLORS[role]}`}>
                 {role}

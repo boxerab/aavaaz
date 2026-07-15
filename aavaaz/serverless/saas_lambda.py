@@ -116,6 +116,15 @@ class CreateKeyRequest(BaseModel):
     name: str
 
 
+class InviteMemberRequest(BaseModel):
+    email: str
+    role: str = "member"
+
+
+class UpdateMemberRequest(BaseModel):
+    role: str
+
+
 class CheckoutRequest(BaseModel):
     plan: str
 
@@ -148,6 +157,50 @@ async def revoke_api_key(key_id: str, claims: dict = Depends(require_auth)):
     if not success:
         raise HTTPException(status_code=404, detail="API key not found")
     return {"status": "revoked"}
+
+
+# ─── Team Endpoints ──────────────────────────────────────────────────────────
+
+
+@app.get("/v1/saas/team")
+async def list_team(claims: dict = Depends(require_auth)):
+    return db.list_members(claims["sub"])
+
+
+@app.post("/v1/saas/team")
+async def invite_member(
+    body: InviteMemberRequest, claims: dict = Depends(require_auth)
+):
+    email = body.email.strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    if body.role not in db.TEAM_ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid role '{body.role}'")
+    try:
+        return db.add_member(claims["sub"], email, body.role)
+    except ValueError:
+        raise HTTPException(
+            status_code=409, detail="Member already exists"
+        ) from None
+
+
+@app.patch("/v1/saas/team/{member_id}")
+async def update_member(
+    member_id: str, body: UpdateMemberRequest, claims: dict = Depends(require_auth)
+):
+    if body.role not in db.TEAM_ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid role '{body.role}'")
+    member = db.update_member_role(claims["sub"], member_id, body.role)
+    if member is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    return member
+
+
+@app.delete("/v1/saas/team/{member_id}")
+async def remove_member(member_id: str, claims: dict = Depends(require_auth)):
+    if not db.remove_member(claims["sub"], member_id):
+        raise HTTPException(status_code=404, detail="Member not found")
+    return {"status": "removed"}
 
 
 # ─── Usage Endpoints ─────────────────────────────────────────────────────────

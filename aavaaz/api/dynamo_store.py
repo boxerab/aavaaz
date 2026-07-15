@@ -9,6 +9,7 @@ Tables:
   - aavaaz-usage-{env}: Daily usage records per user
   - aavaaz-subscriptions-{env}: User subscription state
   - aavaaz-transcripts-{env}: Transcript job history
+  - aavaaz-team-{env}: Team members (partition owner_id, sort member_id)
 """
 
 import contextlib
@@ -22,6 +23,7 @@ from decimal import Decimal
 
 import boto3
 from boto3.dynamodb.conditions import Key
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,9 @@ _table_api_keys = _dynamodb.Table(f"aavaaz-api-keys-{ENV}")
 _table_usage = _dynamodb.Table(f"aavaaz-usage-{ENV}")
 _table_subscriptions = _dynamodb.Table(f"aavaaz-subscriptions-{ENV}")
 _table_transcripts = _dynamodb.Table(f"aavaaz-transcripts-{ENV}")
+_table_team = _dynamodb.Table(f"aavaaz-team-{ENV}")
+
+TEAM_ROLES = {"admin", "member", "viewer"}
 
 
 # ─── API Keys ────────────────────────────────────────────────────────────────
@@ -247,3 +252,68 @@ def get_transcript(user_id: str, created_at: str) -> dict | None:
         Key={"user_id": user_id, "created_at": created_at}
     )
     return response.get("Item")
+
+
+# ─── Team Members ────────────────────────────────────────────────────────────
+
+
+def list_members(owner_id: str) -> list[dict]:
+    """List team members for an owner."""
+    response = _table_team.query(
+        KeyConditionExpression=Key("owner_id").eq(owner_id)
+    )
+    return [_member_view(item) for item in response.get("Items", [])]
+
+
+def add_member(owner_id: str, email: str, role: str) -> dict:
+    """Add a team member. Raises ValueError on duplicate email."""
+    existing = _table_team.query(KeyConditionExpression=Key("owner_id").eq(owner_id))
+    if any(item.get("email") == email for item in existing.get("Items", [])):
+        raise ValueError("Member already exists")
+
+    item = {
+        "owner_id": owner_id,
+        "member_id": str(uuid.uuid4()),
+        "email": email,
+        "role": role,
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+    _table_team.put_item(Item=item)
+    return _member_view(item)
+
+
+def update_member_role(owner_id: str, member_id: str, role: str) -> dict | None:
+    """Update a member's role. Returns the member, or None if not found."""
+    try:
+        response = _table_team.update_item(
+            Key={"owner_id": owner_id, "member_id": member_id},
+            UpdateExpression="SET #r = :role",
+            ConditionExpression="attribute_exists(member_id)",
+            ExpressionAttributeNames={"#r": "role"},
+            ExpressionAttributeValues={":role": role},
+            ReturnValues="ALL_NEW",
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            return None
+        raise
+    return _member_view(response["Attributes"])
+
+
+def remove_member(owner_id: str, member_id: str) -> bool:
+    """Remove a team member. Returns True if a member was deleted."""
+    response = _table_team.delete_item(
+        Key={"owner_id": owner_id, "member_id": member_id},
+        ReturnValues="ALL_OLD",
+    )
+    return "Attributes" in response
+
+
+def _member_view(item: dict) -> dict:
+    """Project a stored member item to the API shape (drops owner_id)."""
+    return {
+        "id": item["member_id"],
+        "email": item.get("email", ""),
+        "role": item.get("role", "member"),
+        "created_at": item.get("created_at", ""),
+    }

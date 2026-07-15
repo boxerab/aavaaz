@@ -218,6 +218,25 @@ resource "aws_dynamodb_table" "transcripts" {
   tags = { Environment = var.environment }
 }
 
+resource "aws_dynamodb_table" "team" {
+  name         = "aavaaz-team-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "owner_id"
+  range_key    = "member_id"
+
+  attribute {
+    name = "owner_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "member_id"
+    type = "S"
+  }
+
+  tags = { Environment = var.environment }
+}
+
 # ---------- S3 (Audio Storage) ----------
 
 resource "aws_s3_bucket" "audio" {
@@ -300,6 +319,7 @@ resource "aws_iam_role_policy" "saas_lambda" {
           aws_dynamodb_table.subscriptions.arn,
           "${aws_dynamodb_table.subscriptions.arn}/index/*",
           aws_dynamodb_table.transcripts.arn,
+          aws_dynamodb_table.team.arn,
         ]
       },
       {

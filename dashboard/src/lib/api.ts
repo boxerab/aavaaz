@@ -95,6 +95,38 @@ export const apiKeys = {
     }),
 };
 
+// Team management
+export type TeamRole = "admin" | "member" | "viewer";
+
+export interface TeamMember {
+  id: string;
+  email: string;
+  role: TeamRole;
+  created_at: string;
+}
+
+export const team = {
+  list: (token: string) =>
+    apiRequest<TeamMember[]>("/v1/saas/team", { token }),
+
+  invite: (token: string, email: string, role: TeamRole) =>
+    apiRequest<TeamMember>("/v1/saas/team", {
+      token,
+      method: "POST",
+      body: { email, role },
+    }),
+
+  updateRole: (token: string, id: string, role: TeamRole) =>
+    apiRequest<TeamMember>(`/v1/saas/team/${id}`, {
+      token,
+      method: "PATCH",
+      body: { role },
+    }),
+
+  remove: (token: string, id: string) =>
+    apiRequest<void>(`/v1/saas/team/${id}`, { token, method: "DELETE" }),
+};
+
 // Usage & billing
 export const billing = {
   usage: (token: string) =>

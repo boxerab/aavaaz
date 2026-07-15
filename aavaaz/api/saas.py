@@ -82,6 +82,9 @@ _api_keys: dict[str, SaasApiKey] = {}  # key_id -> SaasApiKey
 _key_hash_to_id: dict[str, str] = {}  # hash -> key_id (for auth lookups)
 _usage: dict[str, list[UsageEntry]] = {}  # user_id -> [UsageEntry]
 _subscriptions: dict[str, UserSubscription] = {}  # user_id -> UserSubscription
+_team: dict[str, list[dict]] = {}  # owner_id -> [member dict]
+
+TEAM_ROLES = {"admin", "member", "viewer"}
 
 
 # ─── Request/Response Schemas ────────────────────────────────────────────────
@@ -94,6 +97,15 @@ class CreateKeyRequest(BaseModel):
 class CreateKeyResponse(BaseModel):
     key: dict
     secret: str
+
+
+class InviteMemberRequest(BaseModel):
+    email: str
+    role: str = "member"
+
+
+class UpdateMemberRequest(BaseModel):
+    role: str
 
 
 class CheckoutRequest(BaseModel):
@@ -169,6 +181,61 @@ async def revoke_api_key(key_id: str, claims: dict = Depends(require_auth)):
     _key_hash_to_id.pop(key.key_hash, None)
     del _api_keys[key_id]
     return {"status": "revoked"}
+
+
+# ─── Team Endpoints ──────────────────────────────────────────────────────────
+
+
+@router.get("/team")
+async def list_team(claims: dict = Depends(require_auth)):
+    return _team.get(claims["sub"], [])
+
+
+@router.post("/team")
+async def invite_member(
+    body: InviteMemberRequest, claims: dict = Depends(require_auth)
+):
+    email = body.email.strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    if body.role not in TEAM_ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid role '{body.role}'")
+
+    members = _team.setdefault(claims["sub"], [])
+    if any(m["email"] == email for m in members):
+        raise HTTPException(status_code=409, detail="Member already exists")
+
+    member = {
+        "id": str(uuid.uuid4()),
+        "email": email,
+        "role": body.role,
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+    members.append(member)
+    return member
+
+
+@router.patch("/team/{member_id}")
+async def update_member(
+    member_id: str, body: UpdateMemberRequest, claims: dict = Depends(require_auth)
+):
+    if body.role not in TEAM_ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid role '{body.role}'")
+    for member in _team.get(claims["sub"], []):
+        if member["id"] == member_id:
+            member["role"] = body.role
+            return member
+    raise HTTPException(status_code=404, detail="Member not found")
+
+
+@router.delete("/team/{member_id}")
+async def remove_member(member_id: str, claims: dict = Depends(require_auth)):
+    members = _team.get(claims["sub"], [])
+    for i, member in enumerate(members):
+        if member["id"] == member_id:
+            members.pop(i)
+            return {"status": "removed"}
+    raise HTTPException(status_code=404, detail="Member not found")
 
 
 # ─── Usage Endpoints ─────────────────────────────────────────────────────────
