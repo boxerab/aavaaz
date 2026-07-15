@@ -22,8 +22,9 @@ Environment variables (set via Modal Secrets):
     AAVAAZ_API_KEY        Optional API key for authentication
 
 A per-request ``features`` object (JSON body field, or a ``features`` form field
-holding JSON) overrides these env defaults, matching the Lambda batch path.
-Hotwords are not wired here (the WhisperLive batch worker takes an
+holding JSON) overrides these env defaults, matching the Lambda batch path. A
+``callback_url`` (body or form field) fires a webhook with the transcript on
+completion. Hotwords are not wired here (the WhisperLive batch worker takes an
 ``initial_prompt``, not hotwords).
     AAVAAZ_STORE_AUDIO    1 to store uploaded audio to a Modal Volume (default: 0)
 """
@@ -174,6 +175,7 @@ class Transcriber:
         content_type = request.headers.get("content-type", "")
         response_format = None
         features = None
+        callback_url = None
 
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -191,6 +193,7 @@ class Transcriber:
 
                         with contextlib.suppress(ValueError, TypeError):
                             features = _json.loads(raw_features)
+                    callback_url = form.get("callback_url")
                     filename = (
                         getattr(upload, "filename", None) or f"{uuid.uuid4().hex}.wav"
                     )
@@ -208,6 +211,7 @@ class Transcriber:
 
                     payload = await request.json()
                     features = payload.get("features")
+                    callback_url = payload.get("callback_url")
                     if "audio_base64" in payload:
                         filename = payload.get("filename", f"{uuid.uuid4().hex}.wav")
                         local_path = os.path.join(tmpdir, Path(filename).name)
@@ -267,6 +271,11 @@ class Transcriber:
         except Exception:
             logger.exception("Unhandled error: request_id=%s", request_id)
             raise fastapi.HTTPException(status_code=500, detail="Internal server error")
+
+        if callback_url:
+            from aavaaz.features.webhook import send_webhook
+
+            send_webhook(callback_url, result)
 
         fmt = response_format or os.environ.get("AAVAAZ_OUTPUT_FORMAT", "json")
         if fmt == "text":
