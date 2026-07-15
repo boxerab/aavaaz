@@ -435,6 +435,38 @@ def test_handler_api_invalid_key_rejected(_env, monkeypatch):
 
 
 @patch("faster_whisper.WhisperModel")
+def test_handler_multichannel_labels_segments(mock_whisper, _env, monkeypatch):
+    """Multichannel splits per channel and merges with channel labels."""
+    monkeypatch.setenv("AAVAAZ_LANGUAGE", "en")  # skip language auto-probe
+    model = MagicMock()
+    model.transcribe.return_value = (_fake_segments(), _fake_info())
+    mock_whisper.return_value = model
+
+    from aavaaz.serverless.lambda_handler import handler
+
+    event = {
+        "body": json.dumps(
+            {
+                "audio_base64": base64.b64encode(b"x").decode(),
+                "filename": "a.wav",
+                "features": {
+                    "multichannel": {"enabled": True, "labels": ["agent", "customer"]}
+                },
+            }
+        )
+    }
+    fake_audio = types.ModuleType("faster_whisper.audio")
+    fake_audio.decode_audio = MagicMock(return_value=(b"L", b"R"))
+    with patch.dict(sys.modules, {"faster_whisper.audio": fake_audio}):
+        result = handler(event, None)
+
+    assert result["statusCode"] == 200
+    body = json.loads(result["body"])
+    assert {s["channel"] for s in body["segments"]} == {"agent", "customer"}
+    assert model.transcribe.call_count == 2  # one per channel
+
+
+@patch("faster_whisper.WhisperModel")
 def test_handler_api_passes_hotwords(mock_whisper, _env):
     """Custom-vocabulary hotwords in the JSON body reach the transcribe call."""
     model = MagicMock()

@@ -6,8 +6,22 @@ and provides helpers for merging per-channel transcription results.
 """
 
 import logging
+import os
 
 import numpy as np
+
+
+def resolve(features: dict | None) -> tuple[bool, list[str] | None]:
+    """Resolve (enabled, channel_labels) from per-request features or env."""
+    if features is None:
+        enabled = os.environ.get("AAVAAZ_ENABLE_MULTICHANNEL", "0") == "1"
+        raw_labels = os.environ.get("AAVAAZ_CHANNEL_LABELS", "")
+        labels = [x.strip() for x in raw_labels.split(",") if x.strip()] or None
+    else:
+        cfg = features.get("multichannel") or {}
+        enabled = bool(cfg.get("enabled"))
+        labels = cfg.get("labels") or None
+    return enabled, labels
 
 
 def split_channels(audio_np: np.ndarray, channels: int = 2) -> list[np.ndarray]:

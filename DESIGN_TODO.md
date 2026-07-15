@@ -7,7 +7,7 @@ Gap between advertised features (README, `docs/site`) and what is actually wired
 Code exists and is unit-tested, but nothing in a running entry point calls it.
 
 - [x] **Noise reduction** (`features/noise_reduction.py`) — wired in the batch paths via `maybe_reduce_noise` (Lambda decodes+reduces when enabled; Modal reduces the decoded array). Enabled by `AAVAAZ_ENABLE_NOISE_REDUCTION`/`AAVAAZ_NOISE_MODE` env or per-request `features.noiseReduction`. `noisereduce` added to the `whisper` extra; skips gracefully if absent. Streaming path still needs upstream audio-input access (WhisperLive owns the mic frames).
-- [ ] **Multichannel** (`features/multichannel.py`) — split channels and transcribe each in the batch paths, then merge with channel labels.
+- [x] **Multichannel** (`features/multichannel.py`) — wired in the Lambda batch path: when enabled (`features.multichannel` / `AAVAAZ_ENABLE_MULTICHANNEL`), decodes with `split_stereo`, transcribes each channel, and merges onto one timeline with `channel` labels (`merge_channel_segments`). Modal batch path (single-array batch worker) not yet split; deferred.
 - [ ] **Model cache** (`features/model_cache.py`) — only useful where per-request model selection matters; Lambda/Modal load one model per container. Wire into a multi-model server variant, or drop.
 - [ ] **Storage backends** (`features/storage.py`) — Lambda persists to S3 directly today; using the abstraction is a refactor, not new capability. Wire only if a pluggable backend (MinIO/local) is actually needed.
 - [ ] **Transcript search & tagging** (`features/search.py`) — needs a persistent index and a REST endpoint. The in-memory `TranscriptIndex` does not survive Lambda; best implemented as a SaaS endpoint over stored transcripts.

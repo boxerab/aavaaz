@@ -247,31 +247,54 @@ def _transcribe(
     if language is None:
         language = _detect_stable_language(model, audio_path)
 
-    from aavaaz.features import noise_reduction
-
-    transcribe_input: Any = audio_path
-    if noise_reduction.is_enabled(features):
-        from faster_whisper.audio import decode_audio
-
-        audio = decode_audio(audio_path, sampling_rate=16000)
-        transcribe_input = noise_reduction.maybe_reduce_noise(audio, features)
-
-    segments, info = model.transcribe(
-        transcribe_input,
-        language=language,
-        word_timestamps=True,
-        hotwords=hotwords or None,
-    )
+    from aavaaz.features import multichannel, noise_reduction
 
     pipeline = build_pipeline(features)
-    results = []
+    mc_enabled, mc_labels = multichannel.resolve(features)
+
+    if mc_enabled:
+        result = _transcribe_multichannel(
+            model, audio_path, language, hotwords, pipeline, mc_labels, features
+        )
+    else:
+        transcribe_input: Any = audio_path
+        if noise_reduction.is_enabled(features):
+            from faster_whisper.audio import decode_audio
+
+            audio = decode_audio(audio_path, sampling_rate=16000)
+            transcribe_input = noise_reduction.maybe_reduce_noise(audio, features)
+
+        segments, info = model.transcribe(
+            transcribe_input,
+            language=language,
+            word_timestamps=True,
+            hotwords=hotwords or None,
+        )
+        results = _segments_to_entries(segments, pipeline, info, progress_callback)
+        result = {
+            "language": info.language,
+            "language_probability": info.language_probability,
+            "duration": info.duration,
+            "segments": results,
+        }
+
+    logger.info(
+        "Transcription complete: duration=%.1fs segments=%d language=%s elapsed=%.2fs",
+        result.get("duration", 0.0),
+        len(result["segments"]),
+        result.get("language"),
+        time.time() - t0,
+    )
+    enrich_result(result, features)
+    return result
+
+
+def _segments_to_entries(segments, pipeline, info=None, progress_callback=None) -> list:
+    """Convert faster-whisper segments to result dicts, applying the pipeline."""
+    entries = []
     last_progress_pct = 0
     for seg in segments:
-        entry = {
-            "start": seg.start,
-            "end": seg.end,
-            "text": seg.text.strip(),
-        }
+        entry = {"start": seg.start, "end": seg.end, "text": seg.text.strip()}
         if seg.words:
             entry["words"] = [
                 {
@@ -282,33 +305,48 @@ def _transcribe(
                 }
                 for w in seg.words
             ]
-        entry = _apply_pipeline(entry, pipeline)
-        results.append(entry)
+        entries.append(_apply_pipeline(entry, pipeline))
 
-        # Report progress based on audio position
-        if progress_callback and info.duration > 0:
+        if progress_callback and info and info.duration > 0:
             pct = min(95, int((seg.end / info.duration) * 100))
-            if pct >= last_progress_pct + 5:  # Report every 5%
+            if pct >= last_progress_pct + 5:
                 last_progress_pct = pct
                 progress_callback(pct)
+    return entries
 
-    elapsed = time.time() - t0
-    logger.info(
-        "Transcription complete: duration=%.1fs segments=%d language=%s elapsed=%.2fs",
-        info.duration,
-        len(results),
-        info.language,
-        elapsed,
-    )
 
-    result = {
-        "language": info.language,
-        "language_probability": info.language_probability,
-        "duration": info.duration,
-        "segments": results,
+def _transcribe_multichannel(
+    model, audio_path, language, hotwords, pipeline, labels, features
+) -> dict:
+    """Transcribe each audio channel separately and merge on one timeline."""
+    from faster_whisper.audio import decode_audio
+
+    from aavaaz.features import noise_reduction
+    from aavaaz.features.multichannel import merge_channel_segments
+
+    decoded = decode_audio(audio_path, sampling_rate=16000, split_stereo=True)
+    channels = list(decoded) if isinstance(decoded, tuple) else [decoded]
+
+    per_channel = []
+    language_out = language
+    duration_out = 0.0
+    lang_prob = 0.0
+    for audio in channels:
+        audio = noise_reduction.maybe_reduce_noise(audio, features)
+        segments, info = model.transcribe(
+            audio, language=language, word_timestamps=True, hotwords=hotwords or None
+        )
+        per_channel.append(_segments_to_entries(segments, pipeline))
+        language_out = info.language
+        lang_prob = info.language_probability
+        duration_out = max(duration_out, info.duration)
+
+    return {
+        "language": language_out,
+        "language_probability": lang_prob,
+        "duration": duration_out,
+        "segments": merge_channel_segments(per_channel, labels),
     }
-    enrich_result(result, features)
-    return result
 
 
 def _format_output(result: dict) -> str:
