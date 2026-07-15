@@ -79,6 +79,18 @@ def _create_tables():
         ],
         BillingMode="PAY_PER_REQUEST",
     )
+    client.create_table(
+        TableName=f"aavaaz-team-{ENV}",
+        AttributeDefinitions=[
+            {"AttributeName": "owner_id", "AttributeType": "S"},
+            {"AttributeName": "member_id", "AttributeType": "S"},
+        ],
+        KeySchema=[
+            {"AttributeName": "owner_id", "KeyType": "HASH"},
+            {"AttributeName": "member_id", "KeyType": "RANGE"},
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
 
 
 @pytest.fixture
@@ -151,3 +163,40 @@ def test_find_user_by_stripe_customer(db):
     db.update_subscription("user-1", {"stripe_customer_id": "cus_123"})
     assert db.find_user_by_stripe_customer("cus_123") == "user-1"
     assert db.find_user_by_stripe_customer("cus_absent") is None
+
+
+def test_team_add_list_remove(db):
+    member = db.add_member("owner-1", "a@x.com", "admin")
+    assert member["email"] == "a@x.com"
+    assert member["role"] == "admin"
+    assert member["id"]
+    assert [m["id"] for m in db.list_members("owner-1")] == [member["id"]]
+    assert db.remove_member("owner-1", member["id"]) is True
+    assert db.list_members("owner-1") == []
+
+
+def test_team_add_duplicate_raises(db):
+    db.add_member("owner-1", "a@x.com", "member")
+    with pytest.raises(ValueError):
+        db.add_member("owner-1", "a@x.com", "member")
+
+
+def test_team_update_role(db):
+    member = db.add_member("owner-1", "a@x.com", "member")
+    updated = db.update_member_role("owner-1", member["id"], "viewer")
+    assert updated["role"] == "viewer"
+
+
+def test_team_update_missing_returns_none(db):
+    # ConditionExpression makes a missing member return None, not create a row
+    assert db.update_member_role("owner-1", "nope", "admin") is None
+    assert db.list_members("owner-1") == []
+
+
+def test_team_remove_missing_returns_false(db):
+    assert db.remove_member("owner-1", "nope") is False
+
+
+def test_team_isolated_per_owner(db):
+    db.add_member("owner-1", "a@x.com", "member")
+    assert db.list_members("owner-2") == []
