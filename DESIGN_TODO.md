@@ -44,7 +44,7 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 
 ## Dashboard
 
-- [ ] Integrations page connects nothing (static catalog). See the audit for the full list.
+- [x] Integrations page honestly reframed: it's a reference catalog of webhook recipes (not a one-click connect). Subtitle + footer now describe the real mechanism (pass `callback_url`, Aavaaz POSTs standard transcript JSON, no `{{variable}}` substitution) instead of implying live integration and a nonexistent Settings→Webhook template engine.
 - [x] Team page is now backed by a real API: `/v1/saas/team` (GET/POST/PATCH/DELETE) in both SaaS implementations (`api/saas.py` in-memory, `serverless/saas_lambda.py` on a new `aavaaz-team-{env}` DynamoDB table). The page loads/invites/role-changes/removes against it; the current user shows as owner from the auth context. No email is actually sent (invite creates the member record directly). Terraform adds the table + IAM grant.
 - [x] Status page now does real readable health checks (CORS fetch, reads status code → operational/degraded/down) instead of the always-green `no-cors` hack; added CORS to the Modal web app so its `/health` is browser-readable; dropped the un-checkable CloudFront row and the fabricated "no incidents" history.
 - [x] Custom vocabulary — the upload page now sends `aavaaz-custom-vocab` as hotwords (JSON body + S3 metadata); the batch Lambda passes them to `model.transcribe`. Per-word boost is UI-only (faster-whisper hotwords has no weighting; words are ordered highest-boost first).

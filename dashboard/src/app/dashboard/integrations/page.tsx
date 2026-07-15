@@ -197,7 +197,7 @@ export default function IntegrationsPage() {
       <div>
         <h1 className="text-3xl font-bold">Integrations</h1>
         <p className="text-muted-foreground mt-1">
-          Connect Aavaaz to your existing tools and workflows
+          Reference recipes for delivering transcripts to your tools via webhooks
         </p>
       </div>
 
@@ -264,8 +264,10 @@ export default function IntegrationsPage() {
             <code>{selectedIntegration.webhookTemplate}</code>
           </pre>
           <div className="px-4 py-3 border-t bg-muted/30 text-xs text-muted-foreground">
-            Configure this in the <strong>Features → Webhook</strong> section of Settings.
-            Template variables like {"{{transcript.text}}"} are replaced at runtime.
+            Pass a <code>callback_url</code> on your transcription request and Aavaaz POSTs the
+            completed transcript as JSON to it. This snippet is a reference for the receiving
+            tool &mdash; Aavaaz sends its standard transcript JSON and does not substitute{" "}
+            {"{{variables}}"}.
           </div>
         </div>
       )}
