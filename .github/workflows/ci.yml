@@ -27,3 +27,25 @@ jobs:
 
       - name: Test
         run: pytest -v
+
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform validate
+        run: |
+          for d in terraform terraform-lambda terraform-saas terraform-serverless; do
+            echo "== deploy/$d =="
+            terraform -chdir="deploy/$d" init -backend=false -input=false
+            terraform -chdir="deploy/$d" validate
+          done
+
+      - uses: azure/setup-helm@v4
+
+      - name: Helm lint and template
+        run: |
+          helm lint deploy/helm/aavaaz
+          helm template aavaaz deploy/helm/aavaaz

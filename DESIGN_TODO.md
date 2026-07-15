@@ -16,7 +16,7 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 
 ## Partially wired
 
-- [x] **Paragraph segmentation** — now in Lambda and Modal (both via the shared `aavaaz.features.enrichment`). Streaming pipeline still lacks it (needs a final-flush pass, since it groups across segments).
+- [x] **Paragraph segmentation** — now in Lambda and Modal (both via the shared `aavaaz.features.enrichment`). Streaming pipeline still lacks it; see the Upstream section (needs a WhisperLive finalize hook, not doable through the per-segment `segment_post_processor`).
 - [x] **Webhook delivery** — Lambda: synchronous on the JSON API path, async on the S3 large-file path (callback URL stored at upload via `callback_url_b64` → object metadata, fired in `_handle_s3`). Modal: fires `callback_url` (body or form field) inline on completion. Full parity.
 - [x] **Intelligence / formatting / PII / profanity / filler** — the batch enrichment pipeline is now shared between Lambda and Modal via `aavaaz/features/enrichment.py` (`build_pipeline`/`enrich_result`), env-gated with per-request `features` override. Modal `app.py` reads `features` from the JSON body or a `features` form field. Hotwords stay Lambda-only (Modal's batch worker takes `initial_prompt`, not hotwords). Streaming server still has its own plugin path.
 - [x] **Per-request features in the batch Lambda** — `_handle_api` now reads `payload["features"]` (dashboard FeaturesConfig shape) and the S3-trigger path reads the same config from object metadata (`features_b64` → presign → `head_object`). Both override the env defaults. Diarization/translation/ensemble/noise-reduction are intentionally ignored here (not available in the faster-whisper batch path).
@@ -30,16 +30,18 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 
 - [ ] **Batch 30s truncation** — the batched inference path truncates audio to 30s. The code runs from the WhisperLive checkout mounted by Modal, not this repo. Fix upstream, or add a long-audio guard in `deploy/modal/app.py` that routes >30s files to the non-batched path.
 - [ ] **Modal per-client feature race** — `deploy/modal/app_live.py` mutates the shared server's `segment_post_processor` per client under `@modal.concurrent`. Needs per-connection dispatch (a WhisperLive change) or `max_inputs=1`.
+- [ ] **Streaming paragraph segmentation** — paragraphs group across segments and must be emitted once at stream end. WhisperLive exposes only the per-segment `segment_post_processor` hook (transforms one segment's text, can't emit a separate message); on `END_OF_AUDIO` the audio loop just exits to `cleanup` with no finalize callback fired while the socket is open. Needs an upstream WhisperLive finalize/end-of-stream hook (analogous to `segment_post_processor`) so Aavaaz can run `segment_into_paragraphs` over the accumulated transcript and send a final message. A `cleanup` monkeypatch is unreliable (socket often already closed). Not shipping a fragile hack.
 
 ## Docs
 
 - [x] Broken code/API references fixed: JS SDK `analyze()`/`listModels()` (hit nonexistent `/v1/audio/intelligence`, `/v1/models`) removed; `sdks/README.md` endpoint table trimmed to real routes; `docs/site` REST path corrected to `/v1/audio/transcriptions`, `/v1/models` curl and `noise_reduction="near_field"` kwarg removed; `docs/USER_MANAGEMENT.md` import fixed to `aavaaz.features.acl`.
 - [x] Library-only features in the `docs/site` feature grid now carry a `Planned` tag (translation relay, noise reduction, multichannel, model hot-swap, search, auto-highlights/chapters, find&replace, spelling hints; ACL/storage in the enterprise list marked "(Planned)"). The zero-code Multi-Model Ensemble card and the broken README Auto-Reconnect example were removed. Note: only the primary feature grid was swept; repeated mentions in the showcase/comparison sections may still overstate.
 - [x] `docs/TEST_MATRIX.md` remapped to real coverage: ensemble rows → Not implemented; diarization/batch rows → ⚠️ passthrough-only (`test_server.py`, behavior in WhisperLive); storage → `test_security.py`; webhook delivery → `test_serverless.py`; HMAC signature → Not implemented.
+- [x] Marketing showcase swept: the repeated library-only "Noise Reduction" card in the capabilities/showcase section is now marked "(Planned)" too, matching the feature grid.
 
 ## Deploy / infra (unverified — no cloud build in CI)
 
-- [ ] Docker/Helm/Terraform changes made during the audit are unverified by an actual build/deploy. Add a CI job that at least builds the images and `helm template`s the chart.
+- [x] CI now has an `infra` job: `terraform validate` across all four `deploy/terraform*` dirs (verified locally, all valid) + `helm lint`/`helm template` on the chart. Image build not added (needs registry auth); this catches HCL/chart syntax and wiring errors.
 - [x] Transcribe Lambda auth — opt-in `AAVAAZ_REQUIRE_API_KEY=1` gates the API paths on a valid SaaS key (Bearer, validated against DynamoDB); default off keeps the public web demo working. Usage metering is wired on top of this (see SaaS section).
 
 ## Dashboard
