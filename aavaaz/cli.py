@@ -101,6 +101,11 @@ def main():
         help="Enable audio intelligence (sentiment, topics, entities)",
     )
     serve_parser.add_argument(
+        "--paragraphs",
+        action="store_true",
+        help="Group the transcript into paragraphs, sent as a final message at stream end",
+    )
+    serve_parser.add_argument(
         "-v", "--verbose", action="store_true", help="Debug logging"
     )
 
@@ -173,6 +178,7 @@ def main():
             enable_pii=args.pii_redaction,
             enable_profanity=args.profanity_filter,
             enable_intelligence=args.intelligence,
+            enable_paragraphs=args.paragraphs,
         )
         server.run()
 

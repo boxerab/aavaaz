@@ -174,6 +174,38 @@ def test_server_run_wires_plugin_pipeline():
         assert call_kwargs["segment_post_processor"] == reg.apply
 
 
+def test_server_run_wires_paragraph_finalizer():
+    """transcript_finalizer is passed only when paragraphs are enabled."""
+    with patch("aavaaz.server.TranscriptionServer") as mock_ts_cls:
+        mock_ts_cls.return_value = MagicMock()
+        AavaazServer(enable_paragraphs=True).run()
+        assert (
+            mock_ts_cls.return_value.run.call_args[1]["transcript_finalizer"]
+            is not None
+        )
+
+    with patch("aavaaz.server.TranscriptionServer") as mock_ts_cls:
+        mock_ts_cls.return_value = MagicMock()
+        AavaazServer(enable_paragraphs=False).run()
+        assert (
+            mock_ts_cls.return_value.run.call_args[1]["transcript_finalizer"] is None
+        )
+
+
+def test_paragraph_finalizer_groups_transcript():
+    server = AavaazServer(enable_paragraphs=True)
+    transcript = [
+        {"start": 0.0, "end": 1.0, "text": "Hello there."},
+        {"start": 1.0, "end": 2.0, "text": "How are you?"},
+    ]
+    payload = server._paragraph_finalizer(transcript)
+    assert payload is not None
+    assert "paragraphs" in payload
+    assert len(payload["paragraphs"]) >= 1
+    # empty transcript yields nothing to send
+    assert server._paragraph_finalizer([]) is None
+
+
 def test_cli_parse_all_flags():
     """Verify CLI parses all serve flags correctly."""
     test_args = [
@@ -202,6 +234,7 @@ def test_cli_parse_all_flags():
         "--enable-diarization",
         "--max-speakers",
         "8",
+        "--paragraphs",
     ]
 
     with (
@@ -224,4 +257,5 @@ def test_cli_parse_all_flags():
         assert kwargs["word_timestamps"] is True
         assert kwargs["hotwords"] == "foo,bar"
         assert kwargs["enable_diarization"] is True
+        assert kwargs["enable_paragraphs"] is True
         assert kwargs["max_speakers"] == 8

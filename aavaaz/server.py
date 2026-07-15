@@ -44,6 +44,7 @@ class AavaazServer:
         enable_pii: bool = False,
         enable_profanity: bool = False,
         enable_intelligence: bool = False,
+        enable_paragraphs: bool = False,
     ):
         self.host = host
         self.port = port
@@ -66,6 +67,20 @@ class AavaazServer:
         self.enable_pii = enable_pii
         self.enable_profanity = enable_profanity
         self.enable_intelligence = enable_intelligence
+        self.enable_paragraphs = enable_paragraphs
+
+    def _paragraph_finalizer(self, transcript: list[dict]) -> dict | None:
+        """End-of-stream hook: group the transcript into paragraphs.
+
+        Returns a payload dict (sent to the client as a final message), or None
+        when there is nothing to group.
+        """
+        if not transcript:
+            return None
+        from aavaaz.features.utterance import segment_into_paragraphs
+
+        paragraphs = segment_into_paragraphs(transcript)
+        return {"paragraphs": paragraphs} if paragraphs else None
 
     # built-in plugin name -> the AavaazServer flag that enables it
     _FEATURE_PLUGINS = {
@@ -148,6 +163,9 @@ class AavaazServer:
             enable_rest=self.enable_rest_api,
             rest_port=self.rest_port,
             segment_post_processor=post_processor,
+            transcript_finalizer=(
+                self._paragraph_finalizer if self.enable_paragraphs else None
+            ),
             batch_enabled=self.batch_inference,
             batch_max_size=self.batch_max_size,
             batch_window_ms=self.batch_window_ms,
