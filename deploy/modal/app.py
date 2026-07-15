@@ -119,10 +119,19 @@ class Transcriber:
     def web(self):
         import os
 
+        from fastapi.middleware.cors import CORSMiddleware
         from fastapi.responses import HTMLResponse
         from fastapi.staticfiles import StaticFiles
 
         web_app = fastapi.FastAPI(title="Aavaaz Transcription Demo")
+
+        # allow the dashboard/browser clients to read /health and call the API
+        web_app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
         # Serve static assets (logo, etc.)
         web_app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")

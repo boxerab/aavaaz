@@ -44,7 +44,8 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 
 ## Dashboard
 
-- [ ] Team page is a client-only mock; status page reports "operational" for any response (`no-cors`); integrations page connects nothing. See the audit for the full list.
+- [ ] Team page is a client-only mock; integrations page connects nothing. See the audit for the full list.
+- [x] Status page now does real readable health checks (CORS fetch, reads status code → operational/degraded/down) instead of the always-green `no-cors` hack; added CORS to the Modal web app so its `/health` is browser-readable; dropped the un-checkable CloudFront row and the fabricated "no incidents" history.
 - [x] Custom vocabulary — the upload page now sends `aavaaz-custom-vocab` as hotwords (JSON body + S3 metadata); the batch Lambda passes them to `model.transcribe`. Per-word boost is UI-only (faster-whisper hotwords has no weighting; words are ordered highest-boost first).
 - [x] Upload output-format selector — SRT/VTT now generate real cues instead of plain text with a fake extension.
 - [x] API key persistence — created keys are saved to `aavaaz-api-key` so batch requests carry `Authorization` (note: the transcribe Lambda still doesn't enforce it; unauthenticated by design).

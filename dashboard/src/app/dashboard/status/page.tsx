@@ -10,10 +10,10 @@ interface ServiceStatus {
   latency?: number;
 }
 
+// only services that expose a CORS-enabled /health endpoint the browser can read.
 const SERVICES: Omit<ServiceStatus, "status" | "latency">[] = [
   { name: "Batch API (Lambda)", url: "https://gh0edmarma.execute-api.us-east-1.amazonaws.com/health" },
   { name: "Live Transcription (Modal)", url: "https://boxerab--aavaaz-live-livetranscriber-web.modal.run/health" },
-  { name: "Dashboard (CloudFront)", url: "https://du7890u4mptc6.cloudfront.net/" },
 ];
 
 export default function StatusPage() {
@@ -31,11 +31,14 @@ export default function StatusPage() {
       SERVICES.map(async (svc) => {
         const t0 = Date.now();
         try {
-          const res = await fetch(svc.url, { mode: "no-cors", cache: "no-store" });
+          // real CORS request so we can read the actual status code
+          const res = await fetch(svc.url, { cache: "no-store" });
           const latency = Date.now() - t0;
-          // no-cors means we can't read status, but if fetch doesn't throw, it reached the server
-          return { ...svc, status: "operational" as const, latency };
+          // reachable and healthy vs reachable but erroring (5xx/4xx)
+          const status = res.ok ? ("operational" as const) : ("degraded" as const);
+          return { ...svc, status, latency };
         } catch {
+          // network error or missing CORS headers — can't confirm it's up
           return { ...svc, status: "down" as const, latency: Date.now() - t0 };
         }
       })
@@ -143,8 +146,8 @@ export default function StatusPage() {
       <div className="rounded-lg border bg-card p-6">
         <h2 className="text-xl font-semibold mb-4">Recent Incidents</h2>
         <div className="text-center py-8 text-muted-foreground">
-          <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-500" />
-          <p>No incidents in the last 30 days.</p>
+          <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          <p>Incident history is not tracked here. This page reflects live health checks only.</p>
         </div>
       </div>
     </div>
