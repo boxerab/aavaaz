@@ -17,7 +17,14 @@ Environment variables (set via Modal Secrets):
     AAVAAZ_OUTPUT_FORMAT  json | text | srt | vtt (default: json)
     AAVAAZ_ENABLE_PII     1 to enable PII redaction (default: 0)
     AAVAAZ_ENABLE_FORMAT  1 to enable smart formatting (default: 1)
+    AAVAAZ_ENABLE_PARAGRAPHS    1 to add paragraph segmentation (default: 0)
+    AAVAAZ_ENABLE_INTELLIGENCE  1 to add sentiment/topics/entities (default: 0)
     AAVAAZ_API_KEY        Optional API key for authentication
+
+A per-request ``features`` object (JSON body field, or a ``features`` form field
+holding JSON) overrides these env defaults, matching the Lambda batch path.
+Hotwords are not wired here (the WhisperLive batch worker takes an
+``initial_prompt``, not hotwords).
     AAVAAZ_STORE_AUDIO    1 to store uploaded audio to a Modal Volume (default: 0)
 """
 
@@ -137,6 +144,7 @@ class Transcriber:
         return web_app
 
     async def _handle_transcription(self, request):
+        import contextlib
         import os
         import shutil
         import tempfile
@@ -156,6 +164,7 @@ class Transcriber:
 
         content_type = request.headers.get("content-type", "")
         response_format = None
+        features = None
 
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -167,6 +176,12 @@ class Transcriber:
                             status_code=400, detail="No 'file' field"
                         )
                     response_format = form.get("response_format")
+                    raw_features = form.get("features")
+                    if raw_features:
+                        import json as _json
+
+                        with contextlib.suppress(ValueError, TypeError):
+                            features = _json.loads(raw_features)
                     filename = (
                         getattr(upload, "filename", None) or f"{uuid.uuid4().hex}.wav"
                     )
@@ -183,6 +198,7 @@ class Transcriber:
                     import base64
 
                     payload = await request.json()
+                    features = payload.get("features")
                     if "audio_base64" in payload:
                         filename = payload.get("filename", f"{uuid.uuid4().hex}.wav")
                         local_path = os.path.join(tmpdir, Path(filename).name)
@@ -227,7 +243,7 @@ class Transcriber:
                     )
 
                 t0 = time.time()
-                result = self._transcribe(local_path)
+                result = self._transcribe(local_path, features)
                 elapsed = time.time() - t0
                 logger.info(
                     "Transcription complete: request_id=%s duration=%.1fs "
@@ -249,11 +265,13 @@ class Transcriber:
             return fastapi.Response(content=text, media_type="text/plain")
         return result
 
-    def _transcribe(self, audio_path: str) -> dict:
+    def _transcribe(self, audio_path: str, features: dict | None = None) -> dict:
         import os
 
         from faster_whisper.audio import decode_audio
         from whisper_live.batch_inference import BatchRequest
+
+        from aavaaz.features.enrichment import build_pipeline, enrich_result
 
         file_size = os.path.getsize(audio_path)
         logger.info(
@@ -283,7 +301,7 @@ class Transcriber:
         segments = req.result or []
         info = req.info
 
-        pipeline = self._build_pipeline()
+        pipeline = build_pipeline(features)
         results = []
         for seg in segments:
             entry = {
@@ -305,23 +323,11 @@ class Transcriber:
                 entry["text"] = fn(entry["text"])
             results.append(entry)
 
-        return {
+        out = {
             "language": info.language if info else "unknown",
             "language_probability": info.language_probability if info else 0.0,
             "duration": info.duration if info else 0.0,
             "segments": results,
         }
-
-    def _build_pipeline(self) -> list:
-        import os
-
-        fns = []
-        if os.environ.get("AAVAAZ_ENABLE_FORMAT", "1") == "1":
-            from aavaaz.features.formatting import smart_format
-
-            fns.append(smart_format)
-        if os.environ.get("AAVAAZ_ENABLE_PII", "0") == "1":
-            from aavaaz.features.pii_redaction import redact_pii
-
-            fns.append(redact_pii)
-        return fns
+        enrich_result(out, features)
+        return out
