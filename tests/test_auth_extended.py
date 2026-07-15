@@ -1,7 +1,7 @@
 """
-Tests for authentication and authorization gaps (Test Matrix §4.6-4.9).
+Tests for authentication gaps (Test Matrix §4.6-4.9).
 
-Covers rate limiting, WebSocket auth, and unauthorized access.
+Covers rate-limit configuration and WebSocket token auth.
 """
 
 import sys
@@ -10,7 +10,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from aavaaz.api.auth import configure_auth, create_token, verify_token
-from aavaaz.features.acl import Role, UserStore
 
 
 class TestRateLimiting:
@@ -32,43 +31,6 @@ class TestRateLimiting:
 
         server = AavaazServer(rate_limit_rpm=0)
         assert server.rate_limit_rpm == 0
-
-    def test_rate_limit_blocks_when_exceeded(self, tmp_path):
-        """Exceeding the per-minute limit is blocked (the enforcement branch)."""
-        store = UserStore(path=str(tmp_path / "users.json"))
-        user, _ = store.create_user("burst", rate_limit_rpm=2)
-        assert store.check_rate_limit(user.user_id) is True
-        assert store.check_rate_limit(user.user_id) is True
-        assert store.check_rate_limit(user.user_id) is False
-
-
-class TestQuotaTracking:
-    """4.7 - Quota tracking and enforcement."""
-
-    def test_user_store_quota(self, tmp_path):
-        """UserStore should track quota per user."""
-        store = UserStore(path=str(tmp_path / "users.json"))
-        user, key = store.create_user("test_user", role=Role.USER, quota_minutes=100)
-        assert user.quota_minutes == 100
-        assert user.used_minutes == 0.0
-
-    def test_user_rate_limit_per_user(self, tmp_path):
-        """Each user can have different rate limits."""
-        store = UserStore(path=str(tmp_path / "users.json"))
-        user1, _ = store.create_user("fast", rate_limit_rpm=100)
-        user2, _ = store.create_user("slow", rate_limit_rpm=10)
-        assert user1.rate_limit_rpm == 100
-        assert user2.rate_limit_rpm == 10
-
-    def test_rate_limit_check(self, tmp_path):
-        """Rate limiting should track request timestamps."""
-        store = UserStore(path=str(tmp_path / "users.json"))
-        user, key = store.create_user("limited", rate_limit_rpm=5)
-        # Authenticate and check rate
-        authed = store.authenticate(key)
-        assert authed is not None
-        result = store.check_rate_limit(authed.user_id)
-        assert result is True  # First request should pass
 
 
 class TestWebSocketAuth:
@@ -95,31 +57,3 @@ class TestWebSocketAuth:
         configure_auth("test-secret-ws", api_keys=["valid-key"])
         with pytest.raises((ValueError, KeyError, Exception)):  # noqa: B017
             verify_token("")
-
-
-class TestUnauthorizedAccess:
-    """4.9 - Unauthorized access returns proper error codes."""
-
-    def test_invalid_api_key_rejected(self, tmp_path):
-        """Invalid API key should not authenticate."""
-        store = UserStore(path=str(tmp_path / "users.json"))
-        store.create_user("real_user")
-        result = store.authenticate("wrong-key-entirely")
-        assert result is None
-
-    def test_disabled_user_rejected(self, tmp_path):
-        """Disabled users should not authenticate."""
-        store = UserStore(path=str(tmp_path / "users.json"))
-        user, key = store.create_user("disabled_user")
-        user.enabled = False
-        result = store.authenticate(key)
-        assert result is None
-
-    def test_role_permissions(self, tmp_path):
-        """Roles should have correct permission levels."""
-        assert Role.ADMIN.can_admin() is True
-        assert Role.ADMIN.can_transcribe() is True
-        assert Role.USER.can_admin() is False
-        assert Role.USER.can_transcribe() is True
-        assert Role.READONLY.can_transcribe() is False
-        assert Role.READONLY.can_read() is True

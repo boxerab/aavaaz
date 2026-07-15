@@ -40,19 +40,15 @@ Wired = reachable through a running entry point. Library = importable but not co
 | `utterance` (paragraphs) | Wired (batch only) | lambda (`AAVAAZ_ENABLE_PARAGRAPHS`) |
 | `webhook` | Wired (batch only) | lambda (`callback_url` in request) |
 | `plugins` | Wired (core) | server pipeline |
-| `noise_reduction` | Library | — |
-| `multichannel` | Library | — |
-| `model_cache` | Library | — |
-| `storage` | Library | — (lambda persists to S3 directly) |
-| `search` (TranscriptIndex) | Library | — (no endpoint) |
-| `acl` (UserStore/RBAC) | Library | — (auth uses the shared key / Cognito) |
-| `translation_relay` | Library | — |
+| `noise_reduction` | Wired (batch) | lambda + modal audio preprocess (`maybe_reduce_noise`) |
+| `multichannel` | Wired (batch) | lambda per-channel split/merge |
+| `search` (TranscriptIndex) | Library | — (SaaS search endpoint pending) |
 
 ## Auth
 
 - Streaming server: single shared API key (`--api-key`), enforced by WhisperLive (REST header + WS `?token=`). `api/auth.py` provides JWT + static-key auth for the self-hosted SaaS router.
 - SaaS serverless: Cognito id tokens (`saas_lambda.require_auth`).
-- `features/acl.py` (`UserStore`, roles, per-user rate limit/quota) is a self-contained RBAC module, not connected to any entry point.
+- Batch Lambda: optional SaaS API-key gate (`AAVAAZ_REQUIRE_API_KEY`, validated against DynamoDB).
 
 ## SaaS layer
 

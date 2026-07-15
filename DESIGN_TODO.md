@@ -8,11 +8,8 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 
 - [x] **Noise reduction** (`features/noise_reduction.py`) — wired in the batch paths via `maybe_reduce_noise` (Lambda decodes+reduces when enabled; Modal reduces the decoded array). Enabled by `AAVAAZ_ENABLE_NOISE_REDUCTION`/`AAVAAZ_NOISE_MODE` env or per-request `features.noiseReduction`. `noisereduce` added to the `whisper` extra; skips gracefully if absent. Streaming path still needs upstream audio-input access (WhisperLive owns the mic frames).
 - [x] **Multichannel** (`features/multichannel.py`) — wired in the Lambda batch path: when enabled (`features.multichannel` / `AAVAAZ_ENABLE_MULTICHANNEL`), decodes with `split_stereo`, transcribes each channel, and merges onto one timeline with `channel` labels (`merge_channel_segments`). Modal batch path (single-array batch worker) not yet split; deferred.
-- [ ] **Model cache** (`features/model_cache.py`) — only useful where per-request model selection matters; Lambda/Modal load one model per container. Wire into a multi-model server variant, or drop.
-- [ ] **Storage backends** (`features/storage.py`) — Lambda persists to S3 directly today; using the abstraction is a refactor, not new capability. Wire only if a pluggable backend (MinIO/local) is actually needed.
 - [ ] **Transcript search & tagging** (`features/search.py`) — needs a persistent index and a REST endpoint. The in-memory `TranscriptIndex` does not survive Lambda; best implemented as a SaaS endpoint over stored transcripts.
-- [ ] **ACL / RBAC** (`features/acl.py`) — `UserStore` (per-user keys, roles, quota, rate limit) is not connected. Wire into an auth backend option; the streaming server currently uses WhisperLive's single shared key.
-- [ ] **Live translation relay** (`features/translation_relay.py`) — pub/sub relay is standalone; no entry point creates channels or feeds it segments.
+- [x] **Removed as unused/superseded**: `model_cache` (Lambda/Modal load one model per container), `storage` (Lambda writes S3 directly; abstraction was a no-op), `acl` (superseded by the SaaS API keys + team API), `translation_relay` (no entry point). Modules + their tests deleted; marketing cards removed.
 
 ## Partially wired
 
