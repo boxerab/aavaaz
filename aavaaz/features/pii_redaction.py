@@ -22,6 +22,16 @@ _REDACTION_MAP = {
     "ip_address": "[IP_REDACTED]",
 }
 
+_EMAIL_LOCAL_PART = r"[a-z0-9_%+-]+(?:(?:\.|\s+dot\s+)[a-z0-9_%+-]+)*"
+_EMAIL_DOMAIN_LABEL = r"[a-z0-9-]+"
+_EMAIL_DOMAIN_DOT = r"(?:\.|\s+dot\s+)"
+_EMAIL_PATTERN = re.compile(
+    rf"\b{_EMAIL_LOCAL_PART}(?:@|\s+at\s+){_EMAIL_DOMAIN_LABEL}"
+    rf"(?:{_EMAIL_DOMAIN_DOT}{_EMAIL_DOMAIN_LABEL})*"
+    rf"{_EMAIL_DOMAIN_DOT}[a-z]{{2,}}\b",
+    re.IGNORECASE,
+)
+
 # Regex patterns for PII detection
 _PATTERNS = {
     "ssn": re.compile(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b"),
@@ -29,7 +39,7 @@ _PATTERNS = {
     "phone": re.compile(
         r"\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}\b"
     ),
-    "email": re.compile(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b"),
+    "email": _EMAIL_PATTERN,
     "ip_address": re.compile(
         r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b"
     ),

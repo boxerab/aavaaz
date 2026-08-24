@@ -105,6 +105,16 @@ class TestPIIEmail:
         result = redact_pii(text, pii_types={"email"})
         assert "[EMAIL_REDACTED]" in result
 
+    def test_email_with_spoken_at(self):
+        text = "Email alex at example.com"
+        result = redact_pii(text, pii_types={"email"})
+        assert result == "Email [EMAIL_REDACTED]"
+
+    def test_fully_spoken_email(self):
+        text = "Email first dot last at company dot co dot uk"
+        result = redact_pii(text, pii_types={"email"})
+        assert result == "Email [EMAIL_REDACTED]"
+
     def test_no_email_in_text(self):
         text = "This has no email addresses"
         result = redact_pii(text, pii_types={"email"})
