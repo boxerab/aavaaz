@@ -1,6 +1,8 @@
 # uv dependency management
 # https://docs.astral.sh/uv/
 #
+exclude-newer = "7 days"
+
 # Install uv: curl -LsSf https://astral.sh/uv/install.sh | sh
 #
 # Usage:
