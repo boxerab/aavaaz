@@ -36,6 +36,8 @@ class AavaazServer:
         batch_inference: bool = False,
         batch_max_size: int = 8,
         batch_window_ms: int = 50,
+        max_clients: int = 4,
+        max_connection_time: int = 600,
         word_timestamps: bool = False,
         hotwords: str | None = None,
         enable_diarization: bool = False,
@@ -59,6 +61,8 @@ class AavaazServer:
         self.batch_inference = batch_inference
         self.batch_max_size = batch_max_size
         self.batch_window_ms = batch_window_ms
+        self.max_clients = max_clients
+        self.max_connection_time = max_connection_time
         self.word_timestamps = word_timestamps
         self.hotwords = hotwords
         self.enable_diarization = enable_diarization
@@ -169,6 +173,8 @@ class AavaazServer:
             batch_enabled=self.batch_inference,
             batch_max_size=self.batch_max_size,
             batch_window_ms=self.batch_window_ms,
+            max_clients=self.max_clients,
+            max_connection_time=self.max_connection_time,
             metrics_port=self.metrics_port,
             api_key=self.api_key,
             rate_limit_rpm=self.rate_limit_rpm,

@@ -66,6 +66,18 @@ def main():
         help="Max ms to wait for batch to fill (default: 50)",
     )
     serve_parser.add_argument(
+        "--max-clients",
+        type=int,
+        default=4,
+        help="Max concurrent WebSocket clients (default: 4)",
+    )
+    serve_parser.add_argument(
+        "--max-connection-time",
+        type=int,
+        default=600,
+        help="Seconds a client may stay connected (default: 600)",
+    )
+    serve_parser.add_argument(
         "--word-timestamps",
         action="store_true",
         help="Enable word-level timestamps and confidence scores",
@@ -170,6 +182,8 @@ def main():
             batch_inference=args.batch_inference,
             batch_max_size=args.batch_max_size,
             batch_window_ms=args.batch_window_ms,
+            max_clients=args.max_clients,
+            max_connection_time=args.max_connection_time,
             word_timestamps=args.word_timestamps,
             hotwords=args.hotwords,
             enable_diarization=args.enable_diarization,

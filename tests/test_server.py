@@ -61,6 +61,8 @@ def test_server_run_passes_params():
         api_key="key123",
         rate_limit_rpm=60,
         metrics_port=9091,
+        max_clients=200,
+        max_connection_time=900,
         word_timestamps=True,
         hotwords="test",
         enable_diarization=True,
@@ -82,6 +84,8 @@ def test_server_run_passes_params():
         assert call_kwargs["api_key"] == "key123"
         assert call_kwargs["rate_limit_rpm"] == 60
         assert call_kwargs["metrics_port"] == 9091
+        assert call_kwargs["max_clients"] == 200
+        assert call_kwargs["max_connection_time"] == 900
 
         # These four are no longer passed at the run() level — they're
         # per-client defaults injected via the initialize_client wrapper.
@@ -228,6 +232,10 @@ def test_cli_parse_all_flags():
         "16",
         "--batch-window-ms",
         "100",
+        "--max-clients",
+        "200",
+        "--max-connection-time",
+        "900",
         "--word-timestamps",
         "--hotwords",
         "foo,bar",
@@ -254,6 +262,8 @@ def test_cli_parse_all_flags():
         assert kwargs["batch_inference"] is True
         assert kwargs["batch_max_size"] == 16
         assert kwargs["batch_window_ms"] == 100
+        assert kwargs["max_clients"] == 200
+        assert kwargs["max_connection_time"] == 900
         assert kwargs["word_timestamps"] is True
         assert kwargs["hotwords"] == "foo,bar"
         assert kwargs["enable_diarization"] is True
