@@ -9,22 +9,28 @@ with enterprise features that compete with Deepgram, ElevenLabs, and AssemblyAI.
 
 | Category | Capabilities |
 |----------|-------------|
-| **Transcription** | Real-time WebSocket streaming, REST API (OpenAI-compatible), batch inference, multichannel audio |
-| **Intelligence** | Speaker diarization, sentiment analysis, topic detection, entity extraction, summarization |
-| **Post-processing** | Smart formatting, PII redaction, profanity filtering, noise reduction, utterance/paragraph segmentation |
-| **Platform** | Webhook delivery, transcript search & tagging, storage backends (local/S3), ACL/auth, GDPR compliance, Prometheus metrics |
+| **Transcription** | Real-time WebSocket streaming, REST API (OpenAI-compatible), batch inference, multichannel audio (Lambda) |
+| **Intelligence** | Speaker diarization, sentiment analysis, topic detection, entity extraction, summarization (Lambda/Modal batch) |
+| **Post-processing** | Smart formatting, PII redaction, profanity filtering, noise reduction (Lambda/Modal batch), utterance/paragraph segmentation |
+| **Platform** | Webhook delivery (Lambda), transcript search & tagging (SaaS API), S3 output storage (Lambda), API-key and JWT auth, Prometheus metrics |
 | **Deployment** | Docker, Helm charts, Terraform (AWS), **serverless (Lambda)**, **Modal (GPU)**, GPU auto-detection, model caching, SSE streaming |
 
 ## Quick Start
 
+> **WhisperLive version note:** `aavaaz serve` uses hooks that are not in the
+> published `whisper-live` 0.9.0 wheel yet. After any install below, replace
+> it with the fork until a matching release exists:
+> `pip install --no-deps "git+https://github.com/boxerab/WhisperLive@scaling-fixes"`
+
 ### Option 1: Install from PyPI (Recommended)
 
 ```bash
-# Create a virtualenv (Python 3.12 required)
+# Create a virtualenv (Python 3.12 or 3.13)
 python3.12 -m venv .venv && source .venv/bin/activate
 
 # Install aavaaz with WhisperLive + ML stack
 pip install "aavaaz[whisper]"
+pip install --no-deps "git+https://github.com/boxerab/WhisperLive@scaling-fixes"
 
 # Start the server
 aavaaz serve --model large-v3
@@ -39,12 +45,13 @@ aavaaz transcribe audio.wav
 # Install uv: https://docs.astral.sh/uv/
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Create venv with Python 3.12 (required; 3.14 not yet supported by ML deps)
+# Create venv with Python 3.12 or 3.13
 uv venv .venv --python python3.12
 source .venv/bin/activate
 
 # Install from PyPI
 uv pip install "aavaaz[whisper]"
+uv pip install --no-deps "git+https://github.com/boxerab/WhisperLive@scaling-fixes"
 
 # Start the server
 aavaaz serve --model large-v3
@@ -52,10 +59,6 @@ aavaaz serve --model large-v3
 # Transcribe a file
 aavaaz transcribe audio.wav
 ```
-
-> **Fedora 43+ / Python 3.14 note:** The ML stack (PyTorch, faster-whisper) does
-> not yet publish wheels for Python 3.14. Use `python3.12` explicitly when
-> creating the virtualenv. On Fedora: `sudo dnf install python3.12`
 
 ### Option 3: Local Development Install
 
@@ -69,16 +72,18 @@ pip install -e .
 
 # With WhisperLive + dev tooling
 pip install -e ".[whisper,dev]"
+pip install --no-deps "git+https://github.com/boxerab/WhisperLive@scaling-fixes"
 ```
 
 ### Option 4: Using `pip` with Requirements Files
 
 ```bash
-# Create a virtualenv (Python 3.12 required)
+# Create a virtualenv (Python 3.12 or 3.13)
 python3.12 -m venv .venv && source .venv/bin/activate
 
-# Install base + ML stack (large ~20GB download for torch/onnx)
+# Install base + ML stack (about 8 GB, mostly torch)
 pip install -r requirements/whisper.txt
+pip install --no-deps "git+https://github.com/boxerab/WhisperLive@scaling-fixes"
 
 # Or install just base (fast, no ML):
 # pip install -r requirements/base.txt
@@ -89,14 +94,15 @@ aavaaz serve --model large-v3
 # Transcribe a file
 aavaaz transcribe audio.wav
 
-# OpenAI-compatible REST endpoint
+# OpenAI-compatible REST endpoint. The `model` form field is ignored: the
+# endpoint uses `small` unless `--model` is a local path or HF repo.
 curl -X POST http://localhost:8000/v1/audio/transcriptions \
-  -F file=@audio.wav -F model=large-v3
+  -F file=@audio.wav
 ```
 
 ### Note on Storage
 
-The full ML stack (torch, onnxruntime, torchaudio) requires **~20GB** disk space. 
+The full ML stack (torch, torchaudio, CUDA libraries) needs about **8 GB** of disk.
 If you hit disk quota errors, consider:
 - Using `uv` which is faster and handles large downloads better
 - Installing on a machine with more space
@@ -117,17 +123,17 @@ plugin system:
 ┌─────────────────────────────────────────┐
 │              Aavaaz Server               │
 │  ┌─────────────────────────────────┐    │
-│  │  REST API / WebSocket / Web UI  │    │
+│  │      REST API / WebSocket       │    │
 │  └──────────────┬──────────────────┘    │
 │  ┌──────────────┴──────────────────┐    │
 │  │        Plugin Pipeline          │    │
-│  │  diarization → formatting →     │    │
-│  │  PII redaction → intelligence   │    │
+│  │  formatting → PII redaction →   │    │
+│  │  profanity → intelligence       │    │
 │  └──────────────┬──────────────────┘    │
 │  ┌──────────────┴──────────────────┐    │
 │  │    WhisperLive Core Engine      │    │
 │  │  faster-whisper / TensorRT /    │    │
-│  │  OpenVINO                       │    │
+│  │  OpenVINO, VAD, diarization     │    │
 │  └─────────────────────────────────┘    │
 └─────────────────────────────────────────┘
 ```
@@ -146,7 +152,7 @@ When enabled, each segment includes a `words` array:
 ```json
 {
   "segments": [{
-    "start": "0.000", "end": "2.500", "text": "Hello world",
+    "start": "0.000", "end": "2.500", "text": "Hello world", "completed": true,
     "words": [
       {"word": "Hello", "start": "0.000", "end": "0.800", "probability": 0.95},
       {"word": " world", "start": "0.900", "end": "2.500", "probability": 0.88}
@@ -222,15 +228,17 @@ Returns real-time segment events as `text/event-stream`.
 ### Plugin System
 Extend the transcription pipeline with custom post-processors:
 ```python
-from aavaaz.plugins import PluginRegistry
+from aavaaz import AavaazServer, PluginRegistry
 
 registry = PluginRegistry()
-registry.register("my_plugin", my_post_processor_fn, priority=50)
+registry.add("my_plugin", my_post_processor_fn, priority=50)
 
 server = AavaazServer(plugin_registry=registry)
 server.serve()
 ```
-Plugins receive each transcription segment and can modify, enrich, or filter it before delivery to the client.
+Plugins receive each transcription segment dict and return the modified dict.
+Passing your own registry replaces the built-in plugins; use `from aavaaz.plugins import registry`
+and `registry.add(...)` to extend the built-ins instead.
 
 ## Scaling Guide
 
@@ -239,11 +247,11 @@ Plugins receive each transcription segment and can modify, enrich, or filter it 
 aavaaz serve --model large-v3 --batch-inference
 ```
 
-### Multi-GPU (Docker Compose)
+### Docker Compose
 ```yaml
 services:
   aavaaz:
-    image: collabora/aavaaz:latest
+    build: .
     deploy:
       resources:
         reservations:
@@ -258,9 +266,9 @@ services:
 ```bash
 helm install aavaaz deploy/helm/aavaaz \
   --set model=large-v3 \
-  --set replicas=3 \
-  --set gpu.enabled=true
+  --set replicaCount=3
 ```
+Each replica requests one `nvidia.com/gpu` (see `values.yaml` `resources`).
 
 ### AWS (Terraform)
 ```bash
@@ -318,7 +326,7 @@ modal deploy app_live.py
 # Live websocket URL is exposed by app_live.py deployment output.
 ```
 
-Auto-scales to zero when idle, GPU containers spin up in seconds.
+Scales to zero after two idle minutes; the first connection after that waits for a container cold start.
 See [docs/MODAL.md](docs/MODAL.md) for full configuration.
 
 ## Development

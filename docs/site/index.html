@@ -1078,7 +1078,7 @@
             <li><a href="#features">Features</a></li>
             <li><a href="#capabilities">Capabilities</a></li>
             <li><a href="#sdks">SDKs</a></li>
-            <li><a href="#quickstart">Docs</a></li>
+            <li><a href="../html/index.html">Docs</a></li>
             <li><a href="https://du7890u4mptc6.cloudfront.net/dashboard/" class="nav-btn-ghost">Dashboard</a></li>
             <li><a href="https://github.com/collabora/Aavaaz" class="nav-btn-ghost">GitHub</a></li>
             <li><a href="#quickstart" class="nav-btn-green">Get Started</a></li>
@@ -1118,12 +1118,11 @@
     <span class="f">--api-key</span> <span class="v">"sk-..."</span> \
     <span class="f">--batch-inference</span> <span class="f">--metrics-port</span> <span class="v">9091</span>
 
-<span class="o">INFO  Aavaaz v0.9.0 starting...</span>
-<span class="o">INFO  Backend: faster_whisper | Model: small</span>
-<span class="o">INFO  REST API &rarr; http://0.0.0.0:8000</span>
-<span class="o">INFO  Swagger  &rarr; http://0.0.0.0:8000/docs</span>
-<span class="o">INFO  Metrics  &rarr; :9091/metrics</span>
-<span class="s">&#10003; Ready &mdash; accepting connections on :9090</span></div>
+<span class="o">INFO  Starting Aavaaz server on 0.0.0.0:9090 (backend=faster_whisper, model=large-v3)</span>
+<span class="o">INFO  Loaded 4 plugins: ['formatting', 'pii_redaction', 'profanity_filter', 'audio_intelligence']</span>
+<span class="o">INFO  Batch inference enabled (max_batch=8, window=50ms)</span>
+<span class="o">INFO  Prometheus metrics available at http://0.0.0.0:9091/metrics</span>
+<span class="o">INFO  OpenAI-Compatible API started on http://0.0.0.0:8000</span></div>
         </div>
 
         <div class="stats-row">
@@ -1132,15 +1131,15 @@
                 <p>Inference Backends</p>
             </div>
             <div class="stat-cell">
-                <h3>30+</h3>
+                <h3>20+</h3>
                 <p>Production Features</p>
             </div>
             <div class="stat-cell">
                 <h3>6</h3>
-                <p>Client SDKs &amp; Extensions</p>
+                <p>SDKs &amp; WhisperLive Extensions</p>
             </div>
             <div class="stat-cell">
-                <h3>40+</h3>
+                <h3>39</h3>
                 <p>Aavaaz and WhisperLive Contributors</p>
             </div>
         </div>
@@ -1152,7 +1151,7 @@
     <p>Community-driven open source &middot; supported by</p>
     <div class="trust-logos">
         <span>Collabora</span>
-        <span style="font-weight: 400; color: var(--text-muted); font-size: 0.85rem;">and 40+ open source contributors worldwide</span>
+        <span style="font-weight: 400; color: var(--text-muted); font-size: 0.85rem;">and 39 open source contributors worldwide</span>
     </div>
 </div>
 
@@ -1225,7 +1224,7 @@
                 <pre id="demo-transcript"></pre>
                 <div class="demo-meta" id="demo-meta"></div>
             </div>
-            <p style="margin-top: 20px; font-size: 0.75rem; color: var(--text-tertiary); text-align: center;">&#128274; <strong>Privacy:</strong> Your audio is processed in memory and immediately discarded. We do not store, retain, or share any uploaded audio files.</p>
+            <p style="margin-top: 20px; font-size: 0.75rem; color: var(--text-tertiary); text-align: center;">&#128274; <strong>Privacy:</strong> Audio is deleted after transcription. Files over 6 MB pass through S3, and their transcripts stay in the output bucket until you delete them. We never share uploads.</p>
         </div>
     </div>
 </section>
@@ -1246,12 +1245,12 @@
             <div class="backend-card">
                 <div class="backend-icon">&#128640;</div>
                 <h3>TensorRT</h3>
-                <p>NVIDIA TensorRT-LLM for maximum throughput on NVIDIA GPUs. Int4/int8 weight-only quantization for peak performance.</p>
+                <p>NVIDIA TensorRT-LLM for maximum throughput on NVIDIA GPUs. Int4/int8 weight-only engines built with WhisperLive&rsquo;s build script.</p>
             </div>
             <div class="backend-card">
                 <div class="backend-icon">&#128311;</div>
                 <h3>OpenVINO</h3>
-                <p>Intel-optimized inference on CPUs, iGPUs, and dGPUs. Plug-and-play Docker images with automatic hardware detection.</p>
+                <p>Intel CPU inference through OpenVINO GenAI. Engine images come from WhisperLive.</p>
             </div>
         </div>
     </div>
@@ -1274,7 +1273,7 @@
             <div class="feature-card">
                 <span class="f-icon">&#128225;</span>
                 <h3>OpenAI-Compatible REST API</h3>
-                <p>Drop-in replacement for the OpenAI transcription endpoint. SSE streaming, auto-generated Swagger &amp; ReDoc docs.</p>
+                <p>Drop-in replacement for the OpenAI transcription endpoint. SSE streaming, auto-generated Swagger &amp; ReDoc docs (send the API key when auth is on).</p>
                 <span class="feature-tag tag-core">Core</span>
             </div>
             <div class="feature-card">
@@ -1286,7 +1285,7 @@
             <div class="feature-card">
                 <span class="f-icon">&#128100;</span>
                 <h3>Known Speaker Matching</h3>
-                <p>Enroll named speakers with audio clips. Get &ldquo;Alice&rdquo; instead of &ldquo;SPEAKER_00&rdquo; in your transcripts.</p>
+                <p>Enroll named speakers with audio clips on the REST endpoint (verbose_json). Get &ldquo;Alice&rdquo; instead of &ldquo;SPEAKER_00&rdquo;.</p>
                 <span class="feature-tag tag-ai">AI</span>
             </div>
             <div class="feature-card">
@@ -1304,13 +1303,13 @@
             <div class="feature-card">
                 <span class="f-icon">&#128263;</span>
                 <h3>Audio Noise Reduction</h3>
-                <p>Built-in preprocessing with near-field (stationary) and far-field (non-stationary) noise reduction modes.</p>
+                <p>Built-in preprocessing with near-field (stationary) and far-field (non-stationary) noise reduction modes. Applied on file and batch transcription.</p>
                 <span class="feature-tag tag-core">Core</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#129324;</span>
                 <h3>Profanity Filter</h3>
-                <p>Three masking modes &mdash; partial (d**n), full (****), or remove. Custom word lists supported.</p>
+                <p>Three masking modes &mdash; partial (d**n), full (****), or remove. Mode and extra words are set per request on the Lambda and Modal paths; the streaming server uses partial masking.</p>
                 <span class="feature-tag tag-core">Core</span>
             </div>
             <div class="feature-card">
@@ -1322,19 +1321,19 @@
             <div class="feature-card">
                 <span class="f-icon">&#129504;</span>
                 <h3>Audio Intelligence</h3>
-                <p>Post-transcription analysis &mdash; sentiment, topic detection, entity extraction, and extractive summarization.</p>
+                <p>Per-segment sentiment, topic detection and entity extraction. Extractive summarization on file and batch transcription.</p>
                 <span class="feature-tag tag-ai">AI</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#128202;</span>
                 <h3>Smart Formatting</h3>
-                <p>Auto-capitalize sentences, normalize spoken numbers to digits, and clean up punctuation automatically.</p>
+                <p>Auto-capitalize sentences, normalize spoken numbers to digits, and format dates, times, currency and percentages.</p>
                 <span class="feature-tag tag-core">Core</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#128268;</span>
                 <h3>Plugin Architecture</h3>
-                <p>Add custom post-processing steps. Priority-ordered, enable/disable at runtime, graceful error handling.</p>
+                <p>Add custom post-processing steps. Priority-ordered, enable/disable programmatically, a failing plugin never drops a segment.</p>
                 <span class="feature-tag tag-enterprise">Enterprise</span>
             </div>
             <div class="feature-card">
@@ -1346,21 +1345,20 @@
             <div class="feature-card">
                 <span class="f-icon">&#127898;</span>
                 <h3>Multi-Channel Audio</h3>
-                <p>Split stereo/multi-channel audio per-channel. Merge transcriptions into a unified timeline.</p>
+                <p>Split stereo/multi-channel audio per-channel. Merge transcriptions into a unified timeline. Available on Lambda file transcription.</p>
                 <span class="feature-tag tag-core">Core</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#127760;</span>
                 <h3>Language Detection</h3>
-                <p>Auto-detect spoken language with confidence scores. Every response includes language code and probability.</p>
+                <p>Auto-detect spoken language. Batch responses include the language code and probability; streaming sends a language message once detected.</p>
                 <span class="feature-tag tag-core">Core</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#10024;</span>
                 <h3>Auto-Highlights</h3>
-                <p>Extract key phrases and important terms from transcripts using TF-scored n-gram analysis.</p>
+                <p>Extract key phrases and important terms from transcripts using TF-scored n-gram analysis, on file and batch transcription.</p>
                 <span class="feature-tag tag-ai">AI</span>
-                <span class="feature-tag tag-planned">Planned</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#128218;</span>
@@ -1372,7 +1370,7 @@
             <div class="feature-card">
                 <span class="f-icon">&#128172;</span>
                 <h3>Utterance Detection</h3>
-                <p>Detect natural speech boundaries &mdash; complete thoughts vs. pauses. Speaker-aware with punctuation analysis.</p>
+                <p>Detect natural speech boundaries &mdash; complete thoughts vs. pauses, speaker-aware with punctuation analysis. Surfaced as the sentences of auto-paragraphs.</p>
                 <span class="feature-tag tag-core">Core</span>
             </div>
             <div class="feature-card">
@@ -1384,7 +1382,7 @@
             <div class="feature-card">
                 <span class="f-icon">&#128263;</span>
                 <h3>Filler Word Removal</h3>
-                <p>Strip um, uh, hmm, &ldquo;you know&rdquo;, &ldquo;I mean&rdquo; from transcripts. Conservative or aggressive mode.</p>
+                <p>Strip um, uh, hmm, &ldquo;you know&rdquo;, &ldquo;I mean&rdquo; from transcripts. Conservative or aggressive mode. Available on the Lambda and Modal paths.</p>
                 <span class="feature-tag tag-core">Core</span>
             </div>
             <div class="feature-card">
@@ -1404,7 +1402,7 @@
             <div class="feature-card">
                 <span class="f-icon">&#128269;</span>
                 <h3>Transcript Search</h3>
-                <p>Full-text search across stored transcriptions. Filter by user, language, model, tags, and time range.</p>
+                <p>Search across your stored transcripts. Filter by language and tags.</p>
                 <span class="feature-tag tag-enterprise">Enterprise</span>
             </div>
             <div class="feature-card">
@@ -1416,7 +1414,7 @@
             <div class="feature-card">
                 <span class="f-icon">&#128200;</span>
                 <h3>Usage &amp; Billing API</h3>
-                <p>Track API usage per user &mdash; requests, audio minutes, characters. Breakdowns by model and language.</p>
+                <p>Track API usage per user &mdash; requests, audio minutes and cost, with a daily breakdown.</p>
                 <span class="feature-tag tag-enterprise">Enterprise</span>
             </div>
         </div>
@@ -1445,11 +1443,11 @@
             </div>
             <div class="ent-card">
                 <h3>&#128257; Auto-Reconnect</h3>
-                <p>Client-side automatic reconnection with configurable retry count and backoff delay. Only triggers on unexpected disconnects.</p>
+                <p>Client-side automatic reconnection with configurable retry count and delay. Opt in with max_retries; it does not retry after a server error.</p>
             </div>
             <div class="ent-card">
                 <h3>&#128214; OpenAPI Documentation</h3>
-                <p>Auto-generated interactive API docs &mdash; Swagger UI at <code>/docs</code>, ReDoc at <code>/redoc</code>, and OpenAPI JSON schema.</p>
+                <p>Auto-generated interactive API docs &mdash; Swagger UI at <code>/docs</code>, ReDoc at <code>/redoc</code>, and OpenAPI JSON schema. With an API key configured, send the Bearer header to reach them.</p>
             </div>
             <div class="ent-card">
                 <h3>&#127959; Horizontal Scaling</h3>
@@ -1457,23 +1455,23 @@
             </div>
             <div class="ent-card">
                 <h3>&#127891; Fine-Tune Custom Models</h3>
-                <p>Train Whisper on your domain data &mdash; medical, legal, accented speech. A key open-source differentiator commercial APIs can&rsquo;t match.</p>
+                <p>A guide to training Whisper on your domain data &mdash; medical, legal, accented speech &mdash; and serving the result as a custom model.</p>
             </div>
             <div class="ent-card">
                 <h3>&#128051; Docker Everything</h3>
-                <p>Dockerfiles for GPU, CPU, TensorRT, OpenVINO, Edge, and Jetson. One command from zero to production.</p>
+                <p>A CUDA GPU image and Lambda images in this repo. CPU, OpenVINO, TensorRT and ROCm engine images come from WhisperLive.</p>
             </div>
             <div class="ent-card">
                 <h3>&#128274; JWT / SSO</h3>
-                <p>Authenticate via Keycloak, Cognito, Auth0, or Okta. RS256 JWKS and HS256 support. Combined with local API keys.</p>
+                <p>HS256 JWT on the self-hosted SaaS API and Cognito RS256 on the serverless SaaS API, alongside local API keys.</p>
             </div>
             <div class="ent-card">
                 <h3>&#128276; Reliable Webhooks</h3>
-                <p>Async transcription callbacks with exponential backoff retry. Smart retry &mdash; no retry on 4xx, retry on 5xx and 429.</p>
+                <p>Async transcription callbacks with exponential backoff retry. Smart retry &mdash; no retry on 4xx, retry on 5xx and 429. Fired from the Lambda transcription path.</p>
             </div>
             <div class="ent-card">
                 <h3>&#9889; Terraform Deploy</h3>
-                <p>One-command AWS deployment &mdash; VPC, ALB, ECS with GPU, S3, CloudWatch. Full infrastructure as code.</p>
+                <p>One-command AWS deployment &mdash; VPC, ALB, ECS with GPU, CloudWatch. Full infrastructure as code.</p>
             </div>
             <div class="ent-card">
                 <h3>&#9889; Serverless (Lambda)</h3>
@@ -1546,7 +1544,7 @@
             <div class="sdk-card">
                 <div class="sdk-icon">&#128013;</div>
                 <h3>Python</h3>
-                <p>Built-in client with WebSocket, REST, and all features.</p>
+                <p>REST and WebSocket clients, plus the WhisperLive Python client.</p>
             </div>
             <div class="sdk-card">
                 <div class="sdk-icon">&#128311;</div>
@@ -1556,24 +1554,24 @@
             <div class="sdk-card">
                 <div class="sdk-icon">&#128309;</div>
                 <h3>Go</h3>
-                <p>Lightweight REST client with transcription and health checks.</p>
+                <p>Lightweight REST client for transcription.</p>
             </div>
         </div>
         <div class="sdk-grid fade-in" style="margin-top: 16px;">
             <div class="sdk-card">
                 <div class="sdk-icon">&#127760;</div>
                 <h3>Chrome Extension</h3>
-                <p>Transcribe any browser tab audio in real-time.</p>
+                <p>Transcribe any browser tab audio in real-time. <a href="https://github.com/collabora/WhisperLive/tree/main/Audio-Transcription-Chrome">From the WhisperLive repo.</a></p>
             </div>
             <div class="sdk-card">
                 <div class="sdk-icon">&#129418;</div>
                 <h3>Firefox Extension</h3>
-                <p>Same great experience on Firefox.</p>
+                <p>Same great experience on Firefox. <a href="https://github.com/collabora/WhisperLive/tree/main/Audio-Transcription-Firefox">From the WhisperLive repo.</a></p>
             </div>
             <div class="sdk-card">
                 <div class="sdk-icon">&#128241;</div>
                 <h3>iOS Client</h3>
-                <p>Native Swift client for iPhone &amp; iPad.</p>
+                <p>Native Swift client for iPhone. <a href="https://github.com/collabora/WhisperLive/tree/main/Audio-Transcription-iOS">From the WhisperLive repo.</a></p>
             </div>
         </div>
     </div>
@@ -1638,37 +1636,23 @@ console.<span class="fn">log</span>(result.text);
                 </div>
                 <div class="tab-panel" id="tab-go">
 <pre><span class="cmt">// Requires a running aavaaz server (see Python tab to start one)</span>
-<span class="kw">import</span> wl <span class="str">"github.com/collabora/Aavaaz/sdks/go"</span>
+<span class="kw">import</span> wl <span class="str">"github.com/collabora/aavaaz/aavaaz/sdks/go"</span>
 
 client := wl.<span class="fn">NewClient</span>(<span class="str">"http://localhost:8000"</span>, &amp;wl.Config{
     APIKey: <span class="str">"your-key"</span>,
 })
 
 result, err := client.<span class="fn">Transcribe</span>(<span class="str">"audio.wav"</span>, <span class="kw">nil</span>)
-fmt.<span class="fn">Println</span>(result.Text)
-
-<span class="cmt">// Check server health</span>
-health, _ := client.<span class="fn">Health</span>()
-fmt.<span class="fn">Printf</span>(<span class="str">"Status: %s (%d/%d clients)\n"</span>,
-    health.Status, health.Clients, health.MaxClients)</pre>
+fmt.<span class="fn">Println</span>(result.Text)</pre>
                 </div>
                 <div class="tab-panel" id="tab-docker">
-<pre><span class="cmt"># GPU (NVIDIA)</span>
-docker run -it --gpus all -p <span class="num">9090</span>:<span class="num">9090</span> ghcr.io/collabora/aavaaz-gpu:latest
+<pre><span class="cmt"># Build the GPU image from this repo</span>
+docker build -t aavaaz .
+docker run -it --gpus all -p <span class="num">9090</span>:<span class="num">9090</span> -p <span class="num">8000</span>:<span class="num">8000</span> aavaaz
 
-<span class="cmt"># CPU only</span>
-docker run -it -p <span class="num">9090</span>:<span class="num">9090</span> ghcr.io/collabora/aavaaz-cpu:latest
-
-<span class="cmt"># OpenVINO (Intel GPU)</span>
-docker run -it --device=/dev/dri -p <span class="num">9090</span>:<span class="num">9090</span> ghcr.io/collabora/aavaaz-openvino
-
-<span class="cmt"># Edge (Raspberry Pi / ARM64)</span>
-docker build -f docker/Dockerfile.edge -t aavaaz-edge .
-docker run -p <span class="num">9090</span>:<span class="num">9090</span> -p <span class="num">8000</span>:<span class="num">8000</span> aavaaz-edge
-
-<span class="cmt"># NVIDIA Jetson</span>
-docker build -f docker/Dockerfile.jetson -t aavaaz-jetson .
-docker run --runtime nvidia -p <span class="num">9090</span>:<span class="num">9090</span> aavaaz-jetson</pre>
+<span class="cmt"># CPU or OpenVINO engine only (no Aavaaz plugins): WhisperLive images</span>
+docker run -it -p <span class="num">9090</span>:<span class="num">9090</span> ghcr.io/collabora/whisperlive-cpu:latest
+docker run -it --device=/dev/dri -p <span class="num">9090</span>:<span class="num">9090</span> ghcr.io/collabora/whisperlive-openvino:latest</pre>
                 </div>
                 <div class="tab-panel" id="tab-rest">
 <pre><span class="cmt"># Requires a running aavaaz server (see Python tab to start one)</span>
@@ -1676,8 +1660,7 @@ docker run --runtime nvidia -p <span class="num">9090</span>:<span class="num">9
 <span class="cmt"># Transcribe a file</span>
 curl -X POST http://localhost:<span class="num">8000</span>/v1/audio/transcriptions \
   -H <span class="str">"Authorization: Bearer sk-..."</span> \
-  -F <span class="str">"file=@audio.wav"</span> \
-  -F <span class="str">"model=small"</span>
+  -F <span class="str">"file=@audio.wav"</span>
 
 <span class="cmt"># Stream with SSE</span>
 curl -X POST http://localhost:<span class="num">8000</span>/v1/audio/transcriptions \
@@ -1711,7 +1694,7 @@ curl -X POST http://localhost:<span class="num">8000</span>/v1/audio/transcripti
             <div class="deploy-card">
                 <div class="d-icon">&#128223;</div>
                 <h3>Edge &amp; Embedded</h3>
-                <p>Raspberry Pi, NVIDIA Jetson, and ARM64 devices. Optimized Dockerfiles with model selection guides per device class.</p>
+                <p>Raspberry Pi, NVIDIA Jetson, and ARM64 devices. A model selection guide per device class.</p>
             </div>
             <div class="deploy-card">
                 <div class="d-icon">&#9889;</div>
@@ -1721,7 +1704,7 @@ curl -X POST http://localhost:<span class="num">8000</span>/v1/audio/transcripti
             <div class="deploy-card">
                 <div class="d-icon">&#128640;</div>
                 <h3>Modal (GPU Serverless)</h3>
-                <p>On-demand GPU transcription that scales to zero. Full Whisper models on T4/A10G/A100 &mdash; deploy with one command. <a href="https://github.com/collabora/aavaaz/blob/master/docs/MODAL.md" style="color:var(--green)">Docs&nbsp;&rarr;</a></p>
+                <p>On-demand GPU transcription that scales to zero. Full Whisper models on a T4 by default, A10G/A100 by editing gpu= &mdash; deploy with one command. <a href="https://github.com/collabora/aavaaz/blob/master/docs/MODAL.md" style="color:var(--green)">Docs&nbsp;&rarr;</a></p>
             </div>
         </div>
     </div>
@@ -1738,7 +1721,7 @@ curl -X POST http://localhost:<span class="num">8000</span>/v1/audio/transcripti
             <a href="https://www.collabora.com/news-and-blog/news-and-events/whisperfusion-ultra-low-latency-conversations-with-an-ai-chatbot.html" class="blog-card">
                 <span class="blog-tag">Case Study</span>
                 <h3>WhisperFusion: Ultra-Low Latency AI Conversations</h3>
-                <p>How Aavaaz powers WhisperFusion for ultra-low latency conversations with AI chatbots.</p>
+                <p>How WhisperLive, the engine under Aavaaz, powers WhisperFusion for ultra-low latency conversations with AI chatbots.</p>
                 <span class="arrow">Read more &rarr;</span>
             </a>
             <a href="https://www.collabora.com/news-and-blog/news-and-events/breaking-language-barriers-20-moving-closer-production-ready-hindi-asr.html" class="blog-card">
@@ -1755,7 +1738,7 @@ curl -X POST http://localhost:<span class="num">8000</span>/v1/audio/transcripti
 <section class="cta-section">
     <div class="cta-content">
         <h2>Ready to get started?</h2>
-        <p>Aavaaz is free, open source, and ready for production. Join 40+ contributors building the future of speech-to-text.</p>
+        <p>Aavaaz is free, open source, and ready for production. Join 39 contributors building the future of speech-to-text.</p>
         <div class="cta-actions">
             <a href="https://github.com/collabora/Aavaaz" class="btn btn-green">
                 Get Started Free
@@ -1789,10 +1772,10 @@ curl -X POST http://localhost:<span class="num">8000</span>/v1/audio/transcripti
         <div class="footer-col">
             <h4>Resources</h4>
             <a href="https://github.com/collabora/Aavaaz">GitHub</a>
-            <a href="https://github.com/collabora/Aavaaz/blob/main/README.md">Documentation</a>
-            <a href="#enterprise">Scaling Guide</a>
-            <a href="#deploy">Deployment Guide</a>
-            <a href="#deploy">Edge Deployment</a>
+            <a href="https://github.com/collabora/Aavaaz/blob/master/README.md">Documentation</a>
+            <a href="https://github.com/collabora/Aavaaz/blob/master/docs/SCALING.md">Scaling Guide</a>
+            <a href="https://github.com/collabora/Aavaaz/blob/master/docs/aws-commercial-deployment.md">Deployment Guide</a>
+            <a href="https://github.com/collabora/Aavaaz/blob/master/docs/EDGE_DEPLOYMENT.md">Edge Deployment</a>
         </div>
         <div class="footer-col">
             <h4>Community</h4>

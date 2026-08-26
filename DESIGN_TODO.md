@@ -49,3 +49,43 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 - [x] Custom vocabulary — the upload page now sends `aavaaz-custom-vocab` as hotwords (JSON body + S3 metadata); the batch Lambda passes them to `model.transcribe`. Per-word boost is UI-only (faster-whisper hotwords has no weighting; words are ordered highest-boost first).
 - [x] Upload output-format selector — SRT/VTT now generate real cues instead of plain text with a fake extension.
 - [x] API key persistence — created keys are saved to `aavaaz-api-key` so batch requests carry `Authorization` (note: the transcribe Lambda still doesn't enforce it; unauthenticated by design).
+
+## Claims removed or rescoped in the 2026-08-26 docs audit
+
+Wanted features that the README or `docs/site` advertised but no entry point delivers. Each is unchecked until wired, then put the claim back.
+
+### No code behind it
+
+- [ ] **GDPR compliance** — no erasure/purge/export endpoints anywhere; needs transcript + usage deletion on the SaaS APIs and a documented retention policy.
+- [ ] **Storage backends (local/S3)** — Lambda writes S3 directly; there is no storage abstraction and no local backend for `aavaaz serve`.
+- [ ] **ACL** — only the shared API key and SaaS JWT exist; no roles/permissions on transcripts (the deleted `acl` module had `UserStore`/RBAC).
+- [ ] **SSO providers** — site claimed Keycloak, Auth0, Okta with RS256 JWKS. `api/auth.py` is HS256 only; RS256 exists only in `serverless/saas_lambda.py` hardcoded to Cognito. `docs/KEYCLOAK_SSO.md` documents a `--jwt_jwks_url` flag no CLI accepts.
+- [ ] **Edge / Jetson Dockerfiles** — `docker/Dockerfile.edge` and `docker/Dockerfile.jetson` exist nowhere, but `docs/EDGE_DEPLOYMENT.md` still references them.
+- [ ] **Published Aavaaz images** — `ghcr.io/collabora/aavaaz-{gpu,cpu,openvino}` and Docker Hub `collabora/aavaaz` do not exist; only the WhisperLive engine images do. Needs a registry publish job and CPU/OpenVINO/TensorRT variants of `Dockerfile`.
+- [ ] **`/health` on the streaming REST API** — the Go SDK's `Health()` (status, clients, max_clients) GETs a route only the SaaS server and Lambda have. Add it to the WhisperLive REST app or drop it from the SDK.
+- [ ] **Helm `gpu.enabled`** — the chart always requests one `nvidia.com/gpu`; no CPU-only toggle.
+- [ ] **Fine-tuning tooling** — `docs/FINE_TUNING.md` is a guide, no training script in the repo.
+- [ ] **Web UI in `aavaaz serve`** — only the Lambda and Modal deployments serve a page.
+- [ ] **Multi-GPU** — one process serves one GPU; nothing spreads sessions across devices (the SCALING guide covers one node per GPU behind a load balancer).
+
+### Exists on one path, advertised as general
+
+- [ ] **Noise reduction on streaming** — batch only (Lambda/Modal). Streaming needs audio-input access in WhisperLive before `add_frames`.
+- [ ] **Multichannel on Modal batch and streaming** — Lambda only.
+- [ ] **Summarization, highlights, filler removal on `aavaaz serve`** — the streaming plugin does per-segment sentiment/topics/entities only; whole-transcript analysis has no streaming hook beyond `transcript_finalizer` (paragraphs use it, intelligence could too).
+- [ ] **Profanity mode and custom words on `aavaaz serve`** — CLI flag gives partial masking with the default list; mode/extra words are per-request on Lambda/Modal only.
+- [ ] **Known speaker matching over WebSocket** — REST `verbose_json` only; the WS handshake has no enrollment fields.
+- [ ] **Webhooks from `aavaaz serve` and Modal live** — Lambda only.
+- [ ] **Language code + probability on REST `json`/SSE responses** — batch responses have both, REST `json` returns text only, `verbose_json` has no probability, SSE events have neither.
+- [ ] **Transcript search filters** — endpoints take `q`, `language`, `tag`; `TranscriptIndex.search` already supports user/model/start/end but nothing exposes them. "Full-text" is a substring match.
+- [ ] **Usage API characters and per-model/per-language breakdown** — only minutes, requests, cost, daily rows are recorded; `UsageTracker` in `features/search.py` has the richer shape but no caller.
+- [ ] **Smart formatting punctuation cleanup** — formatter does capitalization, numbers, dates/times/currency; nothing touches punctuation.
+- [ ] **Modal batch `word_timestamps` and hotwords** — `deploy/modal/app.py` never sets them on `BatchRequest`.
+- [ ] **Auto-reconnect "only on unexpected disconnects"** — WhisperLive client reconnects on any close unless `server_error`; default `max_retries=0`.
+
+### Behaviour the docs now describe instead of hide
+
+- [ ] **REST `/v1/audio/transcriptions` model selection** — the `model` form field is ignored and `--model` only applies when it is a path or HF repo; otherwise the endpoint loads `small`. Upstream WhisperLive.
+- [ ] **`/docs`, `/redoc`, `/openapi.json` behind `--api-key`** — the REST middleware 401s them; exempt them upstream.
+- [ ] **PyPI install cannot start `aavaaz serve`** — published `whisper-live` 0.9.0 lacks the hooks; docs point at `boxerab/WhisperLive@scaling-fixes` until a release includes collabora/WhisperLive#535.
+- [ ] **Lambda demo keeps large-file transcripts** — uploads over 6 MB go through S3 and their transcript objects are never deleted; add cleanup after the status handler returns them.
