@@ -15,10 +15,12 @@ WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY aavaaz/ aavaaz/
 
-# pypi whisper-live lacks the transcript_finalizer hook aavaaz serve passes
-ARG WHISPER_LIVE_SOURCE=git+https://github.com/boxerab/WhisperLive@scaling-fixes
-RUN python3.12 -m pip install --no-cache-dir "$WHISPER_LIVE_SOURCE" && \
-    python3.12 -m pip install --no-cache-dir .[whisper]
+RUN python3.12 -m pip install --no-cache-dir .[whisper]
+
+# pypi whisper-live lacks the hooks aavaaz serve passes, so the fork replaces
+# it last and a ref change rebuilds only this layer
+ARG WHISPER_LIVE_SOURCE=git+https://github.com/boxerab/WhisperLive@dev
+RUN python3.12 -m pip install --no-cache-dir "$WHISPER_LIVE_SOURCE"
 
 EXPOSE 9090 8000 9100
 
