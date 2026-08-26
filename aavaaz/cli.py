@@ -69,8 +69,14 @@ def main():
     serve_parser.add_argument(
         "--batch-max-queue-wait",
         type=float,
-        default=2.0,
-        help="Seconds of batch queue wait before new clients are told to wait (default: 2.0)",
+        default=0.5,
+        help="Seconds of batch queue wait before new clients are told to wait (default: 0.5)",
+    )
+    serve_parser.add_argument(
+        "--batch-max-admissions-per-s",
+        type=float,
+        default=5.0,
+        help="Most new clients admitted per second in batch mode, the rest get WAIT (default: 5.0)",
     )
     serve_parser.add_argument(
         "--max-clients",
@@ -214,6 +220,7 @@ def main():
             batch_max_size=args.batch_max_size,
             batch_window_ms=args.batch_window_ms,
             batch_max_queue_wait_s=args.batch_max_queue_wait,
+            batch_max_admissions_per_s=args.batch_max_admissions_per_s,
             max_clients=args.max_clients,
             max_connection_time=args.max_connection_time,
             noise_reduction=args.noise_reduction,

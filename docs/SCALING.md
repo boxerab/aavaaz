@@ -290,7 +290,7 @@ curl http://node1:8080/v1/audio/transcriptions \
 
 ## Best Practices
 
-1. **Enable batch inference** — Use `--batch-inference` with `--batch-max-size 16` to batch requests and improve GPU utilization. `--batch-max-queue-wait` (default 2.0 seconds) rejects new clients with a WAIT once the measured batch queue wait exceeds it, so a saturated worker sheds load instead of adding lag for everyone.
+1. **Enable batch inference** — Use `--batch-inference` with `--batch-max-size 16` to batch requests and improve GPU utilization. `--batch-max-queue-wait` (default 0.5 seconds) rejects new clients with a WAIT once the measured batch queue wait exceeds it, so a saturated worker sheds load instead of adding lag for everyone.
 
 2. **Set `--max-clients`** — Limit concurrent connections per node to prevent OOM. Match to your GPU capacity.
 
