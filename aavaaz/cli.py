@@ -81,14 +81,14 @@ def main():
     serve_parser.add_argument(
         "--batch-beam-size",
         type=int,
-        default=5,
-        help="Beam width for batched decoding, 1 is greedy and much faster (default: 5)",
+        default=1,
+        help="Beam width for batched decoding, 1 is greedy, 5 costs about 2.5x the decode time (default: 1)",
     )
     serve_parser.add_argument(
         "--batch-temperature-fallback",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Re-decode batched chunks that fail the quality check at higher temperatures (default: on)",
+        default=False,
+        help="Re-decode batched chunks that fail the quality check at higher temperatures, halves throughput at beam 1 (default: off)",
     )
     serve_parser.add_argument(
         "--max-clients",
