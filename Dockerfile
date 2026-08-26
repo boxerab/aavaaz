@@ -1,5 +1,7 @@
 FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
 
+ENV DEBIAN_FRONTEND=noninteractive
+
 # jammy ships python3.10/3.11 only; deadsnakes provides 3.12 to satisfy requires-python
 RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common curl ffmpeg git && \
