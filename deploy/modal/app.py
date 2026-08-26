@@ -21,12 +21,14 @@ Environment variables (set via Modal Secrets):
     AAVAAZ_ENABLE_INTELLIGENCE  1 to add sentiment/topics/entities (default: 0)
     AAVAAZ_API_KEY        Optional API key for authentication
 
+    AAVAAZ_STORE_AUDIO    1 to store uploaded audio to a Modal Volume (default: 0)
+    AAVAAZ_ENABLE_MULTICHANNEL  1 to transcribe each channel separately (default: 0)
+    AAVAAZ_CHANNEL_LABELS       Comma-separated labels, one per channel
+
 A per-request ``features`` object (JSON body field, or a ``features`` form field
 holding JSON) overrides these env defaults, matching the Lambda batch path. A
-``callback_url`` (body or form field) fires a webhook with the transcript on
-completion. Hotwords are not wired here (the WhisperLive batch worker takes an
-``initial_prompt``, not hotwords).
-    AAVAAZ_STORE_AUDIO    1 to store uploaded audio to a Modal Volume (default: 0)
+``hotwords`` string and a ``callback_url`` (body or form field) bias recognition
+and fire a webhook with the transcript on completion.
 """
 
 import logging
@@ -38,6 +40,9 @@ logger = logging.getLogger("aavaaz.modal")
 logger.setLevel(logging.INFO)
 
 WHISPER_MODEL = "large-v3"
+
+BATCH_TIMEOUT_SECONDS = 300
+UNKNOWN_LANGUAGE = "unknown"
 
 # Path to the web UI files inside the container.
 WEB_DIR = "/web"
@@ -175,6 +180,7 @@ class Transcriber:
         content_type = request.headers.get("content-type", "")
         response_format = None
         features = None
+        hotwords = None
         callback_url = None
 
         try:
@@ -193,6 +199,7 @@ class Transcriber:
 
                         with contextlib.suppress(ValueError, TypeError):
                             features = _json.loads(raw_features)
+                    hotwords = form.get("hotwords")
                     callback_url = form.get("callback_url")
                     filename = (
                         getattr(upload, "filename", None) or f"{uuid.uuid4().hex}.wav"
@@ -211,6 +218,7 @@ class Transcriber:
 
                     payload = await request.json()
                     features = payload.get("features")
+                    hotwords = payload.get("hotwords")
                     callback_url = payload.get("callback_url")
                     if "audio_base64" in payload:
                         filename = payload.get("filename", f"{uuid.uuid4().hex}.wav")
@@ -256,7 +264,7 @@ class Transcriber:
                     )
 
                 t0 = time.time()
-                result = self._transcribe(local_path, features)
+                result = self._transcribe(local_path, features, hotwords)
                 elapsed = time.time() - t0
                 logger.info(
                     "Transcription complete: request_id=%s duration=%.1fs "
@@ -283,13 +291,19 @@ class Transcriber:
             return fastapi.Response(content=text, media_type="text/plain")
         return result
 
-    def _transcribe(self, audio_path: str, features: dict | None = None) -> dict:
+    def _transcribe(
+        self,
+        audio_path: str,
+        features: dict | None = None,
+        hotwords: str | None = None,
+    ) -> dict:
         import os
 
         from faster_whisper.audio import decode_audio
-        from whisper_live.batch_inference import BatchRequest
 
+        from aavaaz.features import multichannel
         from aavaaz.features.enrichment import build_pipeline, enrich_result
+        from aavaaz.features.noise_reduction import maybe_reduce_noise
 
         file_size = os.path.getsize(audio_path)
         logger.info(
@@ -298,59 +312,76 @@ class Transcriber:
             file_size,
         )
 
-        # Decode audio to raw float32 samples at 16kHz
-        audio = decode_audio(audio_path)
+        multichannel_enabled, channel_labels = multichannel.resolve(features)
+        split_stereo = (
+            multichannel_enabled and multichannel.count_channels(audio_path) > 1
+        )
+        decoded = decode_audio(audio_path, split_stereo=split_stereo)
+        pipeline = build_pipeline(features)
 
-        # Optional noise reduction preprocessing (no-op unless enabled)
-        from aavaaz.features.noise_reduction import maybe_reduce_noise
+        def transcribe_channel(audio):
+            segments, info = self._run_batch(
+                maybe_reduce_noise(audio, features), hotwords
+            )
+            return _segments_to_entries(segments, pipeline), info
 
-        audio = maybe_reduce_noise(audio, features)
+        if split_stereo:
+            out = multichannel.transcribe_channels(
+                list(decoded), transcribe_channel, channel_labels
+            )
+        else:
+            entries, info = transcribe_channel(decoded)
+            out = {
+                "language": info.language if info else UNKNOWN_LANGUAGE,
+                "language_probability": info.language_probability if info else 0.0,
+                "duration": info.duration if info else 0.0,
+                "segments": entries,
+            }
 
-        # Submit to WhisperLive batch inference worker
-        req = BatchRequest(audio=audio, language=self.language)
-        self.batch_worker.submit(req)
-        completed = req.future.wait(timeout=300)
+        enrich_result(out, features)
+        return out
 
-        if not completed:
-            logger.error("Transcription timed out after 300s")
+    def _run_batch(self, audio, hotwords: str | None):
+        """Run one mono audio array through the WhisperLive batch worker."""
+        from whisper_live.batch_inference import BatchRequest
+
+        request = BatchRequest(
+            audio=audio,
+            language=self.language,
+            word_timestamps=True,
+            hotwords=hotwords or None,
+        )
+        self.batch_worker.submit(request)
+
+        if not request.future.wait(timeout=BATCH_TIMEOUT_SECONDS):
+            logger.error("Transcription timed out after %ds", BATCH_TIMEOUT_SECONDS)
             raise fastapi.HTTPException(
                 status_code=504, detail="Transcription timed out"
             )
 
-        if req.error:
-            logger.error("Transcription failed: %s", req.error)
-            raise req.error
+        if request.error:
+            logger.error("Transcription failed: %s", request.error)
+            raise request.error
 
-        segments = req.result or []
-        info = req.info
+        return request.result or [], request.info
 
-        pipeline = build_pipeline(features)
-        results = []
-        for seg in segments:
-            entry = {
-                "start": seg.start,
-                "end": seg.end,
-                "text": seg.text.strip(),
-            }
-            if hasattr(seg, "words") and seg.words:
-                entry["words"] = [
-                    {
-                        "word": w.word,
-                        "start": w.start,
-                        "end": w.end,
-                        "probability": w.probability,
-                    }
-                    for w in seg.words
-                ]
-            for fn in pipeline:
-                entry["text"] = fn(entry["text"])
-            results.append(entry)
 
-        out = {
-            "language": info.language if info else "unknown",
-            "language_probability": info.language_probability if info else 0.0,
-            "duration": info.duration if info else 0.0,
-            "segments": results,
-        }
-        enrich_result(out, features)
-        return out
+def _segments_to_entries(segments, pipeline: list) -> list[dict]:
+    """Convert WhisperLive segments to result dicts, applying the text pipeline."""
+    entries = []
+    for seg in segments:
+        entry = {"start": seg.start, "end": seg.end, "text": seg.text.strip()}
+        if getattr(seg, "words", None):
+            entry["words"] = [
+                {
+                    "word": w.word,
+                    "start": w.start,
+                    "end": w.end,
+                    "probability": w.probability,
+                }
+                for w in seg.words
+            ]
+        for fn in pipeline:
+            entry["text"] = fn(entry["text"])
+        entries.append(entry)
+    return entries

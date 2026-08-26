@@ -191,10 +191,16 @@ Modal captures all stdout/stderr in the **Modal dashboard** (app → logs tab).
 The app uses Python's `logging` module (`aavaaz.modal` logger) with the same
 structured fields as Lambda.
 
-## Audio Storage (Optional)
+## Retention
 
 By default, uploaded audio is **not stored** — it is processed in memory and
-immediately discarded. To enable audio retention for debugging or compliance:
+immediately discarded. The S3-trigger path deletes the uploaded object once the
+transcript is written, and `GET /v1/transcription/{key}` deletes the transcript
+object from the output bucket as it hands it to the caller, so a large-file
+upload leaves nothing behind. A transcript nobody polls for (a file dropped
+straight into the input bucket) stays in the output bucket.
+
+To enable audio retention for debugging or compliance:
 
 ### Lambda
 

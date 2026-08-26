@@ -252,7 +252,7 @@ def _transcribe(
     pipeline = build_pipeline(features)
     mc_enabled, mc_labels = multichannel.resolve(features)
 
-    if mc_enabled:
+    if mc_enabled and multichannel.count_channels(audio_path) > 1:
         result = _transcribe_multichannel(
             model, audio_path, language, hotwords, pipeline, mc_labels, features
         )
@@ -322,31 +322,21 @@ def _transcribe_multichannel(
     from faster_whisper.audio import decode_audio
 
     from aavaaz.features import noise_reduction
-    from aavaaz.features.multichannel import merge_channel_segments
+    from aavaaz.features.multichannel import transcribe_channels
 
     decoded = decode_audio(audio_path, sampling_rate=16000, split_stereo=True)
     channels = list(decoded) if isinstance(decoded, tuple) else [decoded]
 
-    per_channel = []
-    language_out = language
-    duration_out = 0.0
-    lang_prob = 0.0
-    for audio in channels:
-        audio = noise_reduction.maybe_reduce_noise(audio, features)
+    def transcribe_channel(audio):
         segments, info = model.transcribe(
-            audio, language=language, word_timestamps=True, hotwords=hotwords or None
+            noise_reduction.maybe_reduce_noise(audio, features),
+            language=language,
+            word_timestamps=True,
+            hotwords=hotwords or None,
         )
-        per_channel.append(_segments_to_entries(segments, pipeline))
-        language_out = info.language
-        lang_prob = info.language_probability
-        duration_out = max(duration_out, info.duration)
+        return _segments_to_entries(segments, pipeline), info
 
-    return {
-        "language": language_out,
-        "language_probability": lang_prob,
-        "duration": duration_out,
-        "segments": merge_channel_segments(per_channel, labels),
-    }
+    return transcribe_channels(channels, transcribe_channel, labels)
 
 
 def _format_output(result: dict) -> str:
@@ -441,15 +431,24 @@ def _record_usage(user_id: str | None, result: dict, source_name: str | None) ->
 
     duration = float(result.get("duration") or 0.0)
     text = " ".join(s.get("text", "") for s in result.get("segments", []))
+    language = result.get("language") or ""
+    model = os.environ.get("AAVAAZ_MODEL", "small")
     with contextlib.suppress(Exception):
-        dynamo_store.record_usage(user_id, duration / 60.0)
+        dynamo_store.record_usage(
+            user_id,
+            duration / 60.0,
+            characters=len(text),
+            model=model,
+            language=language,
+        )
         dynamo_store.save_transcript(
             user_id,
             {
                 "id": uuid.uuid4().hex,
                 "filename": source_name or "audio",
                 "duration": Decimal(str(round(duration, 2))),
-                "language": result.get("language") or "",
+                "language": language,
+                "model": model,
                 "text": text,
                 "tags": {},
             },
@@ -621,9 +620,10 @@ def _handle_transcription_status(event: dict, path: str) -> dict:
     try:
         obj = s3.get_object(Bucket=output_bucket, Key=out_key)
         body = obj["Body"].read().decode()
-        # Clean up progress file
-        with contextlib.suppress(Exception):
-            s3.delete_object(Bucket=output_bucket, Key=progress_key)
+        # served once, then deleted
+        for key in (progress_key, out_key):
+            with contextlib.suppress(Exception):
+                s3.delete_object(Bucket=output_bucket, Key=key)
         return _response(
             200,
             json.dumps({"status": "completed", "transcript": body}),

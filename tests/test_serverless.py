@@ -6,7 +6,9 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
+import boto3
 import pytest
+from moto import mock_aws
 
 # Mock heavy dependencies that aren't available in CI
 _mock_fw = MagicMock()
@@ -210,6 +212,9 @@ def test_handler_cancels_uploaded_transcription(_env, monkeypatch):
     assert result["statusCode"] == 200
     assert json.loads(result["body"])["status"] == "canceled"
     s3.delete_object.assert_any_call(Bucket="input-bucket", Key=upload_key)
+    s3.delete_object.assert_any_call(
+        Bucket="output-bucket", Key="transcripts/test.json"
+    )
     progress_call = s3.put_object.call_args
     assert progress_call.kwargs["Bucket"] == "output-bucket"
     assert progress_call.kwargs["Key"] == "transcripts/test.progress.json"
@@ -414,8 +419,16 @@ def test_handler_api_valid_key_allows(mock_whisper, _env, monkeypatch):
     # metering runs for the authenticated user
     record_usage.assert_called_once()
     assert record_usage.call_args.args[0] == "user-1"
+    kwargs = record_usage.call_args.kwargs
+    assert kwargs["model"] == "tiny.en"
+    assert kwargs["language"] == "en"
+    assert kwargs["characters"] > 0
     save_transcript.assert_called_once()
     assert save_transcript.call_args.args[0] == "user-1"
+    job = save_transcript.call_args.args[1]
+    assert job["model"] == "tiny.en"
+    assert job["language"] == "en"
+    assert kwargs["characters"] == len(job["text"])
 
 
 def test_handler_api_invalid_key_rejected(_env, monkeypatch):
@@ -432,6 +445,50 @@ def test_handler_api_invalid_key_rejected(_env, monkeypatch):
     with patch("aavaaz.api.dynamo_store.validate_api_key", return_value=None):
         result = handler(event, None)
     assert result["statusCode"] == 401
+
+
+def test_status_returns_and_deletes_transcript(_env, monkeypatch):
+    """The completed transcript is returned once, then removed from the bucket."""
+    from aavaaz.serverless.lambda_handler import handler
+
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    monkeypatch.setenv("AAVAAZ_OUTPUT_BUCKET", "output-bucket")
+
+    upload_key = "uploads/meeting.wav"
+    encoded = base64.urlsafe_b64encode(upload_key.encode()).decode().rstrip("=")
+    event = {
+        "requestContext": {
+            "http": {"method": "GET", "path": f"/v1/transcription/{encoded}"}
+        }
+    }
+
+    with mock_aws():
+        s3 = boto3.client("s3", region_name="us-east-1")
+        s3.create_bucket(Bucket="output-bucket")
+        s3.put_object(
+            Bucket="output-bucket",
+            Key="transcripts/meeting.json",
+            Body=json.dumps({"segments": [{"text": "Hello world"}]}).encode(),
+        )
+        s3.put_object(
+            Bucket="output-bucket",
+            Key="transcripts/meeting.progress.json",
+            Body=json.dumps({"status": "processing", "progress": 95}).encode(),
+        )
+
+        result = handler(event, None)
+
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["status"] == "completed"
+        assert "Hello world" in body["transcript"]
+
+        listed = s3.list_objects_v2(Bucket="output-bucket").get("Contents", [])
+        assert [obj["Key"] for obj in listed] == []
+
+        assert handler(event, None)["statusCode"] == 202
 
 
 @patch("faster_whisper.WhisperModel")
@@ -457,13 +514,42 @@ def test_handler_multichannel_labels_segments(mock_whisper, _env, monkeypatch):
     }
     fake_audio = types.ModuleType("faster_whisper.audio")
     fake_audio.decode_audio = MagicMock(return_value=(b"L", b"R"))
-    with patch.dict(sys.modules, {"faster_whisper.audio": fake_audio}):
+    with (
+        patch.dict(sys.modules, {"faster_whisper.audio": fake_audio}),
+        patch("aavaaz.features.multichannel.count_channels", return_value=2),
+    ):
         result = handler(event, None)
 
     assert result["statusCode"] == 200
     body = json.loads(result["body"])
     assert {s["channel"] for s in body["segments"]} == {"agent", "customer"}
     assert model.transcribe.call_count == 2  # one per channel
+
+
+@patch("faster_whisper.WhisperModel")
+def test_handler_multichannel_skips_mono_files(mock_whisper, _env, monkeypatch):
+    monkeypatch.setenv("AAVAAZ_LANGUAGE", "en")
+    model = MagicMock()
+    model.transcribe.return_value = (_fake_segments(), _fake_info())
+    mock_whisper.return_value = model
+
+    from aavaaz.serverless.lambda_handler import handler
+
+    event = {
+        "body": json.dumps(
+            {
+                "audio_base64": base64.b64encode(b"x").decode(),
+                "filename": "a.wav",
+                "features": {"multichannel": {"enabled": True}},
+            }
+        )
+    }
+    with patch("aavaaz.features.multichannel.count_channels", return_value=1):
+        result = handler(event, None)
+
+    assert result["statusCode"] == 200
+    assert "channel" not in json.loads(result["body"])["segments"][0]
+    assert model.transcribe.call_count == 1
 
 
 @patch("faster_whisper.WhisperModel")
@@ -508,9 +594,7 @@ def test_s3_features_from_object_metadata(mock_whisper, _env, monkeypatch):
     )
 
     event = {
-        "Records": [
-            {"s3": {"bucket": {"name": "in"}, "object": {"key": "clip.wav"}}}
-        ]
+        "Records": [{"s3": {"bucket": {"name": "in"}, "object": {"key": "clip.wav"}}}]
     }
 
     with patch("aavaaz.serverless.lambda_handler._s3_client") as mock_s3:
@@ -574,9 +658,7 @@ def test_s3_fires_webhook_from_metadata(mock_whisper, _env, monkeypatch):
 
     from aavaaz.serverless.lambda_handler import handler
 
-    cb_b64 = (
-        base64.urlsafe_b64encode(b"https://example.com/hook").decode().rstrip("=")
-    )
+    cb_b64 = base64.urlsafe_b64encode(b"https://example.com/hook").decode().rstrip("=")
     event = {
         "Records": [{"s3": {"bucket": {"name": "in"}, "object": {"key": "clip.wav"}}}]
     }

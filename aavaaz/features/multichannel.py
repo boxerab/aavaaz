@@ -7,6 +7,8 @@ and provides helpers for merging per-channel transcription results.
 
 import logging
 import os
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 
@@ -77,6 +79,49 @@ def merge_channel_segments(
     # Sort by start time (handle both string and numeric)
     merged.sort(key=lambda s: float(s.get("start", 0)))
     return merged
+
+
+def count_channels(audio_path: str) -> int:
+    """Number of audio channels in any media file ffmpeg can open."""
+    import av
+
+    with av.open(audio_path) as container:
+        return container.streams.audio[0].channels
+
+
+def transcribe_channels(
+    channels: list[np.ndarray],
+    transcribe: Callable[[np.ndarray], tuple[list[dict], Any]],
+    channel_labels: list[str] | None = None,
+) -> dict:
+    """Transcribe each mono channel and merge the segments onto one timeline.
+
+    Args:
+        channels: One mono audio array per channel.
+        transcribe: Called with one channel, returns (segment dicts, whisper info).
+        channel_labels: Optional labels for each channel.
+
+    Returns:
+        A result dict with language, language_probability, duration and the
+        merged, channel-labelled segments.
+    """
+    per_channel = []
+    language = None
+    language_probability = 0.0
+    duration = 0.0
+    for audio in channels:
+        segments, info = transcribe(audio)
+        per_channel.append(segments)
+        language = info.language
+        language_probability = info.language_probability
+        duration = max(duration, info.duration)
+
+    return {
+        "language": language,
+        "language_probability": language_probability,
+        "duration": duration,
+        "segments": merge_channel_segments(per_channel, channel_labels),
+    }
 
 
 def detect_channels_from_wav(file_path: str) -> int:

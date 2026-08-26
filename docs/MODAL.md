@@ -111,7 +111,31 @@ modal secret create aavaaz-config \
 | `AAVAAZ_OUTPUT_FORMAT` | `json` | Output format: `json` or `text` |
 | `AAVAAZ_ENABLE_PII` | `0` | Set to `1` to enable PII redaction |
 | `AAVAAZ_ENABLE_FORMAT` | `1` | Set to `1` to enable smart formatting |
+| `AAVAAZ_ENABLE_MULTICHANNEL` | `0` | Set to `1` to transcribe each channel of a multi-channel file separately |
+| `AAVAAZ_CHANNEL_LABELS` | `ch0,ch1,...` | Comma-separated labels, one per channel |
 | `AAVAAZ_API_KEY` | *(none)* | API key for Bearer token auth |
+
+## Per-request options
+
+The same fields as the Lambda batch API, sent as JSON body fields or
+multipart form fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `features` | object | Feature config (dashboard `FeaturesConfig` shape): `formatting`, `pii`, `profanity`, `intelligence`, `noiseReduction`, `multichannel`. Overrides the `AAVAAZ_ENABLE_*` defaults. |
+| `hotwords` | string | Custom-vocabulary terms to bias recognition. |
+| `callback_url` | string | Webhook URL POSTed with the transcript on completion. |
+
+```bash
+curl -X POST .../v1/audio/transcriptions \
+  -F file=@call.wav \
+  -F hotwords="Aavaaz,WhisperLive" \
+  -F features='{"multichannel": {"enabled": true, "labels": ["agent", "customer"]}}'
+```
+
+Segments always carry per-word timings in `words`. With multichannel enabled,
+each channel is transcribed separately and the segments are merged onto one
+timeline, each tagged with its `channel` label.
 
 ## GPU Selection
 
