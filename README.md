@@ -231,7 +231,7 @@ Batch multiple client sessions into single GPU calls for higher throughput:
 ```bash
 aavaaz serve --model large-v3 --batch-inference --batch-max-size 16 --batch-window-ms 50
 ```
-`--batch-max-queue-wait` (default 0.5 seconds) turns new clients away with a WAIT message once requests sit in the batch queue longer than that. `--batch-max-admissions-per-s` (default 5) caps how many new clients get in per second, so a burst of reconnects cannot overshoot the queue before the wait reflects it.
+`--batch-max-queue-wait` (default 0.5 seconds) turns new clients away with a WAIT message once requests sit in the batch queue longer than that. `--batch-max-admissions-per-s` (default 5) caps how many new clients get in per second, so a burst of reconnects cannot overshoot the queue before the wait reflects it. `--batch-beam-size` (default 5) sets the decoder beam width, 1 is greedy and several times faster at a small accuracy cost.
 
 ### Prometheus Metrics
 Monitor server health with a Prometheus `/metrics` endpoint:

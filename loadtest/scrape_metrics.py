@@ -14,6 +14,7 @@ METRIC_PREFIXES = (
     "whisperlive_connections_rejected_total",
     "whisperlive_transcription_latency_seconds_sum",
     "whisperlive_transcription_latency_seconds_count",
+    "whisperlive_batch_fallback_items_total",
     "whisperlive_audio_processed_seconds_total",
     "whisperlive_errors_total",
 )

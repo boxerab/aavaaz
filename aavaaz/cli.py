@@ -79,6 +79,12 @@ def main():
         help="Most new clients admitted per second in batch mode, the rest get WAIT (default: 5.0)",
     )
     serve_parser.add_argument(
+        "--batch-beam-size",
+        type=int,
+        default=5,
+        help="Beam width for batched decoding, 1 is greedy and much faster (default: 5)",
+    )
+    serve_parser.add_argument(
         "--max-clients",
         type=int,
         default=4,
@@ -221,6 +227,7 @@ def main():
             batch_window_ms=args.batch_window_ms,
             batch_max_queue_wait_s=args.batch_max_queue_wait,
             batch_max_admissions_per_s=args.batch_max_admissions_per_s,
+            batch_beam_size=args.batch_beam_size,
             max_clients=args.max_clients,
             max_connection_time=args.max_connection_time,
             noise_reduction=args.noise_reduction,
