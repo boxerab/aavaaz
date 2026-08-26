@@ -67,6 +67,12 @@ def main():
         help="Max ms to wait for batch to fill (default: 50)",
     )
     serve_parser.add_argument(
+        "--batch-max-queue-wait",
+        type=float,
+        default=2.0,
+        help="Seconds of batch queue wait before new clients are told to wait (default: 2.0)",
+    )
+    serve_parser.add_argument(
         "--max-clients",
         type=int,
         default=4,
@@ -207,6 +213,7 @@ def main():
             batch_inference=args.batch_inference,
             batch_max_size=args.batch_max_size,
             batch_window_ms=args.batch_window_ms,
+            batch_max_queue_wait_s=args.batch_max_queue_wait,
             max_clients=args.max_clients,
             max_connection_time=args.max_connection_time,
             noise_reduction=args.noise_reduction,

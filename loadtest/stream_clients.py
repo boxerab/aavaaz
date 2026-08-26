@@ -23,6 +23,7 @@ SAMPLE_RATE = 16000
 CHUNK_SAMPLES = 4096
 CHUNK_SECONDS = CHUNK_SAMPLES / SAMPLE_RATE
 READY_TIMEOUT_SECONDS = 60
+WAIT_RETRY_S = 5.0
 DEFAULT_TRACKS = pathlib.Path.home() / ".cache/aavaaz-loadtest/tracks"
 STOP_LAG_INTERVALS = 2
 
@@ -100,8 +101,11 @@ class Run:
         session = 0
         while not self.stop.is_set():
             session += 1
-            await self.session(client_id, session)
-            await asyncio.sleep(random.uniform(0.5, 2.0))
+            outcome = await self.session(client_id, session)
+            if outcome == "wait":
+                await asyncio.sleep(WAIT_RETRY_S)
+            else:
+                await asyncio.sleep(random.uniform(0.5, 2.0))
 
     async def session(self, client_id, session):
         track = random.choice(self.tracks)
@@ -116,7 +120,7 @@ class Run:
                 connect_ms = f"{(time.time() - connect_started) * 1000:.0f}"
                 self.record_event(client_id, session, outcome, connect_ms)
                 if outcome != "ready":
-                    return
+                    return outcome
                 stream_start = time.time()
                 receiver = asyncio.create_task(self.receive(ws, client_id, session, stream_start))
                 try:
