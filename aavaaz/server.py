@@ -12,6 +12,7 @@ import threading
 
 from whisper_live.server import TranscriptionServer
 
+from aavaaz.api.auth import JWT_SECRET_ENV, websocket_platform_auth
 from aavaaz.features.plugins import PluginRegistry
 from aavaaz.plugins import registry as default_registry
 
@@ -146,6 +147,18 @@ class AavaazServer:
 
         return preprocess
 
+    def _websocket_auth(self):
+        """The platform JWT check for the websocket, or None when it is open."""
+        secret = os.environ.get(JWT_SECRET_ENV, "")
+        if not secret:
+            logger.warning(
+                "%s is not set: the websocket on port %d accepts any client",
+                JWT_SECRET_ENV,
+                self.port,
+            )
+            return None
+        return websocket_platform_auth(secret)
+
     def _post_callback(self, payload: dict):
         """POST the final transcript to the callback URL in a daemon thread."""
         from aavaaz.features.webhook import send_webhook
@@ -238,6 +251,7 @@ class AavaazServer:
         )
 
         server.run(
+            websocket_auth=self._websocket_auth(),
             host=self.host,
             port=self.port,
             backend=self.backend,

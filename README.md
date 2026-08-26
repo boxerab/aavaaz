@@ -217,6 +217,8 @@ aavaaz serve --model large-v3 --api-key "my-secret-key"
 
 Unauthenticated connections receive HTTP 401 before any GPU resources are allocated.
 
+Set `AAVAAZ_JWT_SECRET` to the HS256 secret the rest of the platform signs with and the WebSocket requires a platform token on every handshake as well. A browser offers it as `new WebSocket(url, ["bearer", token])`, other clients send an `Authorization: Bearer <token>` header. The token must carry `exp` and `sub` and must not carry `aud`, which is what stops a session token minted for another service being replayed here. With the variable unset the WebSocket accepts any client and says so in a warning at startup.
+
 ### Rate Limiting
 Limit REST API requests per client IP (sliding 60-second window):
 ```bash

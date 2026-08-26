@@ -12,6 +12,7 @@ import logging
 import os
 import time
 import urllib.request
+from http import HTTPStatus
 
 import jwt
 from fastapi import HTTPException, Request, Security
@@ -21,8 +22,17 @@ logger = logging.getLogger(__name__)
 
 _security = HTTPBearer(auto_error=False)
 
+JWT_SECRET_ENV = "AAVAAZ_JWT_SECRET"
+
+# Marker a browser offers as `new WebSocket(url, ["bearer", token])`.
+BEARER_SUBPROTOCOL = "bearer"
+
+_BEARER_SCHEME = "Bearer "
+_WEBSOCKET_UNAUTHORIZED_BODY = "Unauthorized\n"
+_PLATFORM_REQUIRED_CLAIMS = ["exp", "sub"]
+
 # Default secret — MUST be overridden via AAVAAZ_JWT_SECRET env var
-_JWT_SECRET = os.environ.get("AAVAAZ_JWT_SECRET", "")
+_JWT_SECRET = os.environ.get(JWT_SECRET_ENV, "")
 _JWT_ALGORITHM = "HS256"
 _JWKS_ALGORITHM = "RS256"
 _JWKS_FETCH_TIMEOUT_SECONDS = 5
@@ -102,6 +112,59 @@ def verify_token(token: str) -> dict:
     if not _JWT_SECRET:
         raise ValueError("JWT secret not configured")
     return jwt.decode(token, _JWT_SECRET, algorithms=[_JWT_ALGORITHM])
+
+
+def _websocket_token(headers) -> str | None:
+    """The token on a websocket handshake.
+
+    A browser cannot set a header on a handshake, so it offers the token as the
+    second subprotocol after the ``bearer`` marker. Non-browser clients may send
+    an ``Authorization`` header instead.
+    """
+    authorization = headers.get("Authorization", "")
+    if authorization.startswith(_BEARER_SCHEME):
+        return authorization[len(_BEARER_SCHEME):] or None
+    marker, _, token = headers.get("Sec-WebSocket-Protocol", "").partition(",")
+    if marker.strip() != BEARER_SUBPROTOCOL:
+        return None
+    return token.strip() or None
+
+
+def verify_platform_token(token: str, secret: str) -> dict:
+    """Verify a platform token: HS256, ``exp`` and ``sub`` required, no ``aud``.
+
+    Every platform service validates the same way, so a session token minted for
+    another service, which carries an ``aud``, cannot be replayed here even
+    though both are signed with the shared secret.
+    """
+    claims = jwt.decode(
+        token,
+        secret,
+        algorithms=[_JWT_ALGORITHM],
+        options={"require": _PLATFORM_REQUIRED_CLAIMS, "verify_aud": False},
+    )
+    if "aud" in claims:
+        raise jwt.InvalidAudienceError("a platform token carries no aud")
+    if not claims["sub"]:
+        raise jwt.InvalidTokenError("the token names no subject")
+    return claims
+
+
+def websocket_platform_auth(secret: str):
+    """Build the WhisperLive ``websocket_auth`` callable for a shared secret."""
+
+    def check(connection, request):
+        token = _websocket_token(request.headers)
+        try:
+            if token is None:
+                raise jwt.InvalidTokenError("no bearer token offered")
+            verify_platform_token(token, secret)
+        except jwt.InvalidTokenError:
+            # no reason in the response, it would separate expired from wrongly signed
+            return connection.respond(HTTPStatus.UNAUTHORIZED, _WEBSOCKET_UNAUTHORIZED_BODY)
+        return None
+
+    return check
 
 
 async def require_auth(
