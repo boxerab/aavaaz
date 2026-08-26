@@ -41,6 +41,7 @@ class AavaazServer:
         batch_max_queue_wait_s: float = 0.5,
         batch_max_admissions_per_s: float = 5.0,
         batch_beam_size: int = 5,
+        batch_temperature_fallback: bool = True,
         max_clients: int = 4,
         max_connection_time: int = 600,
         word_timestamps: bool = False,
@@ -75,6 +76,7 @@ class AavaazServer:
         self.batch_max_queue_wait_s = batch_max_queue_wait_s
         self.batch_max_admissions_per_s = batch_max_admissions_per_s
         self.batch_beam_size = batch_beam_size
+        self.batch_temperature_fallback = batch_temperature_fallback
         self.max_clients = max_clients
         self.max_connection_time = max_connection_time
         self.word_timestamps = word_timestamps
@@ -277,6 +279,7 @@ class AavaazServer:
             batch_max_queue_wait_s=self.batch_max_queue_wait_s,
             batch_max_admissions_per_s=self.batch_max_admissions_per_s,
             batch_beam_size=self.batch_beam_size,
+            batch_temperature_fallback=self.batch_temperature_fallback,
             max_clients=self.max_clients,
             max_connection_time=self.max_connection_time,
             metrics_port=self.metrics_port,
