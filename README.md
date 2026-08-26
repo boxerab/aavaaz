@@ -9,10 +9,10 @@ with enterprise features that compete with Deepgram, ElevenLabs, and AssemblyAI.
 
 | Category | Capabilities |
 |----------|-------------|
-| **Transcription** | Real-time WebSocket streaming, REST API (OpenAI-compatible), batch inference, multichannel audio (Lambda) |
-| **Intelligence** | Speaker diarization, sentiment analysis, topic detection, entity extraction, summarization (Lambda/Modal batch) |
-| **Post-processing** | Smart formatting, PII redaction, profanity filtering, noise reduction (Lambda/Modal batch), utterance/paragraph segmentation |
-| **Platform** | Webhook delivery (Lambda), transcript search & tagging (SaaS API), S3 output storage (Lambda), API-key and JWT auth, Prometheus metrics |
+| **Transcription** | Real-time WebSocket streaming, REST API (OpenAI-compatible), batch inference, multichannel audio (Lambda/Modal) |
+| **Intelligence** | Speaker diarization, sentiment analysis, topic detection, entity extraction, summarization |
+| **Post-processing** | Smart formatting, PII redaction, profanity filtering, noise reduction, filler word removal, utterance/paragraph segmentation |
+| **Platform** | Webhook delivery, transcript search & tagging (SaaS API), S3 output storage (Lambda), API-key and JWT auth, JWT/SSO (JWKS), GDPR export/erasure, Prometheus metrics |
 | **Deployment** | Docker, Helm charts, Terraform (AWS), **serverless (Lambda)**, **Modal (GPU)**, GPU auto-detection, model caching, SSE streaming |
 
 ## Quick Start
@@ -94,9 +94,10 @@ aavaaz serve --model large-v3
 # Transcribe a file
 aavaaz transcribe audio.wav
 
-# OpenAI-compatible REST endpoint. The `model` form field is ignored: the
-# endpoint uses `small` unless `--model` is a local path or HF repo.
+# OpenAI-compatible REST endpoint. The `model` form field takes a stock size,
+# a local path, or an HF repo, and defaults to the server's `--model`.
 curl -X POST http://localhost:8000/v1/audio/transcriptions \
+  -F model=small \
   -F file=@audio.wav
 ```
 
@@ -186,6 +187,25 @@ When enabled, completed segments include a `speaker` field:
 ```json
 {"start": "0.000", "end": "2.500", "text": "Hello", "speaker": "SPEAKER_00", "completed": true}
 ```
+
+### Streaming Post-Processing Flags
+Post-processing options for `aavaaz serve`:
+```bash
+aavaaz serve --model large-v3 \
+  --noise-reduction near_field \
+  --profanity-filter --profanity-mode full --profanity-words foo,bar \
+  --filler-removal --filler-aggressive \
+  --intelligence --paragraphs \
+  --callback-url https://example.com/hook
+```
+- `--noise-reduction {near_field,far_field}` — reduce noise on live audio frames before transcription.
+- `--profanity-mode {partial,full,remove}` — how `--profanity-filter` masks a match.
+- `--profanity-words a,b` — extra words added to the profanity list.
+- `--filler-removal` — drop filler words ("um", "you know") from each segment.
+- `--filler-aggressive` — also drop borderline fillers ("like", "actually", "right").
+- `--intelligence` — per-segment sentiment/topics/entities, plus a final `{"intelligence": ...}` message with summary and highlights for the whole transcript.
+- `--paragraphs` — a final `{"paragraphs": [...]}` message at stream end.
+- `--callback-url URL` — POST the final transcript (segments, paragraphs, intelligence) to URL, with retries.
 
 ### Authentication
 Protect both REST API and WebSocket connections with a shared API key:

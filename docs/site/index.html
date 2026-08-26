@@ -1285,7 +1285,7 @@
             <div class="feature-card">
                 <span class="f-icon">&#128100;</span>
                 <h3>Known Speaker Matching</h3>
-                <p>Enroll named speakers with audio clips on the REST endpoint (verbose_json). Get &ldquo;Alice&rdquo; instead of &ldquo;SPEAKER_00&rdquo;.</p>
+                <p>Enroll named speakers with audio clips over REST or the WebSocket handshake. Get &ldquo;Alice&rdquo; instead of &ldquo;SPEAKER_00&rdquo;.</p>
                 <span class="feature-tag tag-ai">AI</span>
             </div>
             <div class="feature-card">
@@ -1303,13 +1303,13 @@
             <div class="feature-card">
                 <span class="f-icon">&#128263;</span>
                 <h3>Audio Noise Reduction</h3>
-                <p>Built-in preprocessing with near-field (stationary) and far-field (non-stationary) noise reduction modes. Applied on file and batch transcription.</p>
+                <p>Built-in preprocessing with near-field (stationary) and far-field (non-stationary) noise reduction modes.</p>
                 <span class="feature-tag tag-core">Core</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#129324;</span>
                 <h3>Profanity Filter</h3>
-                <p>Three masking modes &mdash; partial (d**n), full (****), or remove. Mode and extra words are set per request on the Lambda and Modal paths; the streaming server uses partial masking.</p>
+                <p>Three masking modes &mdash; partial (d**n), full (****), or remove. Mode and extra words configurable on every path.</p>
                 <span class="feature-tag tag-core">Core</span>
             </div>
             <div class="feature-card">
@@ -1321,13 +1321,13 @@
             <div class="feature-card">
                 <span class="f-icon">&#129504;</span>
                 <h3>Audio Intelligence</h3>
-                <p>Per-segment sentiment, topic detection and entity extraction. Extractive summarization on file and batch transcription.</p>
+                <p>Per-segment sentiment, topics and entities, plus summary and highlights for the whole transcript at stream end or on files.</p>
                 <span class="feature-tag tag-ai">AI</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#128202;</span>
                 <h3>Smart Formatting</h3>
-                <p>Auto-capitalize sentences, normalize spoken numbers to digits, and format dates, times, currency and percentages.</p>
+                <p>Auto-capitalize sentences, normalize spoken numbers to digits, format dates, times, currency and percentages, and clean up punctuation.</p>
                 <span class="feature-tag tag-core">Core</span>
             </div>
             <div class="feature-card">
@@ -1345,19 +1345,19 @@
             <div class="feature-card">
                 <span class="f-icon">&#127898;</span>
                 <h3>Multi-Channel Audio</h3>
-                <p>Split stereo/multi-channel audio per-channel. Merge transcriptions into a unified timeline. Available on Lambda file transcription.</p>
+                <p>Split stereo/multi-channel audio per-channel. Merge transcriptions into a unified timeline. Available on Lambda and Modal file transcription.</p>
                 <span class="feature-tag tag-core">Core</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#127760;</span>
                 <h3>Language Detection</h3>
-                <p>Auto-detect spoken language. Batch responses include the language code and probability; streaming sends a language message once detected.</p>
+                <p>Auto-detect spoken language. Batch and REST responses include the language code and probability; streaming sends a language message once detected.</p>
                 <span class="feature-tag tag-core">Core</span>
             </div>
             <div class="feature-card">
                 <span class="f-icon">&#10024;</span>
                 <h3>Auto-Highlights</h3>
-                <p>Extract key phrases and important terms from transcripts using TF-scored n-gram analysis, on file and batch transcription.</p>
+                <p>Extract key phrases and important terms from transcripts using TF-scored n-gram analysis.</p>
                 <span class="feature-tag tag-ai">AI</span>
             </div>
             <div class="feature-card">
@@ -1382,7 +1382,7 @@
             <div class="feature-card">
                 <span class="f-icon">&#128263;</span>
                 <h3>Filler Word Removal</h3>
-                <p>Strip um, uh, hmm, &ldquo;you know&rdquo;, &ldquo;I mean&rdquo; from transcripts. Conservative or aggressive mode. Available on the Lambda and Modal paths.</p>
+                <p>Strip um, uh, hmm, &ldquo;you know&rdquo;, &ldquo;I mean&rdquo; from transcripts. Conservative or aggressive mode.</p>
                 <span class="feature-tag tag-core">Core</span>
             </div>
             <div class="feature-card">
@@ -1402,7 +1402,7 @@
             <div class="feature-card">
                 <span class="f-icon">&#128269;</span>
                 <h3>Transcript Search</h3>
-                <p>Search across your stored transcripts. Filter by language and tags.</p>
+                <p>Search across your stored transcripts. Filter by language, model, tags, and time range.</p>
                 <span class="feature-tag tag-enterprise">Enterprise</span>
             </div>
             <div class="feature-card">
@@ -1414,7 +1414,7 @@
             <div class="feature-card">
                 <span class="f-icon">&#128200;</span>
                 <h3>Usage &amp; Billing API</h3>
-                <p>Track API usage per user &mdash; requests, audio minutes and cost, with a daily breakdown.</p>
+                <p>Track API usage per user &mdash; requests, audio minutes, characters and cost, with daily, per-model and per-language breakdowns.</p>
                 <span class="feature-tag tag-enterprise">Enterprise</span>
             </div>
         </div>
@@ -1443,11 +1443,11 @@
             </div>
             <div class="ent-card">
                 <h3>&#128257; Auto-Reconnect</h3>
-                <p>Client-side automatic reconnection with configurable retry count and delay. Opt in with max_retries; it does not retry after a server error.</p>
+                <p>Client-side automatic reconnection with configurable retry count and delay. Only triggers on unexpected disconnects.</p>
             </div>
             <div class="ent-card">
                 <h3>&#128214; OpenAPI Documentation</h3>
-                <p>Auto-generated interactive API docs &mdash; Swagger UI at <code>/docs</code>, ReDoc at <code>/redoc</code>, and OpenAPI JSON schema. With an API key configured, send the Bearer header to reach them.</p>
+                <p>Auto-generated interactive API docs &mdash; Swagger UI at <code>/docs</code>, ReDoc at <code>/redoc</code>, and OpenAPI JSON schema.</p>
             </div>
             <div class="ent-card">
                 <h3>&#127959; Horizontal Scaling</h3>
@@ -1463,11 +1463,15 @@
             </div>
             <div class="ent-card">
                 <h3>&#128274; JWT / SSO</h3>
-                <p>HS256 JWT on the self-hosted SaaS API and Cognito RS256 on the serverless SaaS API, alongside local API keys.</p>
+                <p>Authenticate via Keycloak, Cognito, Auth0, or Okta through a JWKS URL (RS256), or HS256 with a shared secret, alongside local API keys.</p>
+            </div>
+            <div class="ent-card">
+                <h3>&#128465; GDPR Export &amp; Erasure</h3>
+                <p>Export everything stored for a user as JSON, delete single transcripts, or erase all transcripts and usage on request.</p>
             </div>
             <div class="ent-card">
                 <h3>&#128276; Reliable Webhooks</h3>
-                <p>Async transcription callbacks with exponential backoff retry. Smart retry &mdash; no retry on 4xx, retry on 5xx and 429. Fired from the Lambda transcription path.</p>
+                <p>Async transcription callbacks with exponential backoff retry. Smart retry &mdash; no retry on 4xx, retry on 5xx and 429.</p>
             </div>
             <div class="ent-card">
                 <h3>&#9889; Terraform Deploy</h3>
@@ -1554,7 +1558,7 @@
             <div class="sdk-card">
                 <div class="sdk-icon">&#128309;</div>
                 <h3>Go</h3>
-                <p>Lightweight REST client for transcription.</p>
+                <p>Lightweight REST client with transcription and health checks.</p>
             </div>
         </div>
         <div class="sdk-grid fade-in" style="margin-top: 16px;">
@@ -1643,7 +1647,11 @@ client := wl.<span class="fn">NewClient</span>(<span class="str">"http://localho
 })
 
 result, err := client.<span class="fn">Transcribe</span>(<span class="str">"audio.wav"</span>, <span class="kw">nil</span>)
-fmt.<span class="fn">Println</span>(result.Text)</pre>
+fmt.<span class="fn">Println</span>(result.Text)
+
+<span class="cmt">// Check server health</span>
+health, _ := client.<span class="fn">Health</span>()
+fmt.<span class="fn">Printf</span>(<span class="str">"Status: %s (%d/%d clients)\n"</span>, health.Status, health.Clients, health.MaxClients)</pre>
                 </div>
                 <div class="tab-panel" id="tab-docker">
 <pre><span class="cmt"># Build the GPU image from this repo</span>
@@ -1660,6 +1668,7 @@ docker run -it --device=/dev/dri -p <span class="num">9090</span>:<span class="n
 <span class="cmt"># Transcribe a file</span>
 curl -X POST http://localhost:<span class="num">8000</span>/v1/audio/transcriptions \
   -H <span class="str">"Authorization: Bearer sk-..."</span> \
+  -F <span class="str">"model=small"</span> \
   -F <span class="str">"file=@audio.wav"</span>
 
 <span class="cmt"># Stream with SSE</span>

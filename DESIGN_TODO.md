@@ -15,7 +15,7 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 
 - [x] **Paragraph segmentation** — Lambda and Modal (shared `aavaaz.features.enrichment`), and now streaming too: `aavaaz serve --paragraphs` runs `segment_into_paragraphs` over the accumulated transcript at stream end and sends a final `{"paragraphs": [...]}` message. Enabled by a new WhisperLive `transcript_finalizer` hook (see Upstream).
 - [x] **Webhook delivery** — Lambda: synchronous on the JSON API path, async on the S3 large-file path (callback URL stored at upload via `callback_url_b64` → object metadata, fired in `_handle_s3`). Modal: fires `callback_url` (body or form field) inline on completion. Full parity.
-- [x] **Intelligence / formatting / PII / profanity / filler** — the batch enrichment pipeline is now shared between Lambda and Modal via `aavaaz/features/enrichment.py` (`build_pipeline`/`enrich_result`), env-gated with per-request `features` override. Modal `app.py` reads `features` from the JSON body or a `features` form field. Hotwords stay Lambda-only (Modal's batch worker takes `initial_prompt`, not hotwords). Streaming server still has its own plugin path.
+- [x] **Intelligence / formatting / PII / profanity / filler** — the batch enrichment pipeline is now shared between Lambda and Modal via `aavaaz/features/enrichment.py` (`build_pipeline`/`enrich_result`), env-gated with per-request `features` override. Modal `app.py` reads `features` from the JSON body or a `features` form field, and passes `hotwords` (body or form field) to the batch worker like Lambda does. Streaming server still has its own plugin path.
 - [x] **Per-request features in the batch Lambda** — `_handle_api` now reads `payload["features"]` (dashboard FeaturesConfig shape) and the S3-trigger path reads the same config from object metadata (`features_b64` → presign → `head_object`). Both override the env defaults. Noise reduction is now honored (see Unwired modules). Diarization/translation/ensemble are still ignored here (not available in the faster-whisper batch path).
 
 ## SaaS
@@ -56,36 +56,36 @@ Wanted features that the README or `docs/site` advertised but no entry point del
 
 ### No code behind it
 
-- [ ] **GDPR compliance** — no erasure/purge/export endpoints anywhere; needs transcript + usage deletion on the SaaS APIs and a documented retention policy.
+- [x] **GDPR compliance** — done: `DELETE /v1/saas/transcripts/{id}`, `GET /v1/saas/me/export`, `DELETE /v1/saas/me/data` in both `api/saas.py` and `serverless/saas_lambda.py`. No retention policy is documented yet.
 - [ ] **Storage backends (local/S3)** — Lambda writes S3 directly; there is no storage abstraction and no local backend for `aavaaz serve`.
 - [ ] **ACL** — only the shared API key and SaaS JWT exist; no roles/permissions on transcripts (the deleted `acl` module had `UserStore`/RBAC).
-- [ ] **SSO providers** — site claimed Keycloak, Auth0, Okta with RS256 JWKS. `api/auth.py` is HS256 only; RS256 exists only in `serverless/saas_lambda.py` hardcoded to Cognito. `docs/KEYCLOAK_SSO.md` documents a `--jwt_jwks_url` flag no CLI accepts.
-- [ ] **Edge / Jetson Dockerfiles** — `docker/Dockerfile.edge` and `docker/Dockerfile.jetson` exist nowhere, but `docs/EDGE_DEPLOYMENT.md` still references them.
-- [ ] **Published Aavaaz images** — `ghcr.io/collabora/aavaaz-{gpu,cpu,openvino}` and Docker Hub `collabora/aavaaz` do not exist; only the WhisperLive engine images do. Needs a registry publish job and CPU/OpenVINO/TensorRT variants of `Dockerfile`.
-- [ ] **`/health` on the streaming REST API** — the Go SDK's `Health()` (status, clients, max_clients) GETs a route only the SaaS server and Lambda have. Add it to the WhisperLive REST app or drop it from the SDK.
-- [ ] **Helm `gpu.enabled`** — the chart always requests one `nvidia.com/gpu`; no CPU-only toggle.
+- [x] **SSO providers** — done: `api/auth.py` verifies RS256 against a provider JWKS (`AAVAAZ_JWT_JWKS_URL`/`AAVAAZ_JWT_ISSUER`/`AAVAAZ_JWT_AUDIENCE`, works with Keycloak, Cognito, Auth0, Okta) and keeps HS256 via `AAVAAZ_JWT_SECRET`; `saas_lambda.py` calls `auth.configure_jwks`. `docs/KEYCLOAK_SSO.md` documents the env vars.
+- [x] **Edge / Jetson Dockerfiles** — `docker/Dockerfile.edge` and `docker/Dockerfile.jetson` exist nowhere, but `docs/EDGE_DEPLOYMENT.md` still references them. — done: `Dockerfile.edge` (arm64 CPU) and `Dockerfile.jetson` (`dustynv/l4t-pytorch:r36.2.0`) at the repo root, mirroring `Dockerfile.cpu`; neither is built in CI, `docs/EDGE_DEPLOYMENT.md` updated.
+- [x] **Published Aavaaz images** — `ghcr.io/collabora/aavaaz-{gpu,cpu,openvino}` and Docker Hub `collabora/aavaaz` do not exist; only the WhisperLive engine images do. Needs a registry publish job and CPU/OpenVINO/TensorRT variants of `Dockerfile`. — done: `.github/workflows/images.yml` pushes `ghcr.io/<owner>/aavaaz-gpu` and `aavaaz-cpu` on `v*` tags and manual dispatch; `Dockerfile.cpu` uses the new `whisper-cpu` extra (no CUDA wheels). First publish needs a tag.
+- [x] **`/health` on the streaming REST API** — done: `GET /health` on the WhisperLive REST app returns status, backend, model, clients, max_clients (fork branch `rest-fixes`, PR collabora/WhisperLive#536).
+- [x] **Helm `gpu.enabled`** — the chart always requests one `nvidia.com/gpu`; no CPU-only toggle. — done: `gpu.enabled` in `values.yaml` (default true) toggles the `nvidia.com/gpu` limit and adds `--backend faster_whisper` when off.
 - [ ] **Fine-tuning tooling** — `docs/FINE_TUNING.md` is a guide, no training script in the repo.
 - [ ] **Web UI in `aavaaz serve`** — only the Lambda and Modal deployments serve a page.
 - [ ] **Multi-GPU** — one process serves one GPU; nothing spreads sessions across devices (the SCALING guide covers one node per GPU behind a load balancer).
 
 ### Exists on one path, advertised as general
 
-- [ ] **Noise reduction on streaming** — batch only (Lambda/Modal). Streaming needs audio-input access in WhisperLive before `add_frames`.
-- [ ] **Multichannel on Modal batch and streaming** — Lambda only.
-- [ ] **Summarization, highlights, filler removal on `aavaaz serve`** — the streaming plugin does per-segment sentiment/topics/entities only; whole-transcript analysis has no streaming hook beyond `transcript_finalizer` (paragraphs use it, intelligence could too).
-- [ ] **Profanity mode and custom words on `aavaaz serve`** — CLI flag gives partial masking with the default list; mode/extra words are per-request on Lambda/Modal only.
-- [ ] **Known speaker matching over WebSocket** — REST `verbose_json` only; the WS handshake has no enrollment fields.
-- [ ] **Webhooks from `aavaaz serve` and Modal live** — Lambda only.
-- [ ] **Language code + probability on REST `json`/SSE responses** — batch responses have both, REST `json` returns text only, `verbose_json` has no probability, SSE events have neither.
-- [ ] **Transcript search filters** — endpoints take `q`, `language`, `tag`; `TranscriptIndex.search` already supports user/model/start/end but nothing exposes them. "Full-text" is a substring match.
-- [ ] **Usage API characters and per-model/per-language breakdown** — only minutes, requests, cost, daily rows are recorded; `UsageTracker` in `features/search.py` has the richer shape but no caller.
-- [ ] **Smart formatting punctuation cleanup** — formatter does capitalization, numbers, dates/times/currency; nothing touches punctuation.
-- [ ] **Modal batch `word_timestamps` and hotwords** — `deploy/modal/app.py` never sets them on `BatchRequest`.
-- [ ] **Auto-reconnect "only on unexpected disconnects"** — WhisperLive client reconnects on any close unless `server_error`; default `max_retries=0`.
+- [x] **Noise reduction on streaming** — done: `aavaaz serve --noise-reduction {near_field,far_field}` feeds live frames through `AavaazServer._make_audio_preprocessor`, using WhisperLive's new `audio_preprocessor` hook (PR collabora/WhisperLive#536).
+- [x] **Multichannel on Modal batch and streaming** — done: Modal `deploy/modal/app.py` splits channels via the shared `aavaaz/features/multichannel.py` (`features.multichannel` / `AAVAAZ_ENABLE_MULTICHANNEL`); Lambda skips the split for mono files (`count_channels`). Streaming is still single-channel.
+- [x] **Summarization, highlights, filler removal on `aavaaz serve`** — done: `--intelligence` also runs `analyze_transcript` at stream end and sends a final `{"intelligence": ...}` message (`AavaazServer._intelligence_finalizer`); `--filler-removal`/`--filler-aggressive` enable the `filler_removal` segment plugin.
+- [x] **Profanity mode and custom words on `aavaaz serve`** — done: `--profanity-mode {partial,full,remove}` and `--profanity-words a,b` feed `configure_profanity` in `plugins/builtins.py`.
+- [x] **Known speaker matching over WebSocket** — done: `known_speakers` in the WS handshake options, enrolled by `TranscriptionServer._enroll_known_speakers`, and sent by the WhisperLive client (fork branch `rest-fixes`).
+- [x] **Webhooks from `aavaaz serve` and Modal live** — done: `aavaaz serve --callback-url` POSTs the final transcript (segments, paragraphs, intelligence) through `features/webhook.send_webhook` from `AavaazServer.finalize_transcript`. Modal live still has none.
+- [x] **Language code + probability on REST `json`/SSE responses** — done: `json`/`verbose_json` carry `language` + `language_probability` and the SSE stream opens with a metadata event (fork branch `rest-fixes`).
+- [x] **Transcript search filters** — done: `GET /v1/saas/transcripts` takes `q`, `language`, `tag`, `model`, `start`, `end` in both SaaS implementations. "Full-text" is still a substring match.
+- [x] **Usage API characters and per-model/per-language breakdown** — done: `GET /v1/saas/usage` returns `characters` plus `by_model` and `by_language` breakdowns in both SaaS implementations.
+- [x] **Smart formatting punctuation cleanup** — done: `_clean_punctuation` in `aavaaz/features/formatting.py`, called from the formatter.
+- [x] **Modal batch `word_timestamps` and hotwords** — done: `deploy/modal/app.py` `_run_batch` passes `word_timestamps=True` and `hotwords`.
+- [x] **Auto-reconnect "only on unexpected disconnects"** — done: `Client._should_reconnect` retries unexpected closes only (fork branch `rest-fixes`).
 
 ### Behaviour the docs now describe instead of hide
 
-- [ ] **REST `/v1/audio/transcriptions` model selection** — the `model` form field is ignored and `--model` only applies when it is a path or HF repo; otherwise the endpoint loads `small`. Upstream WhisperLive.
-- [ ] **`/docs`, `/redoc`, `/openapi.json` behind `--api-key`** — the REST middleware 401s them; exempt them upstream.
+- [x] **REST `/v1/audio/transcriptions` model selection** — done: the `model` form field is honoured for stock sizes, paths and HF repos, falling back to `default_model` from `aavaaz serve --model` (fork branch `rest-fixes`).
+- [x] **`/docs`, `/redoc`, `/openapi.json` behind `--api-key`** — done: `API_KEY_EXEMPT_PATHS` in `whisper_live/server.py` exempts `/docs`, `/redoc`, `/openapi.json` and `/health`.
 - [ ] **PyPI install cannot start `aavaaz serve`** — published `whisper-live` 0.9.0 lacks the hooks; docs point at `boxerab/WhisperLive@scaling-fixes` until a release includes collabora/WhisperLive#535.
-- [ ] **Lambda demo keeps large-file transcripts** — uploads over 6 MB go through S3 and their transcript objects are never deleted; add cleanup after the status handler returns them.
+- [x] **Lambda demo keeps large-file transcripts** — done: the status handler deletes the transcript and progress objects from the output bucket after returning them.
