@@ -48,4 +48,5 @@ One process handles about 2,000 clients. For more, run several with different `-
 Notes:
 - `--session` (default 480 s) must stay under the server's `--max-connection-time`, or sessions end as server disconnects instead of client reconnects.
 - The handshake `--model` must match a model the server can load.
+- A client told to WAIT retries after 5 s, doubling up to 60 s, until it gets in.
 - Server side metrics are at `http://localhost:9100/metrics`.

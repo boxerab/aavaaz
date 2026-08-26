@@ -24,6 +24,7 @@ CHUNK_SAMPLES = 4096
 CHUNK_SECONDS = CHUNK_SAMPLES / SAMPLE_RATE
 READY_TIMEOUT_SECONDS = 60
 WAIT_RETRY_S = 5.0
+WAIT_RETRY_MAX_S = 60.0
 DEFAULT_TRACKS = pathlib.Path.home() / ".cache/aavaaz-loadtest/tracks"
 STOP_LAG_INTERVALS = 2
 
@@ -99,12 +100,15 @@ class Run:
 
     async def client(self, client_id):
         session = 0
+        wait_retry = WAIT_RETRY_S
         while not self.stop.is_set():
             session += 1
             outcome = await self.session(client_id, session)
             if outcome == "wait":
-                await asyncio.sleep(WAIT_RETRY_S)
+                await asyncio.sleep(wait_retry)
+                wait_retry = min(wait_retry * 2, WAIT_RETRY_MAX_S)
             else:
+                wait_retry = WAIT_RETRY_S
                 await asyncio.sleep(random.uniform(0.5, 2.0))
 
     async def session(self, client_id, session):
