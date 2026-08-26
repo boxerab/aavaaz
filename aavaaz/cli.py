@@ -57,8 +57,8 @@ def main():
     serve_parser.add_argument(
         "--batch-max-size",
         type=int,
-        default=8,
-        help="Max requests per GPU batch (default: 8)",
+        default=16,
+        help="Max requests per GPU batch (default: 16)",
     )
     serve_parser.add_argument(
         "--batch-window-ms",

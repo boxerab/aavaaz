@@ -290,7 +290,7 @@ curl http://node1:8080/v1/audio/transcriptions \
 
 ## Best Practices
 
-1. **Enable batch inference** — Use `--batch-inference` with `--batch-max-size 8` to batch requests and improve GPU utilization.
+1. **Enable batch inference** — Use `--batch-inference` with `--batch-max-size 16` to batch requests and improve GPU utilization.
 
 2. **Set `--max-clients`** — Limit concurrent connections per node to prevent OOM. Match to your GPU capacity.
 

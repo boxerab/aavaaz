@@ -229,7 +229,7 @@ Clients exceeding the limit receive HTTP 429.
 ### Batch Inference
 Batch multiple client sessions into single GPU calls for higher throughput:
 ```bash
-aavaaz serve --model large-v3 --batch-inference --batch-max-size 8 --batch-window-ms 50
+aavaaz serve --model large-v3 --batch-inference --batch-max-size 16 --batch-window-ms 50
 ```
 
 ### Prometheus Metrics

@@ -36,7 +36,7 @@ class AavaazServer:
         rate_limit_rpm: int = 0,
         metrics_port: int = 0,
         batch_inference: bool = False,
-        batch_max_size: int = 8,
+        batch_max_size: int = 16,
         batch_window_ms: int = 50,
         max_clients: int = 4,
         max_connection_time: int = 600,
