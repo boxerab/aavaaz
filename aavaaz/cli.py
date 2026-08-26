@@ -5,6 +5,13 @@ import logging
 import sys
 
 
+def _split_words(value: str | None) -> set[str] | None:
+    """Parse a comma-separated CLI list into a set, or None when empty."""
+    if not value:
+        return None
+    return {word.strip() for word in value.split(",") if word.strip()} or None
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="aavaaz",
@@ -14,18 +21,14 @@ def main():
 
     # --- serve ---
     serve_parser = subparsers.add_parser("serve", help="Start the Aavaaz server")
-    serve_parser.add_argument(
-        "--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)"
-    )
+    serve_parser.add_argument("--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
     serve_parser.add_argument(
         "--port", type=int, default=9090, help="WebSocket port (default: 9090)"
     )
     serve_parser.add_argument(
         "--rest-port", type=int, default=8000, help="REST API port (default: 8000)"
     )
-    serve_parser.add_argument(
-        "--model", default="large-v3", help="Whisper model name or path"
-    )
+    serve_parser.add_argument("--model", default="large-v3", help="Whisper model name or path")
     serve_parser.add_argument(
         "--backend",
         default="faster_whisper",
@@ -33,9 +36,7 @@ def main():
         help="Transcription backend",
     )
     serve_parser.add_argument("--no-rest", action="store_true", help="Disable REST API")
-    serve_parser.add_argument(
-        "--api-key", default=None, help="API key for auth (REST + WebSocket)"
-    )
+    serve_parser.add_argument("--api-key", default=None, help="API key for auth (REST + WebSocket)")
     serve_parser.add_argument(
         "--rate-limit-rpm",
         type=int,
@@ -78,6 +79,12 @@ def main():
         help="Seconds a client may stay connected (default: 600)",
     )
     serve_parser.add_argument(
+        "--noise-reduction",
+        choices=["near_field", "far_field"],
+        default=None,
+        help="Reduce noise on live audio before transcription (needs noisereduce)",
+    )
+    serve_parser.add_argument(
         "--word-timestamps",
         action="store_true",
         help="Enable word-level timestamps and confidence scores",
@@ -101,11 +108,35 @@ def main():
         action="store_true",
         help="Enable smart formatting post-processing",
     )
-    serve_parser.add_argument(
-        "--pii-redaction", action="store_true", help="Enable PII redaction"
-    )
+    serve_parser.add_argument("--pii-redaction", action="store_true", help="Enable PII redaction")
     serve_parser.add_argument(
         "--profanity-filter", action="store_true", help="Enable profanity filtering"
+    )
+    serve_parser.add_argument(
+        "--profanity-mode",
+        default="partial",
+        choices=["partial", "full", "remove"],
+        help="How to filter profanity: partial (f**k), full (****), remove",
+    )
+    serve_parser.add_argument(
+        "--profanity-words",
+        default=None,
+        help="Comma-separated extra words to add to the profanity list",
+    )
+    serve_parser.add_argument(
+        "--filler-removal",
+        action="store_true",
+        help="Remove filler words ('um', 'you know') from each segment",
+    )
+    serve_parser.add_argument(
+        "--filler-aggressive",
+        action="store_true",
+        help="Also remove borderline fillers ('like', 'actually', 'right')",
+    )
+    serve_parser.add_argument(
+        "--callback-url",
+        default=None,
+        help="POST the final transcript JSON to this URL at stream end",
     )
     serve_parser.add_argument(
         "--intelligence",
@@ -117,18 +148,12 @@ def main():
         action="store_true",
         help="Group the transcript into paragraphs, sent as a final message at stream end",
     )
-    serve_parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Debug logging"
-    )
+    serve_parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging")
 
     # --- transcribe ---
-    transcribe_parser = subparsers.add_parser(
-        "transcribe", help="Transcribe an audio file"
-    )
+    transcribe_parser = subparsers.add_parser("transcribe", help="Transcribe an audio file")
     transcribe_parser.add_argument("file", help="Path to audio file")
-    transcribe_parser.add_argument(
-        "--model", default="large-v3", help="Whisper model name or path"
-    )
+    transcribe_parser.add_argument("--model", default="large-v3", help="Whisper model name or path")
     transcribe_parser.add_argument(
         "--format",
         default="text",
@@ -184,6 +209,7 @@ def main():
             batch_window_ms=args.batch_window_ms,
             max_clients=args.max_clients,
             max_connection_time=args.max_connection_time,
+            noise_reduction=args.noise_reduction,
             word_timestamps=args.word_timestamps,
             hotwords=args.hotwords,
             enable_diarization=args.enable_diarization,
@@ -191,8 +217,13 @@ def main():
             enable_formatting=args.smart_format,
             enable_pii=args.pii_redaction,
             enable_profanity=args.profanity_filter,
+            profanity_mode=args.profanity_mode,
+            profanity_words=_split_words(args.profanity_words),
+            enable_filler_removal=args.filler_removal,
+            filler_aggressive=args.filler_aggressive,
             enable_intelligence=args.intelligence,
             enable_paragraphs=args.paragraphs,
+            callback_url=args.callback_url,
         )
         server.run()
 

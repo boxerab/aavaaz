@@ -8,6 +8,7 @@ plugin pipeline without modifying WhisperLive core code.
 
 import logging
 import os
+import threading
 
 from whisper_live.server import TranscriptionServer
 
@@ -45,8 +46,14 @@ class AavaazServer:
         enable_formatting: bool = False,
         enable_pii: bool = False,
         enable_profanity: bool = False,
+        profanity_mode: str = "partial",
+        profanity_words: set[str] | None = None,
+        enable_filler_removal: bool = False,
+        filler_aggressive: bool = False,
         enable_intelligence: bool = False,
         enable_paragraphs: bool = False,
+        callback_url: str | None = None,
+        noise_reduction: str | None = None,
     ):
         self.host = host
         self.port = port
@@ -70,8 +77,14 @@ class AavaazServer:
         self.enable_formatting = enable_formatting
         self.enable_pii = enable_pii
         self.enable_profanity = enable_profanity
+        self.profanity_mode = profanity_mode
+        self.profanity_words = profanity_words
+        self.enable_filler_removal = enable_filler_removal
+        self.filler_aggressive = filler_aggressive
         self.enable_intelligence = enable_intelligence
         self.enable_paragraphs = enable_paragraphs
+        self.callback_url = callback_url
+        self.noise_reduction = noise_reduction
 
     def _paragraph_finalizer(self, transcript: list[dict]) -> dict | None:
         """End-of-stream hook: group the transcript into paragraphs.
@@ -86,11 +99,69 @@ class AavaazServer:
         paragraphs = segment_into_paragraphs(transcript)
         return {"paragraphs": paragraphs} if paragraphs else None
 
+    def _intelligence_finalizer(self, transcript: list[dict]) -> dict | None:
+        """End-of-stream hook: analyze the whole transcript at once.
+
+        Returns a payload dict, or None when there is no text to analyze.
+        """
+        text = " ".join(segment.get("text", "") for segment in transcript).strip()
+        if not text:
+            return None
+        from aavaaz.features.audio_intelligence import analyze_transcript
+
+        return {"intelligence": analyze_transcript(text, highlights=True)}
+
+    def finalize_transcript(self, transcript: list[dict]) -> dict | None:
+        """Run every enabled end-of-stream step and merge what they return.
+
+        The merged dict is sent to the client as a final message. When a
+        callback URL is configured the same content plus the segments is
+        POSTed from a background thread so the client socket is not held.
+        """
+        if not transcript:
+            return None
+
+        payload: dict = {}
+        if self.enable_paragraphs:
+            payload.update(self._paragraph_finalizer(transcript) or {})
+        if self.enable_intelligence:
+            payload.update(self._intelligence_finalizer(transcript) or {})
+
+        if self.callback_url:
+            self._post_callback({"segments": transcript, **payload})
+
+        return payload or None
+
+    def _make_audio_preprocessor(self):
+        """Per-frame noise reduction for the live audio hook, or None when off."""
+        if not self.noise_reduction:
+            return None
+        from aavaaz.features.noise_reduction import NoiseReducer
+
+        reducer = NoiseReducer(mode=self.noise_reduction)
+
+        def preprocess(frame, sample_rate):
+            reducer.sample_rate = sample_rate
+            return reducer.reduce(frame)
+
+        return preprocess
+
+    def _post_callback(self, payload: dict):
+        """POST the final transcript to the callback URL in a daemon thread."""
+        from aavaaz.features.webhook import send_webhook
+
+        threading.Thread(
+            target=send_webhook,
+            args=(self.callback_url, payload),
+            daemon=True,
+        ).start()
+
     # built-in plugin name -> the AavaazServer flag that enables it
     _FEATURE_PLUGINS = {
         "formatting": "enable_formatting",
         "pii_redaction": "enable_pii",
         "profanity_filter": "enable_profanity",
+        "filler_removal": "enable_filler_removal",
         "audio_intelligence": "enable_intelligence",
     }
 
@@ -100,9 +171,19 @@ class AavaazServer:
         Built-ins are registered disabled so raw transcripts are never silently
         altered; this turns on the ones the operator asked for.
         """
+        from aavaaz.plugins.builtins import (
+            configure_filler_removal,
+            configure_profanity,
+        )
+
         for plugin_name, flag in self._FEATURE_PLUGINS.items():
             if getattr(self, flag):
                 self.plugin_registry.enable(plugin_name)
+
+        if self.enable_profanity:
+            configure_profanity(self.profanity_mode, self.profanity_words)
+        if self.enable_filler_removal:
+            configure_filler_removal(self.filler_aggressive)
 
     def serve(self, **overrides):
         """Apply keyword overrides (e.g. word_timestamps=True) then start the server."""
@@ -129,18 +210,14 @@ class AavaazServer:
         logger.info("Loaded %d plugins: %s", len(plugins), [p["name"] for p in plugins])
 
         # Use the registry's apply() as the WhisperLive segment_post_processor
-        post_processor = (
-            self.plugin_registry.apply if len(self.plugin_registry) > 0 else None
-        )
+        post_processor = self.plugin_registry.apply if len(self.plugin_registry) > 0 else None
 
         # WhisperLive's server.run() has no kwargs for these server-wide
         # defaults, but its per-client code already reads them via the
         # options dict. Wrap initialize_client so Aavaaz's flags act as
         # defaults that any client can override via its WS handshake.
         original_init_client = server.initialize_client
-        is_custom_model = self.model and (
-            "/" in self.model or os.path.exists(self.model)
-        )
+        is_custom_model = self.model and ("/" in self.model or os.path.exists(self.model))
         server_defaults = {
             "model": self.model,
             "word_timestamps": self.word_timestamps,
@@ -156,6 +233,10 @@ class AavaazServer:
 
         server.initialize_client = initialize_client_with_defaults
 
+        needs_finalizer = bool(
+            self.enable_paragraphs or self.enable_intelligence or self.callback_url
+        )
+
         server.run(
             host=self.host,
             port=self.port,
@@ -164,12 +245,12 @@ class AavaazServer:
             # like one (HF org/repo or local path). Canonical short names
             # like "large-v3" flow through the per-client options dict.
             faster_whisper_custom_model_path=self.model if is_custom_model else None,
+            default_model=self.model,
+            audio_preprocessor=self._make_audio_preprocessor(),
             enable_rest=self.enable_rest_api,
             rest_port=self.rest_port,
             segment_post_processor=post_processor,
-            transcript_finalizer=(
-                self._paragraph_finalizer if self.enable_paragraphs else None
-            ),
+            transcript_finalizer=(self.finalize_transcript if needs_finalizer else None),
             batch_enabled=self.batch_inference,
             batch_max_size=self.batch_max_size,
             batch_window_ms=self.batch_window_ms,

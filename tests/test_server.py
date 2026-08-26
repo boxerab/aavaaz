@@ -1,6 +1,7 @@
 """Tests for AavaazServer initialization and CLI flag wiring."""
 
 import sys
+import threading
 from unittest.mock import MagicMock, patch
 
 from aavaaz.features.plugins import PluginRegistry
@@ -86,6 +87,8 @@ def test_server_run_passes_params():
         assert call_kwargs["metrics_port"] == 9091
         assert call_kwargs["max_clients"] == 200
         assert call_kwargs["max_connection_time"] == 900
+        assert call_kwargs["default_model"] == "tiny"
+        assert call_kwargs["audio_preprocessor"] is None
 
         # These four are no longer passed at the run() level — they're
         # per-client defaults injected via the initialize_client wrapper.
@@ -111,10 +114,7 @@ def test_server_run_passes_custom_model_path():
         mock_ts_cls.return_value = mock_ts
         server.run()
         call_kwargs = mock_ts.run.call_args[1]
-        assert (
-            call_kwargs["faster_whisper_custom_model_path"]
-            == "distil-whisper/distil-large-v3"
-        )
+        assert call_kwargs["faster_whisper_custom_model_path"] == "distil-whisper/distil-large-v3"
 
 
 def test_server_run_injects_client_defaults():
@@ -183,17 +183,115 @@ def test_server_run_wires_paragraph_finalizer():
     with patch("aavaaz.server.TranscriptionServer") as mock_ts_cls:
         mock_ts_cls.return_value = MagicMock()
         AavaazServer(enable_paragraphs=True).run()
-        assert (
-            mock_ts_cls.return_value.run.call_args[1]["transcript_finalizer"]
-            is not None
-        )
+        assert mock_ts_cls.return_value.run.call_args[1]["transcript_finalizer"] is not None
 
     with patch("aavaaz.server.TranscriptionServer") as mock_ts_cls:
         mock_ts_cls.return_value = MagicMock()
         AavaazServer(enable_paragraphs=False).run()
-        assert (
-            mock_ts_cls.return_value.run.call_args[1]["transcript_finalizer"] is None
-        )
+        assert mock_ts_cls.return_value.run.call_args[1]["transcript_finalizer"] is None
+
+
+def test_server_run_wires_finalizer_for_intelligence_and_callback():
+    """Intelligence or a callback URL alone is enough to install the finalizer."""
+    for kwargs in ({"enable_intelligence": True}, {"callback_url": "http://x/hook"}):
+        with patch("aavaaz.server.TranscriptionServer") as mock_ts_cls:
+            mock_ts_cls.return_value = MagicMock()
+            AavaazServer(**kwargs).run()
+            assert mock_ts_cls.return_value.run.call_args[1]["transcript_finalizer"] is not None, (
+                kwargs
+            )
+
+
+def test_finalize_transcript_merges_paragraphs_and_intelligence():
+    server = AavaazServer(enable_paragraphs=True, enable_intelligence=True)
+    transcript = [
+        {"start": 0.0, "end": 1.0, "text": "The product launch went great."},
+        {"start": 1.0, "end": 2.0, "text": "Everyone loved the new dashboard."},
+    ]
+    payload = server.finalize_transcript(transcript)
+    assert set(payload) == {"paragraphs", "intelligence"}
+    assert payload["paragraphs"]
+    intelligence = payload["intelligence"]
+    for key in ("sentiment", "topics", "entities", "summary", "highlights"):
+        assert key in intelligence
+    assert intelligence["sentiment"]["label"] == "positive"
+
+
+def test_finalize_transcript_without_steps_returns_none():
+    server = AavaazServer()
+    assert server.finalize_transcript([{"start": 0.0, "end": 1.0, "text": "hi"}]) is None
+    assert server.finalize_transcript([]) is None
+
+
+def test_finalize_transcript_posts_callback_payload():
+    """The callback payload carries the segments plus every enabled step's output,
+    delivered from a background thread so the finalizer returns immediately."""
+    server = AavaazServer(enable_paragraphs=True, callback_url="http://hook.test/cb")
+    transcript = [{"start": 0.0, "end": 1.0, "text": "Hello there."}]
+
+    delivered = []
+    sent = threading.Event()
+
+    def record(url, payload):
+        delivered.append((url, payload))
+        sent.set()
+        return True
+
+    with patch("aavaaz.features.webhook.send_webhook", side_effect=record):
+        payload = server.finalize_transcript(transcript)
+        assert sent.wait(timeout=5)
+
+    assert list(payload) == ["paragraphs"]
+    url, posted = delivered[0]
+    assert url == "http://hook.test/cb"
+    assert posted["segments"] == transcript
+    assert posted["paragraphs"] == payload["paragraphs"]
+
+
+def test_profanity_options_configure_the_registered_plugin():
+    from aavaaz.plugins.builtins import configure_profanity
+    from aavaaz.plugins.builtins import registry as builtin_registry
+
+    server = AavaazServer(
+        enable_profanity=True, profanity_mode="remove", profanity_words={"blergh"}
+    )
+    server.configure_plugins()
+    try:
+        enabled = {p["name"]: p["enabled"] for p in builtin_registry.list_plugins()}
+        assert enabled["profanity_filter"] is True
+        segment = builtin_registry.apply({"text": "that blergh thing", "start": 0})
+        assert segment["text"] == "that thing"
+    finally:
+        builtin_registry.disable("profanity_filter")
+        configure_profanity()
+
+
+def test_filler_removal_options_configure_the_registered_plugin():
+    from aavaaz.plugins.builtins import configure_filler_removal
+    from aavaaz.plugins.builtins import registry as builtin_registry
+
+    server = AavaazServer(enable_filler_removal=True, filler_aggressive=True)
+    server.configure_plugins()
+    try:
+        enabled = {p["name"]: p["enabled"] for p in builtin_registry.list_plugins()}
+        assert enabled["filler_removal"] is True
+        segment = builtin_registry.apply({"text": "um it is basically done", "start": 0})
+        assert segment["text"] == "It is done"
+    finally:
+        builtin_registry.disable("filler_removal")
+        configure_filler_removal()
+
+
+def test_audio_preprocessor_reduces_frames():
+    import numpy as np
+
+    with patch("aavaaz.features.noise_reduction.NoiseReducer") as mock_reducer_cls:
+        mock_reducer_cls.return_value.reduce.side_effect = lambda frame: frame * 0
+        preprocess = AavaazServer(noise_reduction="near_field")._make_audio_preprocessor()
+        frame = np.ones(4096, dtype=np.float32)
+        assert preprocess(frame, 16000).sum() == 0
+        mock_reducer_cls.assert_called_once_with(mode="near_field")
+        assert mock_reducer_cls.return_value.sample_rate == 16000
 
 
 def test_paragraph_finalizer_groups_transcript():
@@ -236,6 +334,8 @@ def test_cli_parse_all_flags():
         "200",
         "--max-connection-time",
         "900",
+        "--noise-reduction",
+        "far_field",
         "--word-timestamps",
         "--hotwords",
         "foo,bar",
@@ -243,6 +343,15 @@ def test_cli_parse_all_flags():
         "--max-speakers",
         "8",
         "--paragraphs",
+        "--profanity-filter",
+        "--profanity-mode",
+        "remove",
+        "--profanity-words",
+        "blergh, zort",
+        "--filler-removal",
+        "--filler-aggressive",
+        "--callback-url",
+        "http://hook.test/cb",
     ]
 
     with (
@@ -264,8 +373,32 @@ def test_cli_parse_all_flags():
         assert kwargs["batch_window_ms"] == 100
         assert kwargs["max_clients"] == 200
         assert kwargs["max_connection_time"] == 900
+        assert kwargs["noise_reduction"] == "far_field"
         assert kwargs["word_timestamps"] is True
         assert kwargs["hotwords"] == "foo,bar"
         assert kwargs["enable_diarization"] is True
         assert kwargs["enable_paragraphs"] is True
         assert kwargs["max_speakers"] == 8
+        assert kwargs["enable_profanity"] is True
+        assert kwargs["profanity_mode"] == "remove"
+        assert kwargs["profanity_words"] == {"blergh", "zort"}
+        assert kwargs["enable_filler_removal"] is True
+        assert kwargs["filler_aggressive"] is True
+        assert kwargs["callback_url"] == "http://hook.test/cb"
+
+
+def test_cli_profanity_defaults():
+    """Without the profanity options the defaults reach the server unchanged."""
+    with (
+        patch.object(sys, "argv", ["aavaaz", "serve"]),
+        patch("aavaaz.server.AavaazServer") as mock_cls,
+    ):
+        mock_cls.return_value.run = MagicMock()
+        from aavaaz.cli import main
+
+        main()
+        kwargs = mock_cls.call_args[1]
+        assert kwargs["profanity_mode"] == "partial"
+        assert kwargs["profanity_words"] is None
+        assert kwargs["enable_filler_removal"] is False
+        assert kwargs["callback_url"] is None

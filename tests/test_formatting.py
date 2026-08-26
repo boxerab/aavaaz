@@ -65,9 +65,7 @@ class TestCollapseWhitespace:
 
 class TestFormatTranscript:
     def test_all_options(self):
-        result = format_transcript(
-            "  hello world.  how  are you  ", capitalize=True, numbers=False
-        )
+        result = format_transcript("  hello world.  how  are you  ", capitalize=True, numbers=False)
         assert result.startswith("Hello")
         assert "  " not in result
 
@@ -97,3 +95,22 @@ class TestSmartFormat:
 
     def test_ordinal_in_date(self):
         assert "2nd" in smart_format("May second")
+
+    def test_removes_space_before_punctuation(self):
+        assert smart_format("hello , world .") == "hello, world."
+
+    def test_adds_space_after_punctuation(self):
+        assert smart_format("hello,world.Bye") == "hello, world. Bye"
+
+    def test_collapses_repeated_terminal_marks(self):
+        assert smart_format("wow!! really??") == "wow! really?"
+        assert smart_format("done.. now") == "done. now"
+
+    def test_keeps_ellipsis(self):
+        assert smart_format("wait... ok") == "wait... ok"
+
+    def test_collapses_double_commas(self):
+        assert smart_format("one,, two") == "one, two"
+
+    def test_leaves_numeric_punctuation_alone(self):
+        assert smart_format("3:30 PM costs 1.5") == "3:30 PM costs 1.5"

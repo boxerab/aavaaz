@@ -29,16 +29,56 @@ def _make_pii_plugin():
     return pii_plugin
 
 
-def _make_profanity_plugin():
-    """Create a profanity filter plugin."""
-    from aavaaz.features.profanity_filter import filter_profanity
+class _ProfanityPlugin:
+    """Profanity filter plugin whose mode and word list stay settable after registration."""
 
-    def profanity_plugin(segment):
+    def __init__(self):
+        self.mode = "partial"
+        self.extra_words: set[str] | None = None
+
+    def __call__(self, segment):
+        from aavaaz.features.profanity_filter import filter_profanity
+
         if "text" in segment:
-            segment["text"] = filter_profanity(segment["text"])
+            segment["text"] = filter_profanity(
+                segment["text"], mode=self.mode, extra_words=self.extra_words
+            )
         return segment
 
-    return profanity_plugin
+
+class _FillerRemovalPlugin:
+    """Filler word removal plugin whose aggressive flag stays settable after registration."""
+
+    def __init__(self):
+        self.aggressive = False
+
+    def __call__(self, segment):
+        from aavaaz.features.audio_intelligence import remove_filler_words
+
+        if "text" in segment:
+            segment["text"] = remove_filler_words(segment["text"], aggressive=self.aggressive)
+        return segment
+
+
+def _make_profanity_plugin():
+    """Create a profanity filter plugin."""
+    return _ProfanityPlugin()
+
+
+def _make_filler_removal_plugin():
+    """Create a filler word removal plugin."""
+    return _FillerRemovalPlugin()
+
+
+def configure_profanity(mode: str = "partial", extra_words: set[str] | None = None):
+    """Set the options used by the registered profanity_filter plugin."""
+    _profanity_plugin.mode = mode
+    _profanity_plugin.extra_words = extra_words
+
+
+def configure_filler_removal(aggressive: bool = False):
+    """Set the options used by the registered filler_removal plugin."""
+    _filler_removal_plugin.aggressive = aggressive
 
 
 def _make_formatting_plugin():
@@ -78,13 +118,15 @@ def _make_intelligence_plugin():
 
 
 # Register all built-in plugins with ascending priority, disabled by default
+_profanity_plugin = _make_profanity_plugin()
+_filler_removal_plugin = _make_filler_removal_plugin()
+
 registry.add("formatting", _make_formatting_plugin(), priority=10, enabled=False)
 registry.add("pii_redaction", _make_pii_plugin(), priority=20, enabled=False)
-registry.add("profanity_filter", _make_profanity_plugin(), priority=30, enabled=False)
+registry.add("profanity_filter", _profanity_plugin, priority=30, enabled=False)
+registry.add("filler_removal", _filler_removal_plugin, priority=40, enabled=False)
 
 try:
-    registry.add(
-        "audio_intelligence", _make_intelligence_plugin(), priority=90, enabled=False
-    )
+    registry.add("audio_intelligence", _make_intelligence_plugin(), priority=90, enabled=False)
 except ImportError:
     logger.debug("Audio intelligence module not available")

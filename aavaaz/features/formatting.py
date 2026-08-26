@@ -132,9 +132,7 @@ def _capitalize_sentences(text):
     if text:
         text = text[0].upper() + text[1:]
     # Capitalize after . ! ?
-    text = re.sub(
-        r"([.!?])\s+([a-z])", lambda m: m.group(1) + " " + m.group(2).upper(), text
-    )
+    text = re.sub(r"([.!?])\s+([a-z])", lambda m: m.group(1) + " " + m.group(2).upper(), text)
     return text
 
 
@@ -284,9 +282,7 @@ def _format_ordinals(text):
         r"\b(the|on|" + month_alt + r"|\d{1,2})\s+(" + ordinal_alt + r")\b",
         re.IGNORECASE,
     )
-    return pattern.sub(
-        lambda m: f"{m.group(1)} {_ORDINAL_MAP[m.group(2).lower()]}", text
-    )
+    return pattern.sub(lambda m: f"{m.group(1)} {_ORDINAL_MAP[m.group(2).lower()]}", text)
 
 
 def _format_dates(text):
@@ -302,11 +298,25 @@ def _format_dates(text):
     return text
 
 
+_PUNCTUATION_MARKS = ",.!?;:"
+
+
+def _clean_punctuation(text):
+    """Tidy spacing and repeated marks: 'hi , there !!' -> 'hi, there!'."""
+    marks = re.escape(_PUNCTUATION_MARKS)
+    text = re.sub(r"\s+([" + marks + r"])", r"\1", text)
+    text = re.sub(r"([!?])\1+", r"\1", text)
+    text = re.sub(r"(?<!\.)\.\.(?!\.)", ".", text)
+    text = re.sub(r",{2,}", ",", text)
+    text = re.sub(r"([" + marks + r"])(?=[A-Za-z])", r"\1 ", text)
+    return text
+
+
 def smart_format(text):
     """Apply all smart formatting rules.
 
     Converts spoken dates, times, currency, percentages, and ordinals
-    to their written/numeric forms.
+    to their written/numeric forms, then cleans up punctuation spacing.
 
     Args:
         text: Input text.
@@ -321,6 +331,7 @@ def smart_format(text):
     text = _format_percentages(text)
     text = _format_times(text)
     text = _format_dates(text)
+    text = _clean_punctuation(text)
     return text
 
 

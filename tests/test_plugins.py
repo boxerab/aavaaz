@@ -2,10 +2,12 @@
 
 from aavaaz.features.plugins import PluginRegistry
 from aavaaz.plugins.builtins import (
+    _make_filler_removal_plugin,
     _make_formatting_plugin,
     _make_pii_plugin,
     _make_profanity_plugin,
 )
+from aavaaz.plugins.builtins import registry as builtin_registry
 
 
 def test_pii_plugin_redacts_email():
@@ -29,6 +31,41 @@ def test_profanity_plugin_masks():
     result = plugin(segment)
     assert "fuck" not in result["text"]
     assert "f" in result["text"]  # partial mask keeps first char
+
+
+def test_profanity_plugin_honours_configured_mode_and_extra_words():
+    plugin = _make_profanity_plugin()
+    plugin.mode = "remove"
+    plugin.extra_words = {"blergh"}
+    result = plugin({"text": "this blergh shit", "start": 0, "end": 1})
+    assert result["text"] == "this"
+
+
+def test_filler_removal_plugin_strips_fillers():
+    plugin = _make_filler_removal_plugin()
+    result = plugin({"text": "um so, you know, it works", "start": 0, "end": 1})
+    assert "um" not in result["text"].split()
+    assert "you know" not in result["text"]
+    assert "works" in result["text"]
+
+
+def test_filler_removal_plugin_aggressive_flag():
+    plugin = _make_filler_removal_plugin()
+    segment = {"text": "it is basically done", "start": 0, "end": 1}
+    assert plugin(dict(segment))["text"] == "It is basically done"
+    plugin.aggressive = True
+    assert plugin(dict(segment))["text"] == "It is done"
+
+
+def test_builtin_filler_removal_registered_disabled_between_formatting_and_intelligence():
+    priorities = {p["name"]: p for p in builtin_registry.list_plugins()}
+    filler = priorities["filler_removal"]
+    assert filler["enabled"] is False
+    assert (
+        priorities["formatting"]["priority"]
+        < filler["priority"]
+        < priorities["audio_intelligence"]["priority"]
+    )
 
 
 def test_formatting_plugin_capitalizes():
