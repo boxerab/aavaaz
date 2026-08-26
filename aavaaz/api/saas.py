@@ -13,7 +13,7 @@ import logging
 import os
 import secrets
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -55,6 +55,9 @@ class UsageEntry:
     date: str
     audio_minutes: float = 0.0
     requests: int = 0
+    characters: int = 0
+    by_model: dict[str, dict] = field(default_factory=dict)
+    by_language: dict[str, dict] = field(default_factory=dict)
 
 
 @dataclass
@@ -85,6 +88,9 @@ _subscriptions: dict[str, UserSubscription] = {}  # user_id -> UserSubscription
 _team: dict[str, list[dict]] = {}  # owner_id -> [member dict]
 
 TEAM_ROLES = {"admin", "member", "viewer"}
+
+UNATTRIBUTED_USAGE_KEY = "unknown"
+DAILY_USAGE_ROWS = 30
 
 
 # ─── Request/Response Schemas ────────────────────────────────────────────────
@@ -123,22 +129,22 @@ class CheckoutResponse(BaseModel):
 # ─── API Key Endpoints ───────────────────────────────────────────────────────
 
 
+def _key_view(key: SaasApiKey) -> dict:
+    """Project a stored key to the API shape (drops the hash)."""
+    return {
+        "id": key.id,
+        "name": key.name,
+        "prefix": key.prefix,
+        "created_at": key.created_at,
+        "last_used": key.last_used,
+        "expires_at": key.expires_at,
+    }
+
+
 @router.get("/api-keys")
 async def list_api_keys(claims: dict = Depends(require_auth)):
     user_id = claims["sub"]
-    user_keys = [
-        {
-            "id": k.id,
-            "name": k.name,
-            "prefix": k.prefix,
-            "created_at": k.created_at,
-            "last_used": k.last_used,
-            "expires_at": k.expires_at,
-        }
-        for k in _api_keys.values()
-        if k.user_id == user_id
-    ]
-    return user_keys
+    return [_key_view(k) for k in _api_keys.values() if k.user_id == user_id]
 
 
 @router.post("/api-keys")
@@ -162,17 +168,7 @@ async def create_api_key(body: CreateKeyRequest, claims: dict = Depends(require_
     _api_keys[key_id] = api_key
     _key_hash_to_id[key_hash] = key_id
 
-    return {
-        "key": {
-            "id": api_key.id,
-            "name": api_key.name,
-            "prefix": api_key.prefix,
-            "created_at": api_key.created_at,
-            "last_used": None,
-            "expires_at": None,
-        },
-        "secret": raw_key,
-    }
+    return {"key": _key_view(api_key), "secret": raw_key}
 
 
 @router.delete("/api-keys/{key_id}")
@@ -196,9 +192,7 @@ async def list_team(claims: dict = Depends(require_auth)):
 
 
 @router.post("/team")
-async def invite_member(
-    body: InviteMemberRequest, claims: dict = Depends(require_auth)
-):
+async def invite_member(body: InviteMemberRequest, claims: dict = Depends(require_auth)):
     email = body.email.strip().lower()
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
@@ -245,6 +239,16 @@ async def remove_member(member_id: str, claims: dict = Depends(require_auth)):
 # ─── Usage Endpoints ─────────────────────────────────────────────────────────
 
 
+def _merge_breakdowns(entries: list[UsageEntry], field_name: str) -> dict[str, dict]:
+    totals: dict[str, dict] = {}
+    for entry in entries:
+        for name, counts in getattr(entry, field_name).items():
+            running = totals.setdefault(name, {"audio_minutes": 0.0, "requests": 0})
+            running["audio_minutes"] += counts["audio_minutes"]
+            running["requests"] += counts["requests"]
+    return totals
+
+
 @router.get("/usage")
 async def get_usage(claims: dict = Depends(require_auth)):
     user_id = claims["sub"]
@@ -255,12 +259,14 @@ async def get_usage(claims: dict = Depends(require_auth)):
     month_entries = [e for e in entries if e.date.startswith(this_month)]
     total_minutes = sum(e.audio_minutes for e in month_entries)
     total_requests = sum(e.requests for e in month_entries)
+    total_characters = sum(e.characters for e in month_entries)
     total_cost = total_minutes * sub.price_per_minute
 
     return {
         "current_month": {
             "audio_minutes": total_minutes,
             "requests": total_requests,
+            "characters": total_characters,
             "cost_usd": total_cost,
         },
         "quota": {
@@ -268,14 +274,17 @@ async def get_usage(claims: dict = Depends(require_auth)):
             "audio_minutes_used": total_minutes,
         },
         "plan": sub.plan,
+        "by_model": _merge_breakdowns(month_entries, "by_model"),
+        "by_language": _merge_breakdowns(month_entries, "by_language"),
         "daily_usage": [
             {
                 "date": e.date,
                 "audio_minutes": e.audio_minutes,
                 "requests": e.requests,
+                "characters": e.characters,
                 "cost_usd": e.audio_minutes * sub.price_per_minute,
             }
-            for e in entries[-30:]
+            for e in entries[-DAILY_USAGE_ROWS:]
         ],
     }
 
@@ -376,9 +385,7 @@ async def stripe_webhook(request: Request):
     sig_header = request.headers.get("stripe-signature", "")
 
     try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, STRIPE_WEBHOOK_SECRET
-        )
+        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
     except (ValueError, stripe.SignatureVerificationError):
         raise HTTPException(status_code=400, detail="Invalid signature")
 
@@ -422,15 +429,33 @@ async def stripe_webhook(request: Request):
 _transcripts: dict[str, list[dict]] = {}  # user_id -> [job dicts]
 
 
+def _epoch(timestamp: str | None) -> float | None:
+    """Parse an ISO 8601 timestamp to epoch seconds, rejecting malformed input."""
+    if not timestamp:
+        return None
+    try:
+        parsed = datetime.fromisoformat(timestamp)
+    except ValueError:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid ISO 8601 timestamp '{timestamp}'"
+        ) from None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.timestamp()
+
+
 @router.get("/transcripts")
 async def list_transcripts(
     claims: dict = Depends(require_auth),
     q: str | None = Query(None),
     language: str | None = Query(None),
     tag: list[str] = Query(default_factory=list),
+    model: str | None = Query(None),
+    start: str | None = Query(None),
+    end: str | None = Query(None),
 ):
     jobs = _transcripts.get(claims["sub"], [])
-    if not (q or language or tag):
+    if not (q or language or tag or model or start or end):
         return jobs
 
     from aavaaz.features.search import TranscriptIndex, TranscriptMetadata
@@ -442,11 +467,20 @@ async def list_transcripts(
                 job_id=job.get("id", ""),
                 text=job.get("text", ""),
                 language=job.get("language", ""),
+                model=job.get("model", ""),
+                created_at=_epoch(job.get("created_at")) or 0.0,
                 tags=job.get("tags") or {},
             )
         )
     tags = dict(t.split(":", 1) for t in tag if ":" in t)
-    hits = index.search(query=q or "", language=language, tags=tags or None)
+    hits = index.search(
+        query=q or "",
+        language=language,
+        tags=tags or None,
+        model=model,
+        start_time=_epoch(start),
+        end_time=_epoch(end),
+    )
     by_id = {job.get("id"): job for job in jobs}
     return [by_id[m.job_id] for m in hits if m.job_id in by_id]
 
@@ -472,28 +506,90 @@ async def set_transcript_tags(
     raise HTTPException(status_code=404, detail="Transcript not found")
 
 
+@router.delete("/transcripts/{transcript_id}", status_code=204)
+async def delete_transcript(transcript_id: str, claims: dict = Depends(require_auth)):
+    jobs = _transcripts.get(claims["sub"], [])
+    for i, job in enumerate(jobs):
+        if job["id"] == transcript_id:
+            jobs.pop(i)
+            return
+    raise HTTPException(status_code=404, detail="Transcript not found")
+
+
+# ─── GDPR Endpoints ──────────────────────────────────────────────────────────
+
+
+@router.get("/me/export")
+async def export_my_data(claims: dict = Depends(require_auth)):
+    user_id = claims["sub"]
+    sub = _subscriptions.get(user_id, UserSubscription(user_id=user_id))
+    return {
+        "profile": {
+            "user_id": user_id,
+            "email": claims.get("email", ""),
+            "plan": sub.plan,
+            "status": sub.status,
+        },
+        "api_keys": [_key_view(k) for k in _api_keys.values() if k.user_id == user_id],
+        "transcripts": _transcripts.get(user_id, []),
+        "usage": [
+            {
+                "date": e.date,
+                "audio_minutes": e.audio_minutes,
+                "requests": e.requests,
+                "characters": e.characters,
+                "by_model": e.by_model,
+                "by_language": e.by_language,
+            }
+            for e in _usage.get(user_id, [])
+        ],
+    }
+
+
+@router.delete("/me/data")
+async def delete_my_data(claims: dict = Depends(require_auth)):
+    user_id = claims["sub"]
+    return {
+        "transcripts_deleted": len(_transcripts.pop(user_id, [])),
+        "usage_records_deleted": len(_usage.pop(user_id, [])),
+    }
+
+
 # ─── Usage Recording (call from the transcription pipeline once metering is wired) ─
 
 
-def record_usage(user_id: str, audio_minutes: float):
+def _add_to_breakdown(breakdown: dict[str, dict], name: str, audio_minutes: float):
+    counts = breakdown.setdefault(name, {"audio_minutes": 0.0, "requests": 0})
+    counts["audio_minutes"] += audio_minutes
+    counts["requests"] += 1
+
+
+def record_usage(
+    user_id: str,
+    audio_minutes: float,
+    characters: int = 0,
+    model: str = "",
+    language: str = "",
+):
     """Record audio usage for a user. Call after each transcription."""
     today = datetime.now(UTC).strftime("%Y-%m-%d")
     entries = _usage.setdefault(user_id, [])
 
-    # Find or create today's entry
-    for entry in entries:
-        if entry.date == today:
-            entry.audio_minutes += audio_minutes
-            entry.requests += 1
-            return
+    entry = next((e for e in entries if e.date == today), None)
+    if entry is None:
+        entry = UsageEntry(user_id=user_id, date=today)
+        entries.append(entry)
 
-    entries.append(
-        UsageEntry(user_id=user_id, date=today, audio_minutes=audio_minutes, requests=1)
-    )
+    entry.audio_minutes += audio_minutes
+    entry.requests += 1
+    entry.characters += characters
+    _add_to_breakdown(entry.by_model, model or UNATTRIBUTED_USAGE_KEY, audio_minutes)
+    _add_to_breakdown(entry.by_language, language or UNATTRIBUTED_USAGE_KEY, audio_minutes)
 
 
 def record_transcript(user_id: str, job: dict):
     """Record a completed transcription job."""
+    job.setdefault("created_at", datetime.now(UTC).isoformat())
     _transcripts.setdefault(user_id, []).insert(0, job)
 
 

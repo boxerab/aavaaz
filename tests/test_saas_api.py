@@ -66,6 +66,93 @@ def test_checkout_pro_passes_allowlist_then_needs_billing(client, monkeypatch):
     assert resp.status_code == 503
 
 
+def test_usage_reports_characters_and_breakdowns(client):
+    saas.record_usage("user-1", 2.0, characters=11, model="small", language="en")
+    saas.record_usage("user-1", 1.0, characters=5, model="large-v3", language="fr")
+    saas.record_usage("user-1", 0.5, characters=3, model="small", language="en")
+
+    body = client.get("/v1/saas/usage").json()
+    assert body["current_month"]["audio_minutes"] == 3.5
+    assert body["current_month"]["requests"] == 3
+    assert body["current_month"]["characters"] == 19
+    assert body["by_model"] == {
+        "small": {"audio_minutes": 2.5, "requests": 2},
+        "large-v3": {"audio_minutes": 1.0, "requests": 1},
+    }
+    assert body["by_language"] == {
+        "en": {"audio_minutes": 2.5, "requests": 2},
+        "fr": {"audio_minutes": 1.0, "requests": 1},
+    }
+    assert body["daily_usage"][-1]["characters"] == 19
+
+
+def test_usage_without_model_or_language_is_unattributed(client):
+    saas.record_usage("user-1", 1.0)
+    body = client.get("/v1/saas/usage").json()
+    assert body["by_model"] == {"unknown": {"audio_minutes": 1.0, "requests": 1}}
+    assert body["by_language"] == {"unknown": {"audio_minutes": 1.0, "requests": 1}}
+
+
+def test_usage_is_per_user(client):
+    saas.record_usage("user-1", 1.0, model="small")
+    client.current_user["sub"] = "user-2"
+    body = client.get("/v1/saas/usage").json()
+    assert body["current_month"]["requests"] == 0
+    assert body["by_model"] == {}
+
+
+def test_delete_transcript(client):
+    saas.record_transcript("user-1", {"id": "t1", "text": "hi"})
+    assert client.delete("/v1/saas/transcripts/t1").status_code == 204
+    assert client.get("/v1/saas/transcripts").json() == []
+    assert client.delete("/v1/saas/transcripts/t1").status_code == 404
+
+
+def test_export_my_data(client):
+    client.post("/v1/saas/api-keys", json={"name": "ci"})
+    saas.record_transcript("user-1", {"id": "t1", "text": "hi"})
+    saas.record_usage("user-1", 1.0, characters=2, model="small", language="en")
+
+    body = client.get("/v1/saas/me/export").json()
+    assert body["profile"]["user_id"] == "user-1"
+    assert body["profile"]["plan"] == "free"
+    assert [k["name"] for k in body["api_keys"]] == ["ci"]
+    assert "key_hash" not in body["api_keys"][0]
+    assert [t["id"] for t in body["transcripts"]] == ["t1"]
+    assert body["usage"][0]["by_model"] == {"small": {"audio_minutes": 1.0, "requests": 1}}
+
+
+def test_export_is_scoped_to_the_caller(client):
+    saas.record_transcript("user-1", {"id": "t1", "text": "hi"})
+    client.current_user["sub"] = "user-2"
+    body = client.get("/v1/saas/me/export").json()
+    assert body["transcripts"] == []
+    assert body["usage"] == []
+
+
+def test_delete_my_data(client):
+    client.post("/v1/saas/api-keys", json={"name": "ci"})
+    saas.record_transcript("user-1", {"id": "t1", "text": "hi"})
+    saas.record_transcript("user-1", {"id": "t2", "text": "ho"})
+    saas.record_usage("user-1", 1.0)
+
+    body = client.delete("/v1/saas/me/data").json()
+    assert body == {"transcripts_deleted": 2, "usage_records_deleted": 1}
+    assert client.get("/v1/saas/transcripts").json() == []
+    assert client.get("/v1/saas/usage").json()["current_month"]["requests"] == 0
+    # api keys are credentials, not personal records
+    assert len(client.get("/v1/saas/api-keys").json()) == 1
+
+
+def test_delete_my_data_leaves_other_users_alone(client):
+    saas.record_transcript("user-2", {"id": "t1", "text": "hi"})
+    assert client.delete("/v1/saas/me/data").json() == {
+        "transcripts_deleted": 0,
+        "usage_records_deleted": 0,
+    }
+    assert [t["id"] for t in saas._transcripts["user-2"]] == ["t1"]
+
+
 def test_shared_plan_tables():
     assert plans.included_minutes("pro") == 1000
     assert plans.included_minutes("unknown") == 60

@@ -80,6 +80,11 @@ Two implementations sharing the same endpoints:
 1. **In-memory** (`aavaaz/api/saas.py`) — for local dev, mounts as FastAPI router
 2. **DynamoDB** (`aavaaz/serverless/saas_lambda.py`) — for production Lambda deployment
 
+Both accept an RS256 token from an identity provider once `AAVAAZ_JWT_JWKS_URL`,
+`AAVAAZ_JWT_ISSUER` and `AAVAAZ_JWT_AUDIENCE` are set, and an HS256 token signed
+with `AAVAAZ_JWT_SECRET`. The Lambda also accepts an `aavaaz_...` API key as the
+bearer token. See `docs/KEYCLOAK_SSO.md`.
+
 Endpoints:
 | Method | Path | Description |
 |--------|------|-------------|
@@ -91,8 +96,67 @@ Endpoints:
 | POST | `/v1/saas/checkout` | Create Stripe Checkout session |
 | POST | `/v1/saas/billing-portal` | Create Stripe billing portal session |
 | POST | `/v1/saas/stripe-webhook` | Handle Stripe webhook events |
-| GET | `/v1/saas/transcripts` | List transcript history |
+| GET | `/v1/saas/transcripts` | List/search transcript history |
 | GET | `/v1/saas/transcripts/{id}` | Get specific transcript |
+| PATCH | `/v1/saas/transcripts/{id}/tags` | Replace a transcript's tags |
+| DELETE | `/v1/saas/transcripts/{id}` | Delete a transcript (204, 404 if not yours) |
+| GET | `/v1/saas/me/export` | Export the caller's profile, keys, transcripts, usage |
+| DELETE | `/v1/saas/me/data` | Erase the caller's transcripts and usage records |
+| GET | `/v1/saas/team` | List team members |
+| POST | `/v1/saas/team` | Invite a team member |
+| PATCH | `/v1/saas/team/{id}` | Change a member's role |
+| DELETE | `/v1/saas/team/{id}` | Remove a member |
+
+On the serverless track `{id}` is the transcript's `created_at` timestamp, which
+is the DynamoDB sort key.
+
+#### Transcript search
+
+`GET /v1/saas/transcripts` filters the caller's own transcripts. All parameters
+combine, and an empty parameter set returns the full history.
+
+| Parameter | Meaning |
+|-----------|---------|
+| `q` | case-insensitive substring of the transcript text |
+| `language` | exact language code |
+| `model` | exact model name |
+| `tag` | `key:value`, repeatable |
+| `start` | ISO 8601 lower bound on created time, inclusive |
+| `end` | ISO 8601 upper bound on created time, inclusive |
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "$API/v1/saas/transcripts?model=large-v3&language=en&start=2026-01-01&end=2026-02-01"
+```
+
+#### Usage response
+
+`GET /v1/saas/usage` reports the current month:
+
+```json
+{
+  "current_month": {"audio_minutes": 3.5, "requests": 3, "characters": 19, "cost_usd": 0.021},
+  "quota": {"audio_minutes_limit": 1000, "audio_minutes_used": 3.5},
+  "plan": "pro",
+  "by_model": {"large-v3": {"audio_minutes": 2.5, "requests": 2}},
+  "by_language": {"en": {"audio_minutes": 2.5, "requests": 2}},
+  "daily_usage": [{"date": "2026-08-25", "audio_minutes": 3.5, "requests": 3, "characters": 19, "cost_usd": 0.021}]
+}
+```
+
+Transcriptions that arrive without a model or language name are counted under
+`unknown`.
+
+#### Deleting data
+
+`DELETE /v1/saas/me/data` erases transcripts and usage records and returns the
+counts:
+
+```json
+{"transcripts_deleted": 12, "usage_records_deleted": 30}
+```
+
+API keys survive it. Revoke them through `DELETE /v1/saas/api-keys/{id}`.
 
 ### Infrastructure as Code
 

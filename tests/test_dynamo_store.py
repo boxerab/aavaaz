@@ -59,9 +59,7 @@ def _create_tables():
         GlobalSecondaryIndexes=[
             {
                 "IndexName": "stripe-customer-index",
-                "KeySchema": [
-                    {"AttributeName": "stripe_customer_id", "KeyType": "HASH"}
-                ],
+                "KeySchema": [{"AttributeName": "stripe_customer_id", "KeyType": "HASH"}],
                 "Projection": {"ProjectionType": "ALL"},
             }
         ],
@@ -137,6 +135,32 @@ def test_record_usage_accepts_float(db):
     assert sum(u["requests"] for u in usage) == 2
 
 
+def test_record_usage_accumulates_characters_and_breakdowns(db):
+    db.record_usage("user-1", 2.0, characters=11, model="small", language="en")
+    db.record_usage("user-1", 1.0, characters=5, model="large-v3", language="fr")
+    db.record_usage("user-1", 0.5, characters=3, model="small", language="en")
+
+    (day,) = db.get_usage("user-1", days=1)
+    assert day["audio_minutes"] == 3.5
+    assert day["requests"] == 3
+    assert day["characters"] == 19
+    assert day["by_model"] == {
+        "small": {"audio_minutes": 2.5, "requests": 2},
+        "large-v3": {"audio_minutes": 1.0, "requests": 1},
+    }
+    assert day["by_language"] == {
+        "en": {"audio_minutes": 2.5, "requests": 2},
+        "fr": {"audio_minutes": 1.0, "requests": 1},
+    }
+
+
+def test_record_usage_without_model_or_language_is_unattributed(db):
+    db.record_usage("user-1", 1.0)
+    (day,) = db.get_usage("user-1", days=1)
+    assert day["by_model"] == {"unknown": {"audio_minutes": 1.0, "requests": 1}}
+    assert day["by_language"] == {"unknown": {"audio_minutes": 1.0, "requests": 1}}
+
+
 def test_validate_api_key_respects_expiry(db):
     meta, secret = db.create_api_key("user-1", "ci")
     assert db.validate_api_key(secret) == "user-1"
@@ -202,22 +226,89 @@ def test_team_isolated_per_owner(db):
     assert db.list_members("owner-2") == []
 
 
-def test_search_transcripts(db):
+def _seed_transcripts(db):
     db.save_transcript(
         "u1",
-        {"id": "1", "text": "hello kubernetes world", "language": "en",
-         "tags": {"project": "x"}},
+        {
+            "id": "1",
+            "text": "hello kubernetes world",
+            "language": "en",
+            "model": "small",
+            "created_at": "2026-01-10T09:00:00+00:00",
+            "tags": {"project": "x"},
+        },
     )
     db.save_transcript(
-        "u1", {"id": "2", "text": "bonjour le monde", "language": "fr", "tags": {}}
+        "u1",
+        {
+            "id": "2",
+            "text": "bonjour le monde",
+            "language": "fr",
+            "model": "large-v3",
+            "created_at": "2026-03-20T09:00:00+00:00",
+            "tags": {},
+        },
     )
+
+
+def test_search_transcripts(db):
+    _seed_transcripts(db)
     assert len(db.search_transcripts("u1")) == 2
     assert [t["id"] for t in db.search_transcripts("u1", query="kubernetes")] == ["1"]
     assert [t["id"] for t in db.search_transcripts("u1", language="fr")] == ["2"]
-    assert [
-        t["id"] for t in db.search_transcripts("u1", tags={"project": "x"})
-    ] == ["1"]
+    assert [t["id"] for t in db.search_transcripts("u1", tags={"project": "x"})] == ["1"]
     assert db.search_transcripts("u1", query="nope") == []
+
+
+def test_search_transcripts_by_model(db):
+    _seed_transcripts(db)
+    assert [t["id"] for t in db.search_transcripts("u1", model="large-v3")] == ["2"]
+    assert [t["id"] for t in db.search_transcripts("u1", model="small")] == ["1"]
+    assert db.search_transcripts("u1", model="tiny") == []
+
+
+def test_search_transcripts_by_date_range(db):
+    _seed_transcripts(db)
+    lower = "2026-02-01T00:00:00+00:00"
+    assert [t["id"] for t in db.search_transcripts("u1", start=lower)] == ["2"]
+    assert [t["id"] for t in db.search_transcripts("u1", end=lower)] == ["1"]
+    assert {
+        t["id"]
+        for t in db.search_transcripts(
+            "u1", start="2026-01-01T00:00:00+00:00", end="2026-12-31T00:00:00+00:00"
+        )
+    } == {"1", "2"}
+    assert [t["id"] for t in db.search_transcripts("u1", start="2026-03-20T09:00:00+00:00")] == [
+        "2"
+    ]
+
+
+def test_search_transcripts_is_scoped_to_the_user(db):
+    _seed_transcripts(db)
+    assert db.search_transcripts("u2", query="kubernetes") == []
+
+
+def test_delete_transcript(db):
+    _seed_transcripts(db)
+    assert db.delete_transcript("u1", "2026-01-10T09:00:00+00:00") is True
+    assert [t["id"] for t in db.list_transcripts("u1")] == ["2"]
+    assert db.delete_transcript("u1", "2026-01-10T09:00:00+00:00") is False
+
+
+def test_delete_user_data(db):
+    _seed_transcripts(db)
+    db.save_transcript("u2", {"id": "3", "text": "keep me"})
+    db.record_usage("u1", 1.0, model="small")
+    db.record_usage("u2", 2.0, model="small")
+
+    assert db.delete_user_data("u1") == {
+        "transcripts_deleted": 2,
+        "usage_records_deleted": 1,
+    }
+    assert db.list_transcripts("u1") == []
+    assert db.get_usage("u1", days=1) == []
+    assert [t["id"] for t in db.list_transcripts("u2")] == ["3"]
+    assert db.get_usage("u2", days=1)[0]["audio_minutes"] == 2.0
 
 
 def test_set_transcript_tags(db):
@@ -226,3 +317,103 @@ def test_set_transcript_tags(db):
     updated = db.set_transcript_tags("u1", created_at, {"team": "a"})
     assert updated["tags"] == {"team": "a"}
     assert db.set_transcript_tags("u1", "does-not-exist", {"x": "y"}) is None
+
+
+# ─── Lambda SaaS app (aavaaz.serverless.saas_lambda) over the same store ─────
+
+
+@pytest.fixture
+def lambda_client(db):
+    from fastapi.testclient import TestClient
+
+    from aavaaz.serverless import saas_lambda
+
+    current_user = {"sub": "u1", "email": "u1@example.com"}
+    saas_lambda.app.dependency_overrides[saas_lambda.require_auth] = lambda: dict(current_user)
+    client = TestClient(saas_lambda.app)
+    client.current_user = current_user
+    yield client
+    saas_lambda.app.dependency_overrides.clear()
+
+
+def test_lambda_transcript_filters(lambda_client, db):
+    _seed_transcripts(db)
+    url = "/v1/saas/transcripts"
+
+    assert {t["id"] for t in lambda_client.get(url).json()} == {"1", "2"}
+    assert [t["id"] for t in lambda_client.get(url, params={"model": "small"}).json()] == ["1"]
+    assert [
+        t["id"]
+        for t in lambda_client.get(url, params={"start": "2026-02-01T00:00:00+00:00"}).json()
+    ] == ["2"]
+    assert [
+        t["id"] for t in lambda_client.get(url, params={"end": "2026-02-01T00:00:00+00:00"}).json()
+    ] == ["1"]
+    assert [t["id"] for t in lambda_client.get(url, params={"language": "fr"}).json()] == ["2"]
+
+
+def test_lambda_usage_reports_characters_and_breakdowns(lambda_client, db):
+    db.record_usage("u1", 2.0, characters=11, model="small", language="en")
+    db.record_usage("u1", 1.0, characters=5, model="large-v3", language="fr")
+
+    body = lambda_client.get("/v1/saas/usage").json()
+    assert body["current_month"]["audio_minutes"] == 3.0
+    assert body["current_month"]["requests"] == 2
+    assert body["current_month"]["characters"] == 16
+    assert body["by_model"] == {
+        "small": {"audio_minutes": 2.0, "requests": 1},
+        "large-v3": {"audio_minutes": 1.0, "requests": 1},
+    }
+    assert body["by_language"] == {
+        "en": {"audio_minutes": 2.0, "requests": 1},
+        "fr": {"audio_minutes": 1.0, "requests": 1},
+    }
+    assert body["daily_usage"][-1]["characters"] == 16
+
+
+def test_lambda_delete_transcript(lambda_client, db):
+    _seed_transcripts(db)
+    created_at = "2026-01-10T09:00:00+00:00"
+    assert lambda_client.delete(f"/v1/saas/transcripts/{created_at}").status_code == 204
+    assert [t["id"] for t in db.list_transcripts("u1")] == ["2"]
+    assert lambda_client.delete(f"/v1/saas/transcripts/{created_at}").status_code == 404
+
+
+def test_lambda_delete_transcript_of_another_user_is_404(lambda_client, db):
+    _seed_transcripts(db)
+    lambda_client.current_user["sub"] = "u2"
+    resp = lambda_client.delete("/v1/saas/transcripts/2026-01-10T09:00:00+00:00")
+    assert resp.status_code == 404
+    assert len(db.list_transcripts("u1")) == 2
+
+
+def test_lambda_export_my_data(lambda_client, db):
+    _seed_transcripts(db)
+    db.create_api_key("u1", "ci")
+    db.record_usage("u1", 1.0, characters=2, model="small", language="en")
+
+    body = lambda_client.get("/v1/saas/me/export").json()
+    assert body["profile"] == {
+        "user_id": "u1",
+        "email": "u1@example.com",
+        "plan": "free",
+        "status": "active",
+    }
+    assert [k["name"] for k in body["api_keys"]] == ["ci"]
+    assert "key_hash" not in body["api_keys"][0]
+    assert {t["id"] for t in body["transcripts"]} == {"1", "2"}
+    assert body["usage"][0]["by_model"] == {"small": {"audio_minutes": 1.0, "requests": 1}}
+
+
+def test_lambda_delete_my_data(lambda_client, db):
+    _seed_transcripts(db)
+    db.record_usage("u1", 1.0)
+    db.save_transcript("u2", {"id": "3", "text": "keep me"})
+
+    assert lambda_client.delete("/v1/saas/me/data").json() == {
+        "transcripts_deleted": 2,
+        "usage_records_deleted": 1,
+    }
+    assert db.list_transcripts("u1") == []
+    assert db.get_usage("u1", days=1) == []
+    assert [t["id"] for t in db.list_transcripts("u2")] == ["3"]

@@ -40,6 +40,9 @@ _table_team = _dynamodb.Table(f"aavaaz-team-{ENV}")
 
 TEAM_ROLES = {"admin", "member", "viewer"}
 
+USAGE_MINUTE_DECIMALS = 4
+UNATTRIBUTED_USAGE_KEY = "unknown"
+
 
 # ─── API Keys ────────────────────────────────────────────────────────────────
 
@@ -136,18 +139,72 @@ def validate_api_key(raw_key: str) -> str | None:
 # ─── Usage Tracking ──────────────────────────────────────────────────────────
 
 
-def record_usage(user_id: str, audio_minutes: float):
-    """Record usage for the current day. Atomic increment."""
-    today = datetime.now(UTC).strftime("%Y-%m-%d")
+def record_usage(
+    user_id: str,
+    audio_minutes: float,
+    characters: int = 0,
+    model: str = "",
+    language: str = "",
+):
+    """Record usage for the current day. Atomic increments.
+
+    DynamoDB's ADD only reaches top-level attributes, and SET only reaches a
+    path whose parents already exist, so the per-model and per-language maps
+    are created by two idempotent updates before the counters move.
+    """
+    key = {"user_id": user_id, "date": datetime.now(UTC).strftime("%Y-%m-%d")}
+    minutes = Decimal(str(round(audio_minutes, USAGE_MINUTE_DECIMALS)))
+    breakdown_names = {
+        "#model": model or UNATTRIBUTED_USAGE_KEY,
+        "#language": language or UNATTRIBUTED_USAGE_KEY,
+    }
 
     _table_usage.update_item(
-        Key={"user_id": user_id, "date": today},
-        UpdateExpression="ADD audio_minutes :mins, requests :one",
+        Key=key,
+        UpdateExpression=(
+            "SET by_model = if_not_exists(by_model, :empty), "
+            "by_language = if_not_exists(by_language, :empty)"
+        ),
+        ExpressionAttributeValues={":empty": {}},
+    )
+    _table_usage.update_item(
+        Key=key,
+        UpdateExpression=(
+            "SET by_model.#model = if_not_exists(by_model.#model, :zero), "
+            "by_language.#language = if_not_exists(by_language.#language, :zero)"
+        ),
+        ExpressionAttributeNames=breakdown_names,
+        ExpressionAttributeValues={":zero": {"audio_minutes": Decimal(0), "requests": 0}},
+    )
+    _table_usage.update_item(
+        Key=key,
+        UpdateExpression=(
+            "ADD audio_minutes :mins, requests :one, characters :chars "
+            "SET by_model.#model.audio_minutes = "
+            "by_model.#model.audio_minutes + :mins, "
+            "by_model.#model.requests = by_model.#model.requests + :one, "
+            "by_language.#language.audio_minutes = "
+            "by_language.#language.audio_minutes + :mins, "
+            "by_language.#language.requests = "
+            "by_language.#language.requests + :one"
+        ),
+        ExpressionAttributeNames=breakdown_names,
         ExpressionAttributeValues={
-            ":mins": Decimal(str(round(audio_minutes, 4))),
+            ":mins": minutes,
             ":one": 1,
+            ":chars": int(characters),
         },
     )
+
+
+def _breakdown_view(stored: dict | None) -> dict[str, dict]:
+    return {
+        name: {
+            "audio_minutes": float(counts.get("audio_minutes", 0)),
+            "requests": int(counts.get("requests", 0)),
+        }
+        for name, counts in (stored or {}).items()
+    }
 
 
 def get_usage(user_id: str, days: int = 30) -> list[dict]:
@@ -166,6 +223,9 @@ def get_usage(user_id: str, days: int = 30) -> list[dict]:
             "date": item["date"],
             "audio_minutes": float(item.get("audio_minutes", 0)),
             "requests": int(item.get("requests", 0)),
+            "characters": int(item.get("characters", 0)),
+            "by_model": _breakdown_view(item.get("by_model")),
+            "by_language": _breakdown_view(item.get("by_language")),
         }
         for item in response.get("Items", [])
     ]
@@ -248,9 +308,7 @@ def list_transcripts(user_id: str, limit: int = 50) -> list[dict]:
 
 def get_transcript(user_id: str, created_at: str) -> dict | None:
     """Get a specific transcript by user_id and created_at."""
-    response = _table_transcripts.get_item(
-        Key={"user_id": user_id, "created_at": created_at}
-    )
+    response = _table_transcripts.get_item(Key={"user_id": user_id, "created_at": created_at})
     return response.get("Item")
 
 
@@ -259,15 +317,27 @@ def search_transcripts(
     query: str | None = None,
     language: str | None = None,
     tags: dict[str, str] | None = None,
+    model: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
     limit: int = 50,
 ) -> list[dict]:
-    """Filter a user's transcripts by text substring, language, and tags.
+    """Filter a user's transcripts by text substring, language, tags, model and date.
 
-    DynamoDB has no full-text search, so the user's records are queried by
-    partition key and filtered in-process (fine for per-user volumes).
+    ``start``/``end`` are inclusive ISO 8601 bounds on created_at, the sort key,
+    so they narrow the query itself. DynamoDB has no full-text search, so the
+    remaining filters run in-process (fine for per-user volumes).
     """
+    condition = Key("user_id").eq(user_id)
+    if start and end:
+        condition = condition & Key("created_at").between(start, end)
+    elif start:
+        condition = condition & Key("created_at").gte(start)
+    elif end:
+        condition = condition & Key("created_at").lte(end)
+
     items = _table_transcripts.query(
-        KeyConditionExpression=Key("user_id").eq(user_id),
+        KeyConditionExpression=condition,
         ScanIndexForward=False,
     ).get("Items", [])
 
@@ -278,14 +348,48 @@ def search_transcripts(
             continue
         if language and item.get("language") != language:
             continue
-        if tags and not all(
-            str((item.get("tags") or {}).get(k)) == v for k, v in tags.items()
-        ):
+        if model and item.get("model") != model:
+            continue
+        if tags and not all(str((item.get("tags") or {}).get(k)) == v for k, v in tags.items()):
             continue
         results.append(item)
         if len(results) >= limit:
             break
     return results
+
+
+def delete_transcript(user_id: str, created_at: str) -> bool:
+    """Delete one of a user's transcripts. Returns True if a record was removed."""
+    response = _table_transcripts.delete_item(
+        Key={"user_id": user_id, "created_at": created_at},
+        ReturnValues="ALL_OLD",
+    )
+    return "Attributes" in response
+
+
+def delete_user_data(user_id: str) -> dict:
+    """Erase a user's transcripts and usage records. Returns the counts deleted."""
+    transcripts = _table_transcripts.query(
+        KeyConditionExpression=Key("user_id").eq(user_id),
+        ProjectionExpression="created_at",
+    ).get("Items", [])
+    with _table_transcripts.batch_writer() as batch:
+        for item in transcripts:
+            batch.delete_item(Key={"user_id": user_id, "created_at": item["created_at"]})
+
+    usage = _table_usage.query(
+        KeyConditionExpression=Key("user_id").eq(user_id),
+        ProjectionExpression="#d",
+        ExpressionAttributeNames={"#d": "date"},
+    ).get("Items", [])
+    with _table_usage.batch_writer() as batch:
+        for item in usage:
+            batch.delete_item(Key={"user_id": user_id, "date": item["date"]})
+
+    return {
+        "transcripts_deleted": len(transcripts),
+        "usage_records_deleted": len(usage),
+    }
 
 
 def set_transcript_tags(user_id: str, created_at: str, tags: dict) -> dict | None:
@@ -311,9 +415,7 @@ def set_transcript_tags(user_id: str, created_at: str, tags: dict) -> dict | Non
 
 def list_members(owner_id: str) -> list[dict]:
     """List team members for an owner."""
-    response = _table_team.query(
-        KeyConditionExpression=Key("owner_id").eq(owner_id)
-    )
+    response = _table_team.query(KeyConditionExpression=Key("owner_id").eq(owner_id))
     return [_member_view(item) for item in response.get("Items", [])]
 
 

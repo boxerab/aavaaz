@@ -1,221 +1,175 @@
-# Keycloak SSO Integration
+# SSO with an OpenID Connect provider
 
-Connect Aavaaz to your company's Keycloak instance so employees can
-authenticate with their existing corporate credentials.
+Aavaaz's SaaS API accepts RS256 bearer tokens from any OpenID Connect provider.
+It fetches the provider's JWKS, caches the keys in memory, and re-fetches when a
+token arrives with a key id it has not seen (so key rotation needs no restart).
 
-## Overview
+Keycloak is used as the worked example below. Cognito, Auth0 and Okta differ
+only in the two URLs.
+
+## Configuration
+
+Three environment variables, read by `aavaaz/api/auth.py`:
+
+| Variable | Value |
+|----------|-------|
+| `AAVAAZ_JWT_JWKS_URL` | the provider's JWKS endpoint |
+| `AAVAAZ_JWT_ISSUER` | expected `iss` claim, must match exactly (trailing slashes count) |
+| `AAVAAZ_JWT_AUDIENCE` | expected `aud` claim, usually the client ID. Leave unset to skip the audience check |
+
+They apply to both SaaS implementations: the self-hosted API
+(`python -m aavaaz.saas_server`) and the Lambda (`aavaaz/serverless/saas_lambda.py`).
+`AAVAAZ_JWT_SECRET` stays the HS256 option for locally issued tokens, and the two
+coexist: the token's `alg` header picks the path.
+
+The Lambda defaults all three to its Cognito pool, derived from
+`AAVAAZ_COGNITO_REGION`, `AAVAAZ_COGNITO_POOL_ID` and `AAVAAZ_COGNITO_CLIENT_ID`,
+so a Cognito deployment sets nothing extra.
+
+## Provider URL shapes
+
+### Keycloak
 
 ```
-Employee              Keycloak              Aavaaz
-   │                     │                      │
-   ├──── Login ─────────►│                      │
-   │◄─── JWT Token ──────┤                      │
-   │                     │                      │
-   ├──── Bearer Token ──────────────────────────►│
-   │                     │                      ├── Validate JWT via JWKS
-   │                     │                      ├── Extract role from claims
-   │◄──── Transcription ────────────────────────┤
+AAVAAZ_JWT_ISSUER=https://keycloak.example.com/realms/<realm>
+AAVAAZ_JWT_JWKS_URL=https://keycloak.example.com/realms/<realm>/protocol/openid-connect/certs
+AAVAAZ_JWT_AUDIENCE=<client-id>
 ```
 
-## Step 1: Create a Keycloak Client
+### AWS Cognito
 
-In the Keycloak Admin Console:
+```
+AAVAAZ_JWT_ISSUER=https://cognito-idp.<region>.amazonaws.com/<pool-id>
+AAVAAZ_JWT_JWKS_URL=https://cognito-idp.<region>.amazonaws.com/<pool-id>/.well-known/jwks.json
+AAVAAZ_JWT_AUDIENCE=<app-client-id>
+```
 
-1. Go to **Clients → Create client**
-2. Fill in:
-   - **Client ID**: `whisperlive`
-   - **Client type**: `OpenID Connect`
-   - **Root URL**: `https://your-whisperlive-host:9090`
-3. Click **Next**, then:
-   - **Client authentication**: Off (public client) — or On for confidential
-   - **Authorization**: Off
-   - **Standard flow**: ✅ (for web UI login)
-   - **Direct access grants**: ✅ (for CLI/API usage)
-4. Set **Valid redirect URIs**: `https://your-whisperlive-host:9090/*`
-5. Click **Save**
+Cognito id tokens carry `token_use: id`. The Lambda rejects access tokens on that
+claim, so send the id token.
 
-## Step 2: Add a Role Mapper
+### Auth0
 
-Aavaaz reads roles from the `role` claim. Configure Keycloak to include it:
+```
+AAVAAZ_JWT_ISSUER=https://<tenant>.auth0.com/
+AAVAAZ_JWT_JWKS_URL=https://<tenant>.auth0.com/.well-known/jwks.json
+AAVAAZ_JWT_AUDIENCE=<api-identifier>
+```
 
-1. Go to **Clients → whisperlive → Client scopes**
-2. Click the `whisperlive-dedicated` scope
-3. **Add mapper → By configuration → User Realm Role**
-4. Configure:
-   - **Name**: `role-mapper`
-   - **Token Claim Name**: `role`
-   - **Claim JSON Type**: `String`
-   - **Add to ID token**: ✅
-   - **Add to access token**: ✅
-   - **Multivalued**: Off (use the highest privilege role)
-5. Click **Save**
+The Auth0 issuer ends in a slash.
 
-### Create Realm Roles
+### Okta
 
-In **Realm roles**, create these roles (matching Aavaaz's role system):
+```
+AAVAAZ_JWT_ISSUER=https://<tenant>.okta.com/oauth2/<authorization-server-id>
+AAVAAZ_JWT_JWKS_URL=https://<tenant>.okta.com/oauth2/<authorization-server-id>/v1/keys
+AAVAAZ_JWT_AUDIENCE=<audience>
+```
 
-| Keycloak Role | Aavaaz Role | Permissions |
-|---------------|-----------------|-------------|
-| `admin` | admin | Full access + user management |
-| `user` | user | Transcribe + read results |
-| `readonly` | readonly | Read results only |
+For the org authorization server the path is `/oauth2/v1/keys` with no server id.
 
-Assign roles to users under **Users → [user] → Role mappings**.
+## Keycloak setup
 
-## Step 3: Start Aavaaz with Keycloak
+### 1. Create a client
+
+In the Admin Console, **Clients → Create client**:
+
+- **Client ID**: `aavaaz`
+- **Client type**: OpenID Connect
+- **Client authentication**: Off for a browser app, On for a service account
+- **Standard flow**: on (browser login)
+- **Direct access grants**: on (CLI and scripts)
+- **Valid redirect URIs**: your dashboard origin plus `/*`
+
+### 2. Add a role mapper
+
+Aavaaz reads roles from the `role` claim.
+
+1. **Clients → aavaaz → Client scopes → aavaaz-dedicated**
+2. **Add mapper → By configuration → User Realm Role**
+3. Name `role-mapper`, Token Claim Name `role`, Claim JSON Type `String`
+4. Add to ID token and access token, Multivalued off
+
+Create the realm roles `admin`, `user` and `readonly` under **Realm roles** and
+assign them under **Users → [user] → Role mappings**.
+
+### 3. Start the API
 
 ```bash
-# Your Keycloak realm URL
-KEYCLOAK_URL="https://keycloak.yourcompany.com/realms/your-realm"
+export KEYCLOAK_REALM_URL="https://keycloak.example.com/realms/aavaaz"
+export AAVAAZ_JWT_JWKS_URL="${KEYCLOAK_REALM_URL}/protocol/openid-connect/certs"
+export AAVAAZ_JWT_ISSUER="${KEYCLOAK_REALM_URL}"
+export AAVAAZ_JWT_AUDIENCE="aavaaz"
 
-python run_server.py \
-  --jwt_jwks_url "${KEYCLOAK_URL}/protocol/openid-connect/certs" \
-  --jwt_issuer "${KEYCLOAK_URL}" \
-  --jwt_audience "whisperlive" \
-  --port 9090
+python -m aavaaz.saas_server
 ```
 
 ### Docker Compose
 
 ```yaml
 services:
-  whisperlive:
-    image: whisperlive:latest
+  aavaaz-saas:
+    image: aavaaz:latest
+    command: python -m aavaaz.saas_server
     environment:
-      - KEYCLOAK_URL=https://keycloak.yourcompany.com/realms/your-realm
-    command: >
-      python run_server.py
-        --jwt_jwks_url "${KEYCLOAK_URL}/protocol/openid-connect/certs"
-        --jwt_issuer "${KEYCLOAK_URL}"
-        --jwt_audience "whisperlive"
-        --port 9090
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - capabilities: [gpu]
+      - AAVAAZ_JWT_JWKS_URL=https://keycloak.example.com/realms/aavaaz/protocol/openid-connect/certs
+      - AAVAAZ_JWT_ISSUER=https://keycloak.example.com/realms/aavaaz
+      - AAVAAZ_JWT_AUDIENCE=aavaaz
+    ports:
+      - "8001:8001"
 ```
 
-## Step 4: Get a Token and Use It
+## Getting a token
 
-### Option A: Direct Access Grant (CLI/scripts)
+### Password grant (CLI and scripts)
 
 ```bash
-# Get a token with username/password
 TOKEN=$(curl -s -X POST \
-  "https://keycloak.yourcompany.com/realms/your-realm/protocol/openid-connect/token" \
-  -d "client_id=whisperlive" \
+  "https://keycloak.example.com/realms/aavaaz/protocol/openid-connect/token" \
+  -d "client_id=aavaaz" \
   -d "grant_type=password" \
   -d "username=alice" \
   -d "password=secret" \
   | jq -r '.access_token')
 
-# Use it
-curl -X POST http://localhost:9090/v1/audio/transcriptions \
-  -H "Authorization: Bearer $TOKEN" \
-  -F file=@meeting.wav -F model=small
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8001/v1/saas/usage
 ```
 
-### Option B: Browser-based login (web UI)
+### Client credentials (machine to machine)
 
-If you're using the Aavaaz web UI, add a Keycloak JS adapter to handle
-the login flow. Add this to the web UI's `index.html`:
-
-```html
-<script src="https://keycloak.yourcompany.com/js/keycloak.js"></script>
-<script>
-const keycloak = new Keycloak({
-    url: 'https://keycloak.yourcompany.com',
-    realm: 'your-realm',
-    clientId: 'whisperlive'
-});
-
-keycloak.init({ onLoad: 'login-required' }).then(authenticated => {
-    if (authenticated) {
-        // Use keycloak.token as the Bearer token for API calls
-        window.WHISPER_TOKEN = keycloak.token;
-
-        // Auto-refresh token before expiry
-        setInterval(() => {
-            keycloak.updateToken(30).catch(() => keycloak.login());
-        }, 60000);
-    }
-});
-</script>
-```
-
-### Option C: Service account (machine-to-machine)
-
-For automated pipelines, enable **Service accounts roles** on the client:
-
-1. **Clients → whisperlive → Settings → Client authentication**: On
-2. **Service accounts roles**: ✅
-3. Assign the `user` role under **Service account roles**
+Enable **Client authentication** and **Service accounts roles** on the client,
+then:
 
 ```bash
 TOKEN=$(curl -s -X POST \
-  "https://keycloak.yourcompany.com/realms/your-realm/protocol/openid-connect/token" \
-  -d "client_id=whisperlive" \
-  -d "client_secret=YOUR_CLIENT_SECRET" \
+  "https://keycloak.example.com/realms/aavaaz/protocol/openid-connect/token" \
+  -d "client_id=aavaaz" \
+  -d "client_secret=$CLIENT_SECRET" \
   -d "grant_type=client_credentials" \
   | jq -r '.access_token')
 ```
 
-## Combined Mode: Keycloak + Local API Keys
+### Browser login
 
-For a hybrid setup where most users log in via Keycloak but some service
-accounts use local API keys:
-
-```bash
-python run_server.py \
-  --user_store users.json \
-  --jwt_jwks_url "https://keycloak.yourcompany.com/realms/your-realm/protocol/openid-connect/certs" \
-  --jwt_issuer "https://keycloak.yourcompany.com/realms/your-realm" \
-  --jwt_audience "whisperlive"
-```
-
-Auth order: local API key → Keycloak JWT → fallback `--api_key`.
-
-## Verify It Works
-
-```bash
-# 1. Get a token
-TOKEN=$(curl -s -X POST \
-  "https://keycloak.yourcompany.com/realms/your-realm/protocol/openid-connect/token" \
-  -d "client_id=whisperlive" \
-  -d "grant_type=password" \
-  -d "username=testuser" \
-  -d "password=testpass" \
-  | jq -r '.access_token')
-
-# 2. Decode it (inspect claims)
-echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq .
-
-# 3. Hit the health endpoint (no auth needed)
-curl http://localhost:9090/health
-
-# 4. Transcribe (auth required)
-curl -X POST http://localhost:9090/v1/audio/transcriptions \
-  -H "Authorization: Bearer $TOKEN" \
-  -F file=@test.wav -F model=small
-```
+The dashboard obtains the token through its own provider SDK (Amplify for
+Cognito, keycloak-js for Keycloak) and sends it as `Authorization: Bearer`.
 
 ## Troubleshooting
 
+The Lambda puts the underlying reason in the 401 body. The self-hosted server
+answers a plain `Invalid token`, so match on the cause instead.
+
 | Problem | Fix |
 |---------|-----|
-| `401 Invalid or missing API key` | Check token is valid: decode and verify `exp`, `iss`, `aud` claims |
-| `JWT token expired` | Tokens are short-lived (default 5min). Refresh with `keycloak.updateToken()` or re-authenticate |
-| `Invalid JWT token` | Verify `--jwt_issuer` matches the `iss` claim exactly (trailing slashes matter) |
-| Role not recognized | Ensure the role mapper outputs `admin`, `user`, or `readonly` as the `role` claim |
-| JWKS connection refused | Ensure Aavaaz can reach the Keycloak URL. In Docker, use the container network hostname |
-| Self-signed Keycloak cert | Set `PYTHONHTTPSVERIFY=0` or mount the CA cert into the container |
+| `401 Invalid token: Invalid audience` | `AAVAAZ_JWT_AUDIENCE` does not match the token's `aud`. Decode the token: `echo "$TOKEN" \| cut -d. -f2 \| base64 -d \| jq .` |
+| `401 Invalid token: Invalid issuer` | `AAVAAZ_JWT_ISSUER` must equal `iss` character for character, trailing slash included |
+| `401 Invalid token: No JWKS key for kid` | The token was signed by a key the provider does not publish, or `AAVAAZ_JWT_JWKS_URL` points at another realm |
+| `401 Invalid token: RS256 token received but AAVAAZ_JWT_JWKS_URL is not set` | The three variables are missing from the process environment |
+| `401 Wrong token type` | Cognito access token sent instead of the id token |
+| `URLError` on the first request | The API cannot reach the JWKS URL. Inside Docker use the container network hostname |
 
-## Security Notes
+## Security notes
 
-- Keycloak access tokens are **short-lived** (5 min default). Configure token
-  lifespan in **Realm settings → Tokens**.
-- Use **HTTPS** for both Keycloak and Aavaaz in production.
-- For the web UI, use **PKCE** (Proof Key for Code Exchange) — Keycloak
-  supports it out of the box with public clients.
-- Rotate the client secret periodically if using a confidential client.
+- Provider access tokens are short-lived (5 minutes on Keycloak by default).
+  Refresh them client-side rather than lengthening the lifespan.
+- Use HTTPS for both the provider and Aavaaz.
+- Use PKCE for browser clients.

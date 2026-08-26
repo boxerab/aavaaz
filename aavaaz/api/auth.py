@@ -1,10 +1,17 @@
 """
 JWT-based authentication and API key access control for Aavaaz REST API.
+
+Two token flavours are accepted: HS256 signed with ``AAVAAZ_JWT_SECRET``, and
+RS256 verified against the JWKS of an identity provider (Cognito, Keycloak,
+Auth0, Okta) configured through ``AAVAAZ_JWT_JWKS_URL`` / ``AAVAAZ_JWT_ISSUER``
+/ ``AAVAAZ_JWT_AUDIENCE``.
 """
 
+import json
 import logging
 import os
 import time
+import urllib.request
 
 import jwt
 from fastapi import HTTPException, Request, Security
@@ -17,7 +24,14 @@ _security = HTTPBearer(auto_error=False)
 # Default secret — MUST be overridden via AAVAAZ_JWT_SECRET env var
 _JWT_SECRET = os.environ.get("AAVAAZ_JWT_SECRET", "")
 _JWT_ALGORITHM = "HS256"
+_JWKS_ALGORITHM = "RS256"
+_JWKS_FETCH_TIMEOUT_SECONDS = 5
 _API_KEYS: set[str] = set()
+
+_JWKS_URL = os.environ.get("AAVAAZ_JWT_JWKS_URL", "")
+_JWT_ISSUER = os.environ.get("AAVAAZ_JWT_ISSUER", "")
+_JWT_AUDIENCE = os.environ.get("AAVAAZ_JWT_AUDIENCE", "")
+_jwks_keys: dict[str, jwt.PyJWK] = {}
 
 
 def configure_auth(jwt_secret: str, api_keys: list[str] | None = None):
@@ -26,6 +40,46 @@ def configure_auth(jwt_secret: str, api_keys: list[str] | None = None):
     _JWT_SECRET = jwt_secret
     if api_keys:
         _API_KEYS = set(api_keys)
+
+
+def configure_jwks(jwks_url: str, issuer: str = "", audience: str = ""):
+    """Point RS256 verification at an identity provider's JWKS endpoint."""
+    global _JWKS_URL, _JWT_ISSUER, _JWT_AUDIENCE
+    _JWKS_URL = jwks_url
+    _JWT_ISSUER = issuer
+    _JWT_AUDIENCE = audience
+    _jwks_keys.clear()
+
+
+def _fetch_jwks() -> dict:
+    with urllib.request.urlopen(_JWKS_URL, timeout=_JWKS_FETCH_TIMEOUT_SECONDS) as response:
+        return json.loads(response.read())
+
+
+def _signing_key(kid: str) -> jwt.PyJWK:
+    """Return the JWKS key for a kid, re-fetching the key set if it is unknown."""
+    if kid not in _jwks_keys:
+        _jwks_keys.clear()
+        for key in jwt.PyJWKSet.from_dict(_fetch_jwks()).keys:
+            _jwks_keys[key.key_id] = key
+    key = _jwks_keys.get(kid)
+    if key is None:
+        raise jwt.InvalidTokenError(f"No JWKS key for kid '{kid}'")
+    return key
+
+
+def _verify_jwks_token(token: str) -> dict:
+    if not _JWKS_URL:
+        raise jwt.InvalidTokenError("RS256 token received but AAVAAZ_JWT_JWKS_URL is not set")
+    key = _signing_key(jwt.get_unverified_header(token).get("kid", ""))
+    return jwt.decode(
+        token,
+        key.key,
+        algorithms=[_JWKS_ALGORITHM],
+        issuer=_JWT_ISSUER or None,
+        audience=_JWT_AUDIENCE or None,
+        options={"verify_aud": bool(_JWT_AUDIENCE)},
+    )
 
 
 def create_token(subject: str, expires_in: int = 3600, **claims) -> str:
@@ -42,7 +96,9 @@ def create_token(subject: str, expires_in: int = 3600, **claims) -> str:
 
 
 def verify_token(token: str) -> dict:
-    """Verify and decode a JWT token."""
+    """Verify and decode a JWT token, by JWKS for RS256 and by secret otherwise."""
+    if jwt.get_unverified_header(token).get("alg") == _JWKS_ALGORITHM:
+        return _verify_jwks_token(token)
     if not _JWT_SECRET:
         raise ValueError("JWT secret not configured")
     return jwt.decode(token, _JWT_SECRET, algorithms=[_JWT_ALGORITHM])
