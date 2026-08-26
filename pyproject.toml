@@ -63,6 +63,7 @@ dev = [
     "numpy",
     "ruff",
     "moto[dynamodb]",
+    "av",
 ]
 # Hosted SaaS API (Lambda handler + Stripe billing)
 saas = [

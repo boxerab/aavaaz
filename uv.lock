@@ -8,7 +8,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-08-19T02:43:31.343711084Z"
+exclude-newer = "2026-08-19T03:19:11.750352667Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -26,6 +26,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "av" },
     { name = "httpx" },
     { name = "moto", extra = ["dynamodb"] },
     { name = "numpy" },
@@ -60,6 +61,7 @@ whisper-cpu = [
 
 [package.metadata]
 requires-dist = [
+    { name = "av", marker = "extra == 'dev'" },
     { name = "boto3" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", marker = "extra == 'dev'" },
