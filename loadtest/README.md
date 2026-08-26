@@ -22,7 +22,7 @@ Server, one shared model for all clients:
 aavaaz serve --model small --batch-inference --max-clients 500 --max-connection-time 900 --metrics-port 9100
 ```
 
-Clients, adding 10 every 30 s up to 200, stopping early once interval p95 lag passes 3 s:
+Clients, adding 10 every 30 s up to 200, stopping early once interval p95 lag passes 3 s for two intervals in a row:
 
 ```
 uv run loadtest/stream_clients.py --clients 200 --ramp-step 10 --ramp-interval 30 --hold 300 --stop-lag 3

@@ -24,6 +24,7 @@ CHUNK_SAMPLES = 4096
 CHUNK_SECONDS = CHUNK_SAMPLES / SAMPLE_RATE
 READY_TIMEOUT_SECONDS = 60
 DEFAULT_TRACKS = pathlib.Path.home() / ".cache/aavaaz-loadtest/tracks"
+STOP_LAG_INTERVALS = 2
 
 MESSAGE_FIELDS = ["client", "session", "active", "t", "audio_end", "lag", "segments", "completed"]
 EVENT_FIELDS = ["client", "session", "active", "t", "event", "connect_ms", "detail"]
@@ -44,6 +45,7 @@ class Run:
         self.messages.writeheader()
         self.events.writeheader()
         self.interval_lags = []
+        self.intervals_over_stop_lag = 0
         self.interval_events = {}
         self.stop = asyncio.Event()
 
@@ -197,8 +199,10 @@ class Run:
                 f"lag p50={p50:.2f}s p95={p95:.2f}s {events}",
                 flush=True,
             )
-            if self.args.stop_lag and p95 > self.args.stop_lag:
-                print(f"p95 lag {p95:.2f}s over {self.args.stop_lag}s, stopping", flush=True)
+            over = self.args.stop_lag and p95 > self.args.stop_lag
+            self.intervals_over_stop_lag = self.intervals_over_stop_lag + 1 if over else 0
+            if self.intervals_over_stop_lag >= STOP_LAG_INTERVALS:
+                print(f"p95 lag over {self.args.stop_lag}s for {STOP_LAG_INTERVALS} intervals, stopping", flush=True)
                 self.stop.set()
         else:
             print(f"t={self.now():6.0f}s active={self.active:5d} msgs=0 {events}", flush=True)
@@ -222,7 +226,7 @@ def parse_args(argv=None):
         "--stop-lag",
         type=float,
         default=0,
-        help="stop when interval p95 lag exceeds this (0=never)",
+        help=f"stop when interval p95 lag exceeds this for {STOP_LAG_INTERVALS} intervals in a row (0=never)",
     )
     parser.add_argument("--model", default="small", help="model name sent in the handshake")
     parser.add_argument("--tracks", type=pathlib.Path, default=DEFAULT_TRACKS)
