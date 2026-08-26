@@ -31,6 +31,18 @@ uv run loadtest/report.py
 
 `report.py` prints lag percentiles per client count and writes `loadtest/results/lag_vs_clients.png`.
 
+Server side counters, polled every 10 s into `loadtest/results/metrics.csv`:
+
+```
+uv run loadtest/scrape_metrics.py --targets 10.0.10.5:9100,10.0.10.6:9100
+```
+
+GPU load on a node: `nvidia-smi dmon -s u -d 5 > dmon.log`.
+
+## AWS
+
+`deploy/terraform` builds the servers and, with `loadgen_count`, the load generator hosts. `setup_loadgen.sh` prepares one host (repo, venv, tracks, file limits) and is what the instance runs on first boot.
+
 One process handles about 2,000 clients. For more, run several with different `--out` directories.
 
 Notes:

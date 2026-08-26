@@ -36,6 +36,10 @@ aws ecs update-service --cluster aavaaz --service aavaaz --force-new-deployment
 | `instance_gpu` | `g5.xlarge` | GPU instance type |
 | `desired_count` | `1` | Number of tasks |
 | `api_key` | `""` | API key (empty = no auth) |
+| `max_clients` | `100` | Concurrent WebSocket clients per task |
+| `max_connection_time` | `900` | Seconds a client may stay connected |
+| `loadgen_count` | `0` | Load generator instances for `loadtest/` |
+| `loadgen_instance_type` | `c6i.4xlarge` | Load generator instance type |
 
 Example with custom settings:
 ```bash
@@ -59,6 +63,23 @@ Internet → ALB (ports 8000, 9090) → ECS Service → GPU EC2 Instances (g5.xl
 - **Auto Scaling Group** manages GPU instances
 - **ECR** stores the Aavaaz Docker image
 - **CloudWatch** captures logs (14-day retention)
+
+## Load test
+
+`loadgen_count=1` covers about 2,500 streaming clients per instance. Each instance sets itself up from `loadtest/setup_loadgen.sh` on first boot (repo, venv, LibriSpeech tracks, file limits) and has no SSH key, so use SSM:
+
+```bash
+aws ssm start-session --target $(terraform output -json loadgen_instance_ids | jq -r '.[0]')
+```
+
+Task private IPs for `loadtest/scrape_metrics.py`:
+
+```bash
+aws ecs list-tasks --cluster aavaaz --service-name aavaaz --query 'taskArns' --output text \
+  | xargs aws ecs describe-tasks --cluster aavaaz --tasks \
+  --query 'tasks[].attachments[].details[?name==`privateIPv4Address`].value' --output text \
+  | tr '\t' '\n' | sed 's/$/:9100/' | paste -sd,
+```
 
 ## Teardown
 

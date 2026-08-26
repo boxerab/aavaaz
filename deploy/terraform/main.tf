@@ -59,6 +59,34 @@ variable "api_key" {
   sensitive   = true
 }
 
+variable "max_clients" {
+  description = "Concurrent WebSocket clients each task accepts"
+  type        = number
+  default     = 100
+}
+
+variable "max_connection_time" {
+  description = "Seconds a WebSocket client may stay connected"
+  type        = number
+  default     = 900
+}
+
+variable "loadgen_count" {
+  description = "Load generator instances for loadtest/ (0 = none)"
+  type        = number
+  default     = 0
+}
+
+variable "loadgen_instance_type" {
+  description = "Instance type for load generators"
+  type        = string
+  default     = "c6i.4xlarge"
+}
+
+locals {
+  metrics_port = 9100
+}
+
 # ---------- Networking ----------
 
 module "vpc" {
@@ -107,8 +135,8 @@ resource "aws_iam_role" "ecs_task_execution" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
       Principal = { Service = "ecs-tasks.amazonaws.com" }
     }]
   })
@@ -125,8 +153,8 @@ resource "aws_iam_role" "ecs_task" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
       Principal = { Service = "ecs-tasks.amazonaws.com" }
     }]
   })
@@ -178,6 +206,13 @@ resource "aws_security_group" "ecs" {
     security_groups = [aws_security_group.alb.id]
   }
 
+  ingress {
+    from_port       = 9090
+    to_port         = local.metrics_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.loadgen.id]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -194,6 +229,7 @@ resource "aws_lb" "aavaaz" {
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
   subnets            = module.vpc.public_subnets
+  idle_timeout       = 3600
 }
 
 resource "aws_lb_target_group" "rest" {
@@ -203,11 +239,13 @@ resource "aws_lb_target_group" "rest" {
   vpc_id      = module.vpc.vpc_id
   target_type = "ip"
 
+  # the rest app has no health route
   health_check {
-    path                = "/health"
+    path                = "/"
     healthy_threshold   = 2
     unhealthy_threshold = 3
     interval            = 30
+    matcher             = "200-499"
   }
 }
 
@@ -269,10 +307,15 @@ resource "aws_ecs_task_definition" "aavaaz" {
     portMappings = [
       { containerPort = 8000, protocol = "tcp" },
       { containerPort = 9090, protocol = "tcp" },
+      { containerPort = local.metrics_port, protocol = "tcp" },
     ]
 
     command = compact([
       "--model", var.model,
+      "--batch-inference",
+      "--max-clients", tostring(var.max_clients),
+      "--max-connection-time", tostring(var.max_connection_time),
+      "--metrics-port", tostring(local.metrics_port),
       var.api_key != "" ? "--api-key" : "",
       var.api_key != "" ? var.api_key : "",
     ])
@@ -377,10 +420,10 @@ resource "aws_launch_template" "gpu" {
 }
 
 resource "aws_autoscaling_group" "gpu" {
-  name_prefix      = "aavaaz-gpu-"
-  desired_capacity = var.desired_count
-  max_size         = var.desired_count * 2
-  min_size         = 0
+  name_prefix         = "aavaaz-gpu-"
+  desired_capacity    = var.desired_count
+  max_size            = var.desired_count * 2
+  min_size            = 0
   vpc_zone_identifier = module.vpc.private_subnets
 
   launch_template {
@@ -401,8 +444,8 @@ resource "aws_iam_role" "ecs_instance" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
       Principal = { Service = "ec2.amazonaws.com" }
     }]
   })
@@ -419,6 +462,79 @@ resource "aws_iam_instance_profile" "ecs_instance" {
 }
 
 # ---------- Outputs ----------
+
+# ---------- Load generators ----------
+
+resource "aws_security_group" "loadgen" {
+  name_prefix = "aavaaz-loadgen-"
+  vpc_id      = module.vpc.vpc_id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_iam_role" "loadgen" {
+  name = "aavaaz-loadgen"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "loadgen_ssm" {
+  role       = aws_iam_role.loadgen.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "loadgen" {
+  name = "aavaaz-loadgen"
+  role = aws_iam_role.loadgen.name
+}
+
+data "aws_ami" "al2023" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-2023*-x86_64"]
+  }
+}
+
+resource "aws_instance" "loadgen" {
+  count                       = var.loadgen_count
+  ami                         = data.aws_ami.al2023.id
+  instance_type               = var.loadgen_instance_type
+  subnet_id                   = module.vpc.public_subnets[count.index % length(module.vpc.public_subnets)]
+  vpc_security_group_ids      = [aws_security_group.loadgen.id]
+  iam_instance_profile        = aws_iam_instance_profile.loadgen.name
+  associate_public_ip_address = true
+
+  root_block_device {
+    volume_size = 40
+  }
+
+  user_data = <<-EOF
+    #!/bin/bash
+    curl -sSL https://raw.githubusercontent.com/boxerab/aavaaz/master/loadtest/setup_loadgen.sh | sudo -u ec2-user bash
+  EOF
+
+  tags = { Name = "aavaaz-loadgen-${count.index}" }
+}
+
+output "loadgen_instance_ids" {
+  description = "Load generator instances, reach them with: aws ssm start-session --target <id>"
+  value       = aws_instance.loadgen[*].id
+}
 
 output "rest_endpoint" {
   description = "REST API endpoint"

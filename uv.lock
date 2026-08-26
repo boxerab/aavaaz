@@ -8,7 +8,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-08-17T14:53:00.114956186Z"
+exclude-newer = "2026-08-19T01:34:52.907047585Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -33,6 +33,12 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "ruff" },
 ]
+loadtest = [
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "soundfile" },
+    { name = "websockets" },
+]
 saas = [
     { name = "mangum" },
     { name = "stripe" },
@@ -55,9 +61,11 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'dev'" },
     { name = "httpx", marker = "extra == 'sdk'" },
     { name = "mangum", marker = "extra == 'saas'", specifier = ">=0.19" },
+    { name = "matplotlib", marker = "extra == 'loadtest'" },
     { name = "moto", extras = ["dynamodb"], marker = "extra == 'dev'" },
     { name = "noisereduce", marker = "extra == 'whisper'" },
     { name = "numpy", marker = "extra == 'dev'" },
+    { name = "numpy", marker = "extra == 'loadtest'" },
     { name = "nvidia-cublas-cu12", marker = "sys_platform == 'linux' and extra == 'whisper'" },
     { name = "nvidia-cudnn-cu12", marker = "sys_platform == 'linux' and extra == 'whisper'" },
     { name = "prometheus-client" },
@@ -66,12 +74,14 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'" },
     { name = "python-multipart" },
     { name = "ruff", marker = "extra == 'dev'" },
+    { name = "soundfile", marker = "extra == 'loadtest'" },
     { name = "stripe", marker = "extra == 'saas'", specifier = ">=8" },
     { name = "uvicorn", specifier = ">=0.30" },
+    { name = "websockets", marker = "extra == 'loadtest'", specifier = ">=13" },
     { name = "websockets", marker = "extra == 'sdk'" },
     { name = "whisper-live", marker = "extra == 'whisper'", specifier = ">=0.9.0" },
 ]
-provides-extras = ["whisper", "dev", "saas", "sdk"]
+provides-extras = ["whisper", "loadtest", "dev", "saas", "sdk"]
 
 [[package]]
 name = "annotated-doc"

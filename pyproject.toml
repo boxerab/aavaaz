@@ -46,6 +46,12 @@ whisper = [
     # optional audio noise-reduction preprocessing; code skips gracefully if absent
     "noisereduce",
 ]
+loadtest = [
+    "websockets>=13",
+    "numpy",
+    "soundfile",
+    "matplotlib",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio",
