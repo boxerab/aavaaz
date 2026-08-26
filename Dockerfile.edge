@@ -1,0 +1,23 @@
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg git build-essential portaudio19-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY pyproject.toml README.md LICENSE ./
+COPY aavaaz/ aavaaz/
+
+# whisper-live pins cuda torch wheels
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu torch
+
+# pypi whisper-live lacks the transcript_finalizer hook aavaaz serve passes
+ARG WHISPER_LIVE_SOURCE=git+https://github.com/boxerab/WhisperLive@scaling-fixes
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu "$WHISPER_LIVE_SOURCE" && \
+    pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu .[whisper-cpu] && \
+    pip uninstall -y nvidia-cublas-cu12 nvidia-cudnn-cu12 nvidia-cuda-nvrtc-cu12 triton
+
+EXPOSE 9090 8000 9100
+
+ENTRYPOINT ["aavaaz", "serve"]
+CMD ["--model", "tiny"]

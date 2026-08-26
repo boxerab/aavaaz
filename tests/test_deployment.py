@@ -4,11 +4,41 @@ Tests for deployment targets (Test Matrix §18).
 Validates Docker builds, Helm charts, Modal configs, and Lambda handler.
 """
 
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).parent.parent
+CHART_DIR = PROJECT_ROOT / "deploy" / "helm" / "aavaaz"
+CPU_DOCKERFILES = ["Dockerfile.cpu", "Dockerfile.edge", "Dockerfile.jetson"]
+
+
+CPU_TORCH_INDEX = "--extra-index-url https://download.pytorch.org/whl/cpu "
+
+
+def pip_install_lines(dockerfile_name):
+    content = (PROJECT_ROOT / dockerfile_name).read_text()
+    return [
+        line.strip().replace(CPU_TORCH_INDEX, "").removesuffix(" && \\")
+        for line in content.splitlines()
+        if "pip install" in line and ("WHISPER_LIVE_SOURCE" in line or "[whisper" in line)
+    ]
+
+
+def helm_template(*extra_args):
+    helm = shutil.which("helm")
+    if helm is None:
+        pytest.skip("helm not installed")
+    return subprocess.run(
+        [helm, "template", "aavaaz", str(CHART_DIR), *extra_args],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
 
 
 class TestDockerfiles:
@@ -43,6 +73,38 @@ class TestDockerfiles:
         assert "COPY" in content
 
 
+class TestCpuDockerfiles:
+    """CPU, edge and Jetson images share one install recipe."""
+
+    @pytest.mark.parametrize("name", CPU_DOCKERFILES)
+    def test_exists(self, name):
+        assert (PROJECT_ROOT / name).exists()
+
+    @pytest.mark.parametrize("name", CPU_DOCKERFILES[1:])
+    def test_install_lines_match_cpu(self, name):
+        assert pip_install_lines(name) == pip_install_lines("Dockerfile.cpu")
+
+    def test_cpu_installs_torch_from_cpu_index(self):
+        content = (PROJECT_ROOT / "Dockerfile.cpu").read_text()
+        assert "https://download.pytorch.org/whl/cpu" in content
+
+    def test_default_models(self):
+        assert '"tiny"' in (PROJECT_ROOT / "Dockerfile.edge").read_text()
+        assert '"small"' in (PROJECT_ROOT / "Dockerfile.cpu").read_text()
+        assert '"small"' in (PROJECT_ROOT / "Dockerfile.jetson").read_text()
+
+
+class TestImagesWorkflow:
+    """Release workflow builds the GPU and CPU images."""
+
+    def test_references_both_dockerfiles(self):
+        content = (PROJECT_ROOT / ".github" / "workflows" / "images.yml").read_text()
+        assert "dockerfile: Dockerfile\n" in content
+        assert "dockerfile: Dockerfile.cpu" in content
+        assert "aavaaz-gpu" in content
+        assert "aavaaz-cpu" in content
+
+
 class TestHelmChart:
     """18.5 - Helm chart structure validation."""
 
@@ -62,6 +124,14 @@ class TestHelmChart:
         templates = PROJECT_ROOT / "deploy" / "helm" / "aavaaz" / "templates"
         assert templates.is_dir()
         assert len(list(templates.iterdir())) > 0
+
+    def test_gpu_enabled_requests_a_gpu(self):
+        assert "nvidia.com/gpu" in helm_template()
+
+    def test_gpu_disabled_omits_gpu_limit(self):
+        rendered = helm_template("--set", "gpu.enabled=false")
+        assert "nvidia.com/gpu" not in rendered
+        assert "faster_whisper" in rendered
 
 
 class TestModalConfigs:
@@ -136,9 +206,7 @@ class TestLambdaHandler:
 
         from aavaaz.serverless import lambda_handler
 
-        assert hasattr(lambda_handler, "handler") or hasattr(
-            lambda_handler, "lambda_handler"
-        )
+        assert hasattr(lambda_handler, "handler") or hasattr(lambda_handler, "lambda_handler")
 
     def test_lambda_env_vars_documented(self):
         """Lambda handler should document expected env vars."""

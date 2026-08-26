@@ -8,7 +8,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-08-19T01:34:52.907047585Z"
+exclude-newer = "2026-08-19T02:43:31.343711084Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -53,6 +53,10 @@ whisper = [
     { name = "nvidia-cudnn-cu12", marker = "sys_platform == 'linux'" },
     { name = "whisper-live" },
 ]
+whisper-cpu = [
+    { name = "noisereduce" },
+    { name = "whisper-live" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -64,6 +68,7 @@ requires-dist = [
     { name = "matplotlib", marker = "extra == 'loadtest'" },
     { name = "moto", extras = ["dynamodb"], marker = "extra == 'dev'" },
     { name = "noisereduce", marker = "extra == 'whisper'" },
+    { name = "noisereduce", marker = "extra == 'whisper-cpu'" },
     { name = "numpy", marker = "extra == 'dev'" },
     { name = "numpy", marker = "extra == 'loadtest'" },
     { name = "nvidia-cublas-cu12", marker = "sys_platform == 'linux' and extra == 'whisper'" },
@@ -80,8 +85,9 @@ requires-dist = [
     { name = "websockets", marker = "extra == 'loadtest'", specifier = ">=13" },
     { name = "websockets", marker = "extra == 'sdk'" },
     { name = "whisper-live", marker = "extra == 'whisper'", specifier = ">=0.9.0" },
+    { name = "whisper-live", marker = "extra == 'whisper-cpu'", specifier = ">=0.9.0" },
 ]
-provides-extras = ["whisper", "loadtest", "dev", "saas", "sdk"]
+provides-extras = ["whisper", "whisper-cpu", "loadtest", "dev", "saas", "sdk"]
 
 [[package]]
 name = "annotated-doc"

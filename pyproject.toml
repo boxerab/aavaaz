@@ -46,6 +46,10 @@ whisper = [
     # optional audio noise-reduction preprocessing; code skips gracefully if absent
     "noisereduce",
 ]
+whisper-cpu = [
+    "whisper-live>=0.9.0",
+    "noisereduce",
+]
 loadtest = [
     "websockets>=13",
     "numpy",

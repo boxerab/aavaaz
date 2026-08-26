@@ -31,6 +31,10 @@ spec:
           args:
             - "--model"
             - "{{ .Values.model }}"
+            {{- if not .Values.gpu.enabled }}
+            - "--backend"
+            - "faster_whisper"
+            {{- end }}
             {{- if .Values.apiKey }}
             - "--api-key"
             - "{{ .Values.apiKey }}"
@@ -54,4 +58,11 @@ spec:
               containerPort: 9090
               protocol: TCP
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            requests:
+              {{- toYaml .Values.resources.requests | nindent 14 }}
+            limits:
+              {{- $limits := deepCopy .Values.resources.limits }}
+              {{- if .Values.gpu.enabled }}
+              {{- $limits = merge $limits (dict "nvidia.com/gpu" 1) }}
+              {{- end }}
+              {{- toYaml $limits | nindent 14 }}

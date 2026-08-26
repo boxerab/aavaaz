@@ -97,13 +97,11 @@ location /v1/ {
 ## Docker Compose (Multi-Node)
 
 ```yaml
-version: "3.8"
-
 services:
-  whisperlive-1:
+  aavaaz-1:
     build:
       context: .
-      dockerfile: docker/Dockerfile.gpu
+      dockerfile: Dockerfile
     deploy:
       resources:
         reservations:
@@ -114,16 +112,16 @@ services:
     ports:
       - "9091:9090"
     command: >
-      python run_server.py
-        --port 9090
-        --backend faster_whisper
-        --faster_whisper_custom_model_path large-v3
-        --metrics_port 9100
+      --port 9090
+      --model large-v3
+      --batch-inference
+      --max-clients 8
+      --metrics-port 9100
 
-  whisperlive-2:
+  aavaaz-2:
     build:
       context: .
-      dockerfile: docker/Dockerfile.gpu
+      dockerfile: Dockerfile
     deploy:
       resources:
         reservations:
@@ -134,11 +132,11 @@ services:
     ports:
       - "9092:9090"
     command: >
-      python run_server.py
-        --port 9090
-        --backend faster_whisper
-        --faster_whisper_custom_model_path large-v3
-        --metrics_port 9100
+      --port 9090
+      --model large-v3
+      --batch-inference
+      --max-clients 8
+      --metrics-port 9100
 
   nginx:
     image: nginx:alpine
@@ -147,8 +145,8 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
     depends_on:
-      - whisperlive-1
-      - whisperlive-2
+      - aavaaz-1
+      - aavaaz-2
 ```
 
 ## Kubernetes Deployment
@@ -182,13 +180,14 @@ spec:
             - containerPort: 9100
               name: metrics
           args:
-            - "python"
-            - "run_server.py"
             - "--port"
             - "9090"
-            - "--backend"
-            - "faster_whisper"
-            - "--metrics_port"
+            - "--model"
+            - "large-v3"
+            - "--batch-inference"
+            - "--max-clients"
+            - "8"
+            - "--metrics-port"
             - "9100"
           resources:
             limits:
@@ -221,7 +220,7 @@ spec:
 
 ## Prometheus Monitoring
 
-With `--metrics_port 9100`, each node exposes metrics at `http://<node>:9100/metrics`.
+With `--metrics-port 9100`, each node exposes metrics at `http://<node>:9100/metrics`.
 
 ### Prometheus scrape config
 
@@ -239,7 +238,7 @@ scrape_configs:
 
 | Metric | Description | Alert Threshold |
 |--------|-------------|-----------------|
-| `whisperlive_connections_active` | Current WebSocket sessions per node | > 80% of `--max_clients` |
+| `whisperlive_connections_active` | Current WebSocket sessions per node | > 80% of `--max-clients` |
 | `whisperlive_transcription_latency_seconds` | Per-chunk transcription time | p99 > 2s |
 | `whisperlive_audio_processed_seconds_total` | Total audio throughput | Rate drop > 50% |
 | `whisperlive_errors_total` | Error count by type | Rate > 5/min |
@@ -291,16 +290,14 @@ curl http://node1:8080/v1/audio/transcriptions \
 
 ## Best Practices
 
-1. **Use `--single_model`** — Shares one model instance across all connections per node. Reduces VRAM usage significantly.
+1. **Enable batch inference** — Use `--batch-inference` with `--batch-max-size 8` to batch requests and improve GPU utilization.
 
-2. **Enable batch inference** — Use `--batch_inference` with `--batch_max_size 8` to batch requests and improve GPU utilization.
+2. **Set `--max-clients`** — Limit concurrent connections per node to prevent OOM. Match to your GPU capacity.
 
-3. **Set `--max_clients`** — Limit concurrent connections per node to prevent OOM. Match to your GPU capacity.
+3. **Monitor metrics** — Use Prometheus + Grafana to track saturation and latency.
 
-4. **Monitor metrics** — Use Prometheus + Grafana to track saturation and latency.
+4. **Use WSS (TLS)** — Terminate TLS at the load balancer, not at each node.
 
-5. **Use WSS (TLS)** — Terminate TLS at the load balancer, not at each node.
+5. **API key auth** — Use `--api-key` to protect both REST and WebSocket endpoints.
 
-6. **API key auth** — Use `--api_key` to protect both REST and WebSocket endpoints.
-
-7. **Rate limiting** — Use `--rate_limit_rpm` to prevent REST API abuse.
+6. **Rate limiting** — Use `--rate-limit-rpm` to prevent REST API abuse.

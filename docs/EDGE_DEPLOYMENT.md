@@ -2,30 +2,32 @@
 
 Aavaaz can run on edge devices including Raspberry Pi 4/5, NVIDIA Jetson Nano/Xavier/Orin, and other ARM64 platforms.
 
+Both edge images are built on the device or on an arm64 machine. CI publishes only the x86 GPU and CPU images, arm64 emulation on a runner is too slow to be worth it.
+
 ## Quick Start
 
 ### Raspberry Pi / Generic ARM64
 
 ```bash
-# Build the edge-optimized image
-docker build -f docker/Dockerfile.edge -t whisperlive-edge .
+# Build the edge image (arm64, CPU-only torch)
+docker build --platform=linux/arm64 -f Dockerfile.edge -t aavaaz-edge .
 
-# Run with defaults (tiny model, REST enabled, 2 max clients)
-docker run -p 9090:9090 -p 8000:8000 whisperlive-edge
+# Run with defaults (tiny model, REST on 8000, WebSocket on 9090)
+docker run -p 9090:9090 -p 8000:8000 aavaaz-edge
 
-# Run with noise reduction
-docker run -p 9090:9090 -p 8000:8000 whisperlive-edge \
-  --enable_rest --noise_reduction near_field
+# Limit concurrent clients on a small device
+docker run -p 9090:9090 -p 8000:8000 aavaaz-edge \
+  --model tiny --max-clients 2
 ```
 
 ### NVIDIA Jetson (with CUDA)
 
 ```bash
-# Build the Jetson-specific image (uses L4T base with CUDA)
-docker build -f docker/Dockerfile.jetson -t whisperlive-jetson .
+# Build on the Jetson itself (L4T base ships a CUDA torch)
+docker build -f Dockerfile.jetson -t aavaaz-jetson .
 
 # Run with NVIDIA runtime
-docker run --runtime nvidia -p 9090:9090 -p 8000:8000 whisperlive-jetson
+docker run --runtime nvidia -p 9090:9090 -p 8000:8000 aavaaz-jetson
 ```
 
 ## Model Selection for Edge
@@ -41,27 +43,26 @@ docker run --runtime nvidia -p 9090:9090 -p 8000:8000 whisperlive-jetson
 ## Performance Tips
 
 ### Reduce Memory Usage
-- Use `tiny` or `base` models with `int8` compute type
-- Set `--max_clients 1` or `2` for limited RAM devices
-- Disable features you don't need (metrics, diarization)
+- Use `tiny` or `base` models
+- Set `--max-clients 1` or `2` for limited RAM devices
+- Leave `--metrics-port` at 0 and skip `--enable-diarization`
 
 ### Reduce Latency
-- Enable `--noise_reduction near_field` for cleaner input
-- Use `--raw_pcm_input` to avoid float32 conversion overhead
-- Set lower `--max_connection_time` to free resources faster
+- Enable `--noise-reduction near_field` for cleaner input
+- Set a lower `--max-connection-time` to free resources faster
 
 ### Docker Compose for Edge
 
 ```yaml
-version: '3.8'
 services:
-  whisperlive:
+  aavaaz:
     build:
       context: .
-      dockerfile: docker/Dockerfile.edge
+      dockerfile: Dockerfile.edge
     ports:
       - "9090:9090"
       - "8000:8000"
+      - "9100:9100"
     restart: unless-stopped
     deploy:
       resources:
@@ -69,39 +70,30 @@ services:
           memory: 2G
           cpus: '2'
     command: >
-      --enable_rest
-      --max_clients 2
-      --noise_reduction near_field
-      --metrics_port 9091
+      --model tiny
+      --max-clients 2
+      --metrics-port 9100
 ```
 
 ## Without Docker
 
 ```bash
-# Install on the device directly
-pip install faster-whisper websockets fastapi uvicorn noisereduce soundfile
-
-# Clone and run
 git clone https://github.com/collabora/Aavaaz.git
 cd Aavaaz
-python run_server.py \
-  --backend faster_whisper \
-  --faster_whisper_custom_model_path tiny \
-  --enable_rest \
-  --max_clients 2 \
-  --noise_reduction near_field
+pip install --extra-index-url https://download.pytorch.org/whl/cpu torch
+pip install .[whisper]
+
+aavaaz serve --model tiny --backend faster_whisper --max-clients 2
 ```
 
 ## Monitoring on Edge
 
-Enable Prometheus metrics for lightweight monitoring:
-
 ```bash
-docker run -p 9090:9090 -p 8000:8000 -p 9091:9091 whisperlive-edge \
-  --enable_rest --metrics_port 9091
+docker run -p 9090:9090 -p 8000:8000 -p 9100:9100 aavaaz-edge \
+  --metrics-port 9100
 ```
 
-Access metrics at `http://device-ip:9091/metrics`.
+Access metrics at `http://device-ip:9100/metrics`.
 
 ## Tested Platforms
 
