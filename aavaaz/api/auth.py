@@ -31,6 +31,11 @@ _BEARER_SCHEME = "Bearer "
 _WEBSOCKET_UNAUTHORIZED_BODY = "Unauthorized\n"
 _PLATFORM_REQUIRED_CLAIMS = ["exp", "sub"]
 
+# HS256 signs with the secret itself, so a short one is worth guessing offline.
+# The rest of the platform refuses to start under this, and a gate that is weaker
+# than the services behind it protects nothing.
+MINIMUM_JWT_SECRET_BYTES = 32
+
 # Default secret — MUST be overridden via AAVAAZ_JWT_SECRET env var
 _JWT_SECRET = os.environ.get(JWT_SECRET_ENV, "")
 _JWT_ALGORITHM = "HS256"

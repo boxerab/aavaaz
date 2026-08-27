@@ -11,7 +11,12 @@ from websockets.exceptions import InvalidStatus
 from websockets.sync.client import connect
 from websockets.sync.server import serve
 
-from aavaaz.api.auth import BEARER_SUBPROTOCOL, JWT_SECRET_ENV, websocket_platform_auth
+from aavaaz.api.auth import (
+    BEARER_SUBPROTOCOL,
+    JWT_SECRET_ENV,
+    MINIMUM_JWT_SECRET_BYTES,
+    websocket_platform_auth,
+)
 from aavaaz.server import AavaazServer
 
 SECRET = "0123456789abcdef0123456789abcdef"
@@ -145,3 +150,23 @@ def test_a_set_secret_installs_the_check(monkeypatch):
     monkeypatch.setenv(JWT_SECRET_ENV, SECRET)
     check = AavaazServer()._websocket_auth()
     assert check(FakeConnection(), FakeRequest(subprotocol_offer(make_token()))) is None
+
+
+def test_a_secret_too_short_to_be_worth_having_refuses_to_start(monkeypatch):
+    monkeypatch.setenv(JWT_SECRET_ENV, "a" * (MINIMUM_JWT_SECRET_BYTES - 1))
+    with pytest.raises(ValueError) as refused:
+        AavaazServer()._websocket_auth()
+    assert JWT_SECRET_ENV in str(refused.value)
+    assert str(MINIMUM_JWT_SECRET_BYTES) in str(refused.value)
+
+
+def test_a_secret_of_exactly_the_minimum_is_accepted(monkeypatch):
+    monkeypatch.setenv(JWT_SECRET_ENV, "a" * MINIMUM_JWT_SECRET_BYTES)
+    assert AavaazServer()._websocket_auth() is not None
+
+
+def test_the_length_is_bytes_not_characters(monkeypatch):
+    # 31 characters that encode to more than 32 bytes: counting characters would
+    # wrongly refuse this one
+    monkeypatch.setenv(JWT_SECRET_ENV, "é" * 31)
+    assert AavaazServer()._websocket_auth() is not None

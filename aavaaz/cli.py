@@ -50,6 +50,16 @@ def main():
         help="Prometheus metrics port (0=disabled)",
     )
     serve_parser.add_argument(
+        "--single-model",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Build the model once and share it across clients (default: on). "
+            "Off lets each client name its own model, at a fresh model load per "
+            "connection"
+        ),
+    )
+    serve_parser.add_argument(
         "--batch-inference",
         action="store_true",
         help="Enable cross-client GPU batching",
@@ -82,13 +92,19 @@ def main():
         "--batch-beam-size",
         type=int,
         default=1,
-        help="Beam width for batched decoding, 1 is greedy, 5 costs about 2.5x the decode time (default: 1)",
+        help=(
+            "Beam width for batched decoding, 1 is greedy, 5 costs about 2.5x "
+            "the decode time (default: 1)"
+        ),
     )
     serve_parser.add_argument(
         "--batch-temperature-fallback",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Re-decode batched chunks that fail the quality check at higher temperatures, halves throughput at beam 1 (default: off)",
+        help=(
+            "Re-decode batched chunks that fail the quality check at higher "
+            "temperatures, halves throughput at beam 1 (default: off)"
+        ),
     )
     serve_parser.add_argument(
         "--max-clients",
@@ -228,6 +244,7 @@ def main():
             api_key=args.api_key,
             rate_limit_rpm=args.rate_limit_rpm,
             metrics_port=args.metrics_port,
+            single_model=args.single_model,
             batch_inference=args.batch_inference,
             batch_max_size=args.batch_max_size,
             batch_window_ms=args.batch_window_ms,

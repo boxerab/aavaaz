@@ -12,7 +12,11 @@ import threading
 
 from whisper_live.server import TranscriptionServer
 
-from aavaaz.api.auth import JWT_SECRET_ENV, websocket_platform_auth
+from aavaaz.api.auth import (
+    JWT_SECRET_ENV,
+    MINIMUM_JWT_SECRET_BYTES,
+    websocket_platform_auth,
+)
 from aavaaz.features.plugins import PluginRegistry
 from aavaaz.plugins import registry as default_registry
 
@@ -35,6 +39,7 @@ class AavaazServer:
         api_key: str | None = None,
         rate_limit_rpm: int = 0,
         metrics_port: int = 0,
+        single_model: bool = True,
         batch_inference: bool = False,
         batch_max_size: int = 16,
         batch_window_ms: int = 50,
@@ -70,6 +75,7 @@ class AavaazServer:
         self.api_key = api_key
         self.rate_limit_rpm = rate_limit_rpm
         self.metrics_port = metrics_port
+        self.single_model = single_model
         self.batch_inference = batch_inference
         self.batch_max_size = batch_max_size
         self.batch_window_ms = batch_window_ms
@@ -156,7 +162,11 @@ class AavaazServer:
         return preprocess
 
     def _websocket_auth(self):
-        """The platform JWT check for the websocket, or None when it is open."""
+        """The platform JWT check for the websocket, or None when it is open.
+
+        Refuses to start on a secret too short to be worth having, rather than
+        serving behind a gate that only looks like one.
+        """
         secret = os.environ.get(JWT_SECRET_ENV, "")
         if not secret:
             logger.warning(
@@ -165,6 +175,12 @@ class AavaazServer:
                 self.port,
             )
             return None
+        if len(secret.encode()) < MINIMUM_JWT_SECRET_BYTES:
+            raise ValueError(
+                f"{JWT_SECRET_ENV} is {len(secret.encode())} bytes, "
+                f"needs at least {MINIMUM_JWT_SECRET_BYTES}. "
+                "Generate one with: openssl rand -hex 32"
+            )
         return websocket_platform_auth(secret)
 
     def _post_callback(self, payload: dict):
@@ -214,9 +230,34 @@ class AavaazServer:
             setattr(self, key, value)
         self.run()
 
+    def _predownload_model(self):
+        """Fetch the model weights before the first client arrives.
+
+        Otherwise the download runs inside whichever client triggered it and dies
+        with that client, so a caller who gives up mid-download leaves nothing
+        behind and the next one starts over.
+        """
+        if self.backend != "faster_whisper" or not self.model:
+            return
+        if "/" in self.model or os.path.exists(self.model):
+            return  # a custom path or hub id, not a name faster-whisper resolves
+        from faster_whisper.utils import download_model
+
+        logger.info("Fetching model %s", self.model)
+        try:
+            download_model(self.model)
+        except Exception as error:
+            # a client can still fetch it later, so this is not fatal
+            logger.warning("Could not fetch %s up front: %s", self.model, error)
+            return
+        logger.info("Model %s ready", self.model)
+
     def run(self):
         """Start the Aavaaz server (WhisperLive + plugins + REST API)."""
         self.configure_plugins()
+        # before the download: a refused secret should not cost a model fetch first
+        websocket_auth = self._websocket_auth()
+        self._predownload_model()
         server = TranscriptionServer()
 
         logger.info(
@@ -248,6 +289,16 @@ class AavaazServer:
         }
 
         def initialize_client_with_defaults(websocket, options, *args, **kwargs):
+            # one shared model means a client naming another one does not get it,
+            # and a silent substitution is worse than a slow load
+            asked_for = options.get("model")
+            if self.single_model and asked_for and asked_for != self.model:
+                logger.warning(
+                    "client asked for model %s, serving %s: single_model is on, "
+                    "start with --no-single-model to let clients choose",
+                    asked_for,
+                    self.model,
+                )
             for key, value in server_defaults.items():
                 options.setdefault(key, value)
             return original_init_client(websocket, options, *args, **kwargs)
@@ -259,7 +310,7 @@ class AavaazServer:
         )
 
         server.run(
-            websocket_auth=self._websocket_auth(),
+            websocket_auth=websocket_auth,
             host=self.host,
             port=self.port,
             backend=self.backend,
@@ -268,6 +319,7 @@ class AavaazServer:
             # like "large-v3" flow through the per-client options dict.
             faster_whisper_custom_model_path=self.model if is_custom_model else None,
             default_model=self.model,
+            single_model=self.single_model,
             audio_preprocessor=self._make_audio_preprocessor(),
             enable_rest=self.enable_rest_api,
             rest_port=self.rest_port,
