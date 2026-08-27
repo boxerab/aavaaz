@@ -82,6 +82,9 @@ class FakeBatchWorker:
 @pytest.fixture(scope="module")
 def modal_app():
     """Import deploy/modal/app.py with modal and faster_whisper stubbed out."""
+    stubbed = ("modal", "faster_whisper", "faster_whisper.audio", "whisper_live.batch_inference")
+    before = {name: sys.modules[name] for name in stubbed if name in sys.modules}
+
     sys.modules.setdefault("modal", _stub_modal())
     sys.modules.setdefault("faster_whisper", MagicMock())
 
@@ -118,7 +121,15 @@ def modal_app():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     module.WEB_DIR = str(WEB_DIR)
-    return module
+    yield module
+
+    # put sys.modules back: a MagicMock left under "faster_whisper" is not a
+    # package, so every later test importing a submodule of it fails
+    for name in stubbed:
+        if name in before:
+            sys.modules[name] = before[name]
+        else:
+            sys.modules.pop(name, None)
 
 
 @pytest.fixture

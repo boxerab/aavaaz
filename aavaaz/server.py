@@ -241,10 +241,12 @@ class AavaazServer:
             return
         if "/" in self.model or os.path.exists(self.model):
             return  # a custom path or hub id, not a name faster-whisper resolves
-        from faster_whisper.utils import download_model
-
         logger.info("Fetching model %s", self.model)
         try:
+            # inside the try: faster-whisper is the [whisper] extra, so an install
+            # without it should still start and leave the fetch to a client
+            from faster_whisper.utils import download_model
+
             download_model(self.model)
         except Exception as error:
             # a client can still fetch it later, so this is not fatal

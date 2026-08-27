@@ -4,7 +4,9 @@ A fresh model per connection costs a load on every reconnect, and WhisperLive
 closes the socket after END_OF_AUDIO, so a caller who dictates twice pays twice.
 """
 
-from unittest.mock import patch
+import sys
+from types import ModuleType
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -74,40 +76,60 @@ def test_no_warning_when_clients_may_choose(whisperlive, caplog):
     assert caplog.text == ""
 
 
-def test_the_model_is_fetched_before_the_first_client(monkeypatch):
-    fetched = []
-    monkeypatch.setattr(
-        "faster_whisper.utils.download_model", lambda name, *a, **k: fetched.append(name)
-    )
+@pytest.fixture
+def fetched(monkeypatch):
+    """Stand in for faster-whisper, which the [whisper] extra may not have installed."""
+    names = []
+    utils = ModuleType("faster_whisper.utils")
+    utils.download_model = lambda name, *a, **k: names.append(name)
+    package = ModuleType("faster_whisper")
+    package.utils = utils
+    monkeypatch.setitem(sys.modules, "faster_whisper", package)
+    monkeypatch.setitem(sys.modules, "faster_whisper.utils", utils)
+    return names
+
+
+def test_the_model_is_fetched_before_the_first_client(fetched):
     AavaazServer(model="tiny")._predownload_model()
     assert fetched == ["tiny"]
 
 
-def test_a_failed_fetch_does_not_stop_the_server(monkeypatch, caplog):
+def test_a_failed_fetch_does_not_stop_the_server(fetched, monkeypatch, caplog):
     def explode(name, *args, **kwargs):
         raise OSError("no route to host")
 
-    monkeypatch.setattr("faster_whisper.utils.download_model", explode)
+    sys.modules["faster_whisper.utils"].download_model = explode
     with caplog.at_level("WARNING"):
         AavaazServer(model="tiny")._predownload_model()
     assert "tiny" in caplog.text
 
 
-def test_a_custom_model_path_is_left_to_whisperlive(monkeypatch):
-    fetched = []
-    monkeypatch.setattr(
-        "faster_whisper.utils.download_model", lambda name, *a, **k: fetched.append(name)
-    )
+def test_a_mocked_faster_whisper_still_starts(monkeypatch, caplog):
+    # what CI sees: another test leaves a MagicMock under the name, and importing
+    # a submodule of it raises "not a package"
+    monkeypatch.setitem(sys.modules, "faster_whisper", MagicMock())
+    monkeypatch.delitem(sys.modules, "faster_whisper.utils", raising=False)
+    with caplog.at_level("WARNING"):
+        AavaazServer(model="tiny")._predownload_model()
+    assert "tiny" in caplog.text
+
+
+def test_an_install_without_faster_whisper_still_starts(monkeypatch, caplog):
+    # both entries: a cached submodule is found without consulting the parent
+    monkeypatch.setitem(sys.modules, "faster_whisper", None)
+    monkeypatch.delitem(sys.modules, "faster_whisper.utils", raising=False)
+    with caplog.at_level("WARNING"):
+        AavaazServer(model="tiny")._predownload_model()
+    assert "tiny" in caplog.text
+
+
+def test_a_custom_model_path_is_left_to_whisperlive(fetched):
     AavaazServer(model="Systran/faster-whisper-tiny")._predownload_model()
     assert fetched == []
 
 
-def test_a_refused_secret_costs_no_model_download(whisperlive, monkeypatch):
+def test_a_refused_secret_costs_no_model_download(whisperlive, fetched, monkeypatch):
     monkeypatch.setenv("AAVAAZ_JWT_SECRET", "too-short")
-    fetched = []
-    monkeypatch.setattr(
-        "faster_whisper.utils.download_model", lambda name, *a, **k: fetched.append(name)
-    )
     with pytest.raises(ValueError):
         AavaazServer(model="tiny").run()
     assert fetched == []
