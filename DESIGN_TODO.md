@@ -50,7 +50,8 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 - [x] Custom vocabulary — the upload page now sends `aavaaz-custom-vocab` as hotwords (JSON body + S3 metadata); the batch Lambda passes them to `model.transcribe`. Per-word boost is UI-only (faster-whisper hotwords has no weighting; words are ordered highest-boost first).
 - [x] Upload output-format selector — SRT/VTT now generate real cues instead of plain text with a fake extension.
 - [x] API key persistence — created keys are saved to `aavaaz-api-key` so batch requests carry `Authorization` (note: the transcribe Lambda still doesn't enforce it; unauthenticated by design).
-- [x] Removed the Text to Speech page, it called the `deploy/modal/app_tts.py` Fish Speech deployment, which no longer answers and is not advertised anywhere.
+- [x] Removed the Text to Speech page and `deploy/modal/app_tts.py`, the Fish Speech deployment no longer answers and nothing advertised it.
+- [x] Custom vocabulary page now says the list lives in this browser, that boost only orders it, and that the Live Demo does not send it.
 
 ## Claims removed or rescoped in the 2026-08-26 docs audit
 

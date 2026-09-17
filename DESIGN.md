@@ -21,7 +21,7 @@ The transcription engine, the streaming WebSocket protocol, VAD, cross-client ba
 |---|---|---|---|
 | Self-hosted streaming | `aavaaz serve` → `server.py` | WhisperLive | WS 9090 + REST 8000; plugin pipeline applies per segment; `--noise-reduction` preprocesses live frames; `--paragraphs`/`--intelligence`/`--callback-url` run at stream end |
 | AWS Lambda (batch) | `serverless/lambda_handler.py` | faster-whisper (own pipeline) | S3-trigger + API Gateway; the primary batch path |
-| Modal (GPU) | `deploy/modal/app_live.py` (live), `app.py` (batch), `app_tts.py` | WhisperLive (mounted) | `app.py` mounts WhisperLive from a hardcoded local path |
+| Modal (GPU) | `deploy/modal/app_live.py` (live), `app.py` (batch) | WhisperLive | both install `whisper-live` from pypi, the live app fires no webhook |
 | SaaS API (self-host) | `saas_server.py` → `api/saas.py` | n/a | in-memory store; JWT auth (HS256 secret or RS256 JWKS) |
 | SaaS API (serverless) | `serverless/saas_lambda.py` | n/a | DynamoDB (`api/dynamo_store.py`); Cognito or any JWKS provider; Mangum |
 | Dashboard | `dashboard/` | n/a | Next.js static export SPA; Cognito; calls the SaaS API |

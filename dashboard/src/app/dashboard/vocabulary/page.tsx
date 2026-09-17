@@ -97,7 +97,7 @@ export default function VocabularyPage() {
       <div className="rounded-lg border bg-card p-5 space-y-4">
         <p className="text-sm text-muted-foreground">
           Add words that the model might not recognize correctly — proper nouns, technical terms,
-          product names, acronyms. Higher boost = stronger preference for this spelling.
+          product names, acronyms. Higher boost puts the word earlier in the list.
         </p>
 
         {/* Add word input */}
@@ -158,7 +158,7 @@ export default function VocabularyPage() {
 
         <div className="text-xs text-muted-foreground pt-2 border-t">
           {entries.length} word{entries.length !== 1 ? "s" : ""} in vocabulary.
-          These will be sent with your transcription requests to improve accuracy.
+          The list is saved in this browser only, and is sent with file uploads.
         </div>
       </div>
 
@@ -167,9 +167,9 @@ export default function VocabularyPage() {
         <h3 className="font-semibold mb-2">How Custom Vocabulary Works</h3>
         <ul className="text-sm text-muted-foreground space-y-1.5 list-disc list-inside">
           <li>Words are sent as &quot;hotwords&quot; to the Whisper model during transcription</li>
-          <li>Higher boost values make the model more likely to output that exact spelling</li>
+          <li>Boost only orders the list, faster-whisper applies no per-word weight</li>
           <li>Useful for: company names, product names, people&apos;s names, medical terms, legal jargon</li>
-          <li>Works with both batch file upload and live streaming</li>
+          <li>Sent from the File Upload page, the Live Demo does not use them</li>
         </ul>
       </div>
     </div>

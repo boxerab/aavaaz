@@ -21,6 +21,6 @@ transcripts/
 *.tfstate.backup
 .terraform.lock.hcl
 
-# WhisperLive source (copied during Docker build)
-whisper_live/
-loadtest/results/
+loadtest/results*/
+loadtest/profile/
+loadtest/ab/
