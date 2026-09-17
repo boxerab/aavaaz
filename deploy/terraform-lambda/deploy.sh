@@ -33,22 +33,9 @@ aws ecr get-login-password --region "$REGION" | \
 echo "==> Building container image (model: $WHISPER_MODEL)..."
 cd ../..
 
-# Copy WhisperLive source into build context
-WHISPERLIVE_SRC="${WHISPERLIVE_SRC:-$HOME/src/WhisperLive/whisper_live}"
-if [[ ! -d "$WHISPERLIVE_SRC" ]]; then
-  echo "ERROR: WhisperLive source not found at $WHISPERLIVE_SRC"
-  echo "Set WHISPERLIVE_SRC to point to your whisper_live/ directory"
-  exit 1
-fi
-rm -rf whisper_live
-cp -r "$WHISPERLIVE_SRC" whisper_live/
-
 docker build -f Dockerfile.lambda \
   --build-arg WHISPER_MODEL="$WHISPER_MODEL" \
   -t "$REPO_NAME:latest" .
-
-# Clean up copied source
-rm -rf whisper_live
 
 echo "==> Tagging and pushing to ECR..."
 docker tag "$REPO_NAME:latest" "$ECR_URL:latest"

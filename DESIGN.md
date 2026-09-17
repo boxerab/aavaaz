@@ -4,7 +4,7 @@ Speech-to-text platform built as a thin extension over [WhisperLive](https://git
 
 ## Engine boundary (important)
 
-The transcription engine, the streaming WebSocket protocol, VAD, cross-client batch inference, speaker diarization, and the Prometheus metrics endpoint all live in **WhisperLive** (an installed dependency, or a locally-mounted checkout on Modal). Aavaaz does not reimplement these. The `--batch-inference`, `--enable-diarization`, and `--metrics-port` CLI flags pass straight through to `whisper_live.server`. Earlier aavaaz copies of `batch_inference`/`diarization`/`metrics` were stale duplicates and have been removed.
+The transcription engine, the streaming WebSocket protocol, VAD, cross-client batch inference, speaker diarization, and the Prometheus metrics endpoint all live in **WhisperLive** (an installed dependency). Aavaaz does not reimplement these. The `--batch-inference`, `--enable-diarization`, and `--metrics-port` CLI flags pass straight through to `whisper_live.server`. Earlier aavaaz copies of `batch_inference`/`diarization`/`metrics` were stale duplicates and have been removed.
 
 ## Components
 

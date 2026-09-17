@@ -9,11 +9,9 @@ RUN dnf install -y xz tar && \
 COPY pyproject.toml README.md LICENSE ./
 COPY aavaaz/ aavaaz/
 
-RUN pip install --no-cache-dir . faster-whisper
+RUN pip install --no-cache-dir . faster-whisper==1.2.0
 
-# Install WhisperLive for transcription engine
-COPY whisper_live/ /opt/whisper_live/whisper_live/
-ENV PYTHONPATH="/opt/whisper_live"
+RUN pip install --no-cache-dir --no-deps "whisper-live>=0.10.0"
 
 # Pre-download the default model during build to avoid cold-start download.
 # Override AAVAAZ_MODEL at runtime to use a different model.

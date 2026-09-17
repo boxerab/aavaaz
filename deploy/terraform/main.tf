@@ -525,7 +525,7 @@ resource "aws_instance" "loadgen" {
 
   user_data = <<-EOF
     #!/bin/bash
-    curl -sSL https://raw.githubusercontent.com/boxerab/aavaaz/master/loadtest/setup_loadgen.sh | sudo -u ec2-user bash
+    curl -sSL https://raw.githubusercontent.com/collabora/aavaaz/master/loadtest/setup_loadgen.sh | sudo -u ec2-user bash
   EOF
 
   tags = { Name = "aavaaz-loadgen-${count.index}" }

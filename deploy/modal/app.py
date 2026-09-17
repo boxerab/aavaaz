@@ -46,8 +46,6 @@ UNKNOWN_LANGUAGE = "unknown"
 
 # Path to the web UI files inside the container.
 WEB_DIR = "/web"
-# Path where WhisperLive source is mounted.
-WHISPERLIVE_DIR = "/opt/whisper_live"
 
 app = modal.App("aavaaz-transcribe")
 
@@ -63,6 +61,7 @@ image = (
         "tokenizers",
         "tqdm",
     )
+    .run_commands("pip install --no-deps 'whisper-live>=0.10.0'")
     .run_commands(
         f'python -c "from faster_whisper import WhisperModel; '
         f"WhisperModel('{WHISPER_MODEL}', device='cpu')\""
@@ -72,10 +71,6 @@ image = (
         "../../pyproject.toml", remote_path="/root/aavaaz_pkg/pyproject.toml", copy=True
     )
     .run_commands("pip install /root/aavaaz_pkg")
-    .add_local_dir(
-        "/home/aaron/src/WhisperLive/whisper_live",
-        remote_path=f"{WHISPERLIVE_DIR}/whisper_live",
-    )
     .add_local_dir("../../aavaaz/web", remote_path=WEB_DIR)
 )
 
@@ -101,10 +96,6 @@ class Transcriber:
     @modal.enter()
     def load_model(self):
         import os
-        import sys
-
-        # Add WhisperLive to Python path
-        sys.path.insert(0, WHISPERLIVE_DIR)
 
         from whisper_live.batch_inference import BatchInferenceWorker
         from whisper_live.transcriber.transcriber_faster_whisper import WhisperModel

@@ -25,7 +25,7 @@ def pip_install_lines(dockerfile_name):
     return [
         line.strip().replace(CPU_TORCH_INDEX, "").removesuffix(" && \\")
         for line in content.splitlines()
-        if "pip install" in line and ("WHISPER_LIVE_SOURCE" in line or "[whisper" in line)
+        if "pip install" in line and "[whisper" in line
     ]
 
 

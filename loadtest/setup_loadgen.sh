@@ -7,7 +7,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
 
 cd "$HOME"
-[ -d aavaaz ] || git clone -q https://github.com/boxerab/aavaaz.git
+[ -d aavaaz ] || git clone -q https://github.com/collabora/aavaaz.git
 cd aavaaz
 uv sync -q --extra loadtest
 

@@ -54,14 +54,7 @@ image = (
         f'python -c "from faster_whisper import WhisperModel; '
         f"WhisperModel('{WHISPER_MODEL}', device='cpu')\""
     )
-    # Install local WhisperLive (with generator fix) BEFORE aavaaz so pip
-    # doesn't pull the PyPI version when resolving aavaaz's dependencies.
-    .add_local_dir(
-        "/home/aaron/src/WhisperLive",
-        remote_path="/root/WhisperLive",
-        copy=True,
-    )
-    .run_commands("pip install --no-deps /root/WhisperLive")
+    .run_commands("pip install --no-deps 'whisper-live>=0.10.0'")
     .add_local_dir("../../aavaaz", remote_path="/root/aavaaz_pkg/aavaaz", copy=True)
     .add_local_file(
         "../../pyproject.toml", remote_path="/root/aavaaz_pkg/pyproject.toml", copy=True

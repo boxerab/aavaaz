@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: collabora/aavaaz
+  repository: ghcr.io/collabora/aavaaz-gpu
   tag: latest
   pullPolicy: IfNotPresent
 

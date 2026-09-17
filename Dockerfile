@@ -24,14 +24,6 @@ RUN mkdir -p aavaaz && touch aavaaz/__init__.py && \
 COPY aavaaz/ aavaaz/
 RUN python3.12 -m pip install --no-cache-dir --no-deps --force-reinstall .
 
-# pypi whisper-live lacks the hooks aavaaz serve passes, so the fork replaces
-# it last and a ref change rebuilds only this layer. force-reinstall because the
-# fork carries the same version and pip would otherwise call it already
-# satisfied and leave the pypi build in place, and no-deps to keep the
-# resolution the layer above settled on
-ARG WHISPER_LIVE_SOURCE=git+https://github.com/boxerab/WhisperLive@dev
-RUN python3.12 -m pip install --no-cache-dir --force-reinstall --no-deps "$WHISPER_LIVE_SOURCE"
-
 EXPOSE 9090 8000 9100
 
 ENTRYPOINT ["aavaaz", "serve"]

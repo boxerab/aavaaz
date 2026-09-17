@@ -87,5 +87,5 @@ Wanted features that the README or `docs/site` advertised but no entry point del
 
 - [x] **REST `/v1/audio/transcriptions` model selection** — done: the `model` form field is honoured for stock sizes, paths and HF repos, falling back to `default_model` from `aavaaz serve --model` (fork branch `rest-fixes`).
 - [x] **`/docs`, `/redoc`, `/openapi.json` behind `--api-key`** — done: `API_KEY_EXEMPT_PATHS` in `whisper_live/server.py` exempts `/docs`, `/redoc`, `/openapi.json` and `/health`.
-- [ ] **PyPI install cannot start `aavaaz serve`** — published `whisper-live` 0.9.0 lacks the hooks; docs point at `boxerab/WhisperLive@scaling-fixes` until a release includes collabora/WhisperLive#535.
+- [x] **PyPI install cannot start `aavaaz serve`** — done: whisper-live 0.10.0 on PyPI ships the hooks (collabora/WhisperLive#535, #540, #541). Every install path pins `whisper-live>=0.10.0` and the fork references are gone.
 - [x] **Lambda demo keeps large-file transcripts** — done: the status handler deletes the transcript and progress objects from the output bucket after returning them.

@@ -8,12 +8,12 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-08-19T03:19:11.750352667Z"
+exclude-newer = "2026-09-10T19:36:59.906744384Z"
 exclude-newer-span = "P7D"
 
 [[package]]
 name = "aavaaz"
-version = "0.9.0"
+version = "0.10.0"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
@@ -86,8 +86,8 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.30" },
     { name = "websockets", marker = "extra == 'loadtest'", specifier = ">=13" },
     { name = "websockets", marker = "extra == 'sdk'" },
-    { name = "whisper-live", marker = "extra == 'whisper'", specifier = ">=0.9.0" },
-    { name = "whisper-live", marker = "extra == 'whisper-cpu'", specifier = ">=0.9.0" },
+    { name = "whisper-live", marker = "extra == 'whisper'", specifier = ">=0.10.0" },
+    { name = "whisper-live", marker = "extra == 'whisper-cpu'", specifier = ">=0.10.0" },
 ]
 provides-extras = ["whisper", "whisper-cpu", "loadtest", "dev", "saas", "sdk"]
 
@@ -2871,7 +2871,7 @@ wheels = [
 
 [[package]]
 name = "whisper-live"
-version = "0.9.0"
+version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "av" },
@@ -2881,6 +2881,8 @@ dependencies = [
     { name = "librosa" },
     { name = "numba" },
     { name = "numpy" },
+    { name = "nvidia-cublas-cu12", marker = "sys_platform == 'linux'" },
+    { name = "nvidia-cudnn-cu12", marker = "sys_platform == 'linux'" },
     { name = "onnxruntime" },
     { name = "openai-whisper" },
     { name = "openvino" },
@@ -2899,9 +2901,9 @@ dependencies = [
     { name = "websocket-client" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6f/3b/95cb0d912d7b37c5806921d7b55d5941d056b3d4c291ea1852ff4b4aff64/whisper_live-0.9.0.tar.gz", hash = "sha256:947f596197af53f1864f827b7d9485ef9c695d13e29fe929e5c83217c9136c6c", size = 99080, upload-time = "2026-06-02T06:31:50.352Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d2/f0/c4548d9a6baea38ca51ba1d9d0c99bf93a3598ceb1817187ceab68820966/whisper_live-0.10.0.tar.gz", hash = "sha256:410a2207f51655a6d074218142a97db711c23069bc827ee4d542430965e9c698", size = 125303, upload-time = "2026-09-07T09:10:28.885Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c4/03/bdd18eaca447d5cfd5ceaf09c6f8c0c4168a5291ae7ed2028299f4b9240b/whisper_live-0.9.0-py3-none-any.whl", hash = "sha256:f8317e0fec36866f92ed77d29508bfc686e50446998bf3cd7a3c1e4499c609c3", size = 107369, upload-time = "2026-06-02T06:31:49.217Z" },
+    { url = "https://files.pythonhosted.org/packages/20/a3/7ad1a0acc2a3ee5525cee7fb24eb25135f5315feb092a443ad89a53db8b1/whisper_live-0.10.0-py3-none-any.whl", hash = "sha256:0a37767b4e06106ef119a5a385a0a3f7d09df446fcfb8eccd0f98167f1dd77a5", size = 133083, upload-time = "2026-09-07T09:10:27.524Z" },
 ]
 
 [[package]]

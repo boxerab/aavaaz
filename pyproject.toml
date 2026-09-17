@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aavaaz"
-version = "0.9.0"
+version = "0.10.0"
 description = "Aavaaz — production-grade speech-to-text platform built on WhisperLive"
 readme = "README.md"
 license = "MPL-2.0"
@@ -35,7 +35,7 @@ dependencies = [
 
 [project.optional-dependencies]
 whisper = [
-    "whisper-live>=0.9.0",
+    "whisper-live>=0.10.0",
     # CTranslate2 (faster-whisper's backend) loads CUDA via the system
     # dynamic loader and can't find torch's bundled copies under
     # site-packages/nvidia/. These wheels install the libraries in a
@@ -47,7 +47,7 @@ whisper = [
     "noisereduce",
 ]
 whisper-cpu = [
-    "whisper-live>=0.9.0",
+    "whisper-live>=0.10.0",
     "noisereduce",
 ]
 loadtest = [

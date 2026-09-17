@@ -17,11 +17,6 @@ with enterprise features that compete with Deepgram, ElevenLabs, and AssemblyAI.
 
 ## Quick Start
 
-> **WhisperLive version note:** `aavaaz serve` uses hooks that are not in the
-> published `whisper-live` 0.9.0 wheel yet. After any install below, replace
-> it with the fork until a matching release exists:
-> `pip install --no-deps "git+https://github.com/boxerab/WhisperLive@scaling-fixes"`
-
 ### Option 1: Install from PyPI (Recommended)
 
 ```bash
@@ -30,7 +25,6 @@ python3.12 -m venv .venv && source .venv/bin/activate
 
 # Install aavaaz with WhisperLive + ML stack
 pip install "aavaaz[whisper]"
-pip install --no-deps "git+https://github.com/boxerab/WhisperLive@scaling-fixes"
 
 # Start the server
 aavaaz serve --model large-v3
@@ -51,7 +45,6 @@ source .venv/bin/activate
 
 # Install from PyPI
 uv pip install "aavaaz[whisper]"
-uv pip install --no-deps "git+https://github.com/boxerab/WhisperLive@scaling-fixes"
 
 # Start the server
 aavaaz serve --model large-v3
@@ -72,7 +65,6 @@ pip install -e .
 
 # With WhisperLive + dev tooling
 pip install -e ".[whisper,dev]"
-pip install --no-deps "git+https://github.com/boxerab/WhisperLive@scaling-fixes"
 ```
 
 ### Option 4: Using `pip` with Requirements Files
@@ -83,7 +75,6 @@ python3.12 -m venv .venv && source .venv/bin/activate
 
 # Install base + ML stack (about 8 GB, mostly torch)
 pip install -r requirements/whisper.txt
-pip install --no-deps "git+https://github.com/boxerab/WhisperLive@scaling-fixes"
 
 # Or install just base (fast, no ML):
 # pip install -r requirements/base.txt
@@ -112,7 +103,7 @@ If you hit disk quota errors, consider:
 ### Requirements Files
 
 - `requirements/base.txt` — Core dependencies only (fastapi, uvicorn, boto3)
-- `requirements/whisper.txt` — Full ML stack (torch, whisper-live>=0.9.0, etc)
+- `requirements/whisper.txt` — Full ML stack (torch, whisper-live>=0.10.0, etc)
 - `requirements/dev.txt` — Development tools (pytest, ruff, etc)
 
 ## Architecture
