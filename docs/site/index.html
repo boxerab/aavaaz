@@ -1120,7 +1120,7 @@
 
 <span class="o">INFO  Starting Aavaaz server on 0.0.0.0:9090 (backend=faster_whisper, model=large-v3)</span>
 <span class="o">INFO  Loaded 4 plugins: ['formatting', 'pii_redaction', 'profanity_filter', 'audio_intelligence']</span>
-<span class="o">INFO  Batch inference enabled (max_batch=8, window=50ms)</span>
+<span class="o">INFO  Batch inference enabled (max_batch=16, window=50ms)</span>
 <span class="o">INFO  Prometheus metrics available at http://0.0.0.0:9091/metrics</span>
 <span class="o">INFO  OpenAI-Compatible API started on http://0.0.0.0:8000</span></div>
         </div>
@@ -1139,7 +1139,7 @@
                 <p>SDKs &amp; WhisperLive Extensions</p>
             </div>
             <div class="stat-cell">
-                <h3>39</h3>
+                <h3>40</h3>
                 <p>Aavaaz and WhisperLive Contributors</p>
             </div>
         </div>
@@ -1151,7 +1151,7 @@
     <p>Community-driven open source &middot; supported by</p>
     <div class="trust-logos">
         <span>Collabora</span>
-        <span style="font-weight: 400; color: var(--text-muted); font-size: 0.85rem;">and 39 open source contributors worldwide</span>
+        <span style="font-weight: 400; color: var(--text-muted); font-size: 0.85rem;">and 40 open source contributors worldwide</span>
     </div>
 </div>
 
@@ -1471,7 +1471,7 @@
             </div>
             <div class="ent-card">
                 <h3>&#128276; Reliable Webhooks</h3>
-                <p>Async transcription callbacks with exponential backoff retry. Smart retry &mdash; no retry on 4xx, retry on 5xx and 429.</p>
+                <p>Async transcription callbacks with exponential backoff retry. Smart retry &mdash; no retry on 4xx, retry on 5xx and 429. Fires from Lambda, the Modal batch API and <code>aavaaz serve --callback-url</code>.</p>
             </div>
             <div class="ent-card">
                 <h3>&#9889; Terraform Deploy</h3>
@@ -1598,7 +1598,7 @@
             </div>
             <div class="tab-body">
                 <div class="tab-panel active" id="tab-python">
-<pre><span class="cmt"># Create a virtualenv (Python 3.12 required; 3.14 not yet supported)</span>
+<pre><span class="cmt"># Create a virtualenv (Python 3.12 or 3.13)</span>
 python3.12 -m venv .venv
 source .venv/bin/activate
 
@@ -1747,7 +1747,7 @@ curl -X POST http://localhost:<span class="num">8000</span>/v1/audio/transcripti
 <section class="cta-section">
     <div class="cta-content">
         <h2>Ready to get started?</h2>
-        <p>Aavaaz is free, open source, and ready for production. Join 39 contributors building the future of speech-to-text.</p>
+        <p>Aavaaz is free, open source, and ready for production. Join 40 contributors building the future of speech-to-text.</p>
         <div class="cta-actions">
             <a href="https://github.com/collabora/Aavaaz" class="btn btn-green">
                 Get Started Free

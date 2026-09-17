@@ -35,6 +35,7 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 - [x] Library-only features in the `docs/site` feature grid now carry a `Planned` tag (translation relay, noise reduction, multichannel, model hot-swap, search, auto-highlights/chapters, find&replace, spelling hints; ACL/storage in the enterprise list marked "(Planned)"). The zero-code Multi-Model Ensemble card and the broken README Auto-Reconnect example were removed. Note: only the primary feature grid was swept; repeated mentions in the showcase/comparison sections may still overstate.
 - [x] `docs/TEST_MATRIX.md` remapped to real coverage: ensemble rows → Not implemented; diarization/batch rows → ⚠️ passthrough-only (`test_server.py`, behavior in WhisperLive); storage → `test_security.py`; webhook delivery → `test_serverless.py`; HMAC signature → Not implemented.
 - [x] Marketing showcase swept: the repeated library-only "Noise Reduction" card in the capabilities/showcase section is now marked "(Planned)" too, matching the feature grid.
+- [x] Deleted docs/USER_MANAGEMENT.md and docs/TEST_MATRIX.md, both described the removed acl, model_cache, storage and translation_relay modules and tests that no longer exist.
 
 ## Deploy / infra (unverified — no cloud build in CI)
 
@@ -49,6 +50,7 @@ Code exists and is unit-tested, but nothing in a running entry point calls it.
 - [x] Custom vocabulary — the upload page now sends `aavaaz-custom-vocab` as hotwords (JSON body + S3 metadata); the batch Lambda passes them to `model.transcribe`. Per-word boost is UI-only (faster-whisper hotwords has no weighting; words are ordered highest-boost first).
 - [x] Upload output-format selector — SRT/VTT now generate real cues instead of plain text with a fake extension.
 - [x] API key persistence — created keys are saved to `aavaaz-api-key` so batch requests carry `Authorization` (note: the transcribe Lambda still doesn't enforce it; unauthenticated by design).
+- [x] Removed the Text to Speech page, it called the `deploy/modal/app_tts.py` Fish Speech deployment, which no longer answers and is not advertised anywhere.
 
 ## Claims removed or rescoped in the 2026-08-26 docs audit
 
