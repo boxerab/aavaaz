@@ -23,4 +23,5 @@ transcripts/
 
 loadtest/results*/
 loadtest/profile/
-loadtest/ab/
+loadtest/ab/*/
+loadtest/ab/*.log

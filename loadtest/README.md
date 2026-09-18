@@ -39,6 +39,14 @@ uv run loadtest/scrape_metrics.py --targets 10.0.10.5:9100,10.0.10.6:9100
 
 GPU load on a node: `nvidia-smi dmon -s u -d 5 > dmon.log`.
 
+## Comparing decode settings
+
+`ab/run_one.sh <name> [serve flags]` runs one server config through the ramp and writes the server log, metrics and client results to `loadtest/ab/<name>/`. `ab/run_ab.sh` runs the beam and temperature-fallback combinations the phase 0 findings compare.
+
+```
+loadtest/ab/run_ab.sh
+```
+
 ## AWS
 
 `deploy/terraform` builds the servers and, with `loadgen_count`, the load generator hosts. `setup_loadgen.sh` prepares one host (repo, venv, tracks, file limits) and is what the instance runs on first boot.
