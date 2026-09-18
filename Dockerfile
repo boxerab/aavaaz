@@ -24,6 +24,9 @@ RUN mkdir -p aavaaz && touch aavaaz/__init__.py && \
 COPY aavaaz/ aavaaz/
 RUN python3.12 -m pip install --no-cache-dir --no-deps --force-reinstall .
 
+# an undeclared dependency of the engine only shows up on import
+RUN python3.12 -c "import aavaaz.server"
+
 EXPOSE 9090 8000 9100
 
 ENTRYPOINT ["aavaaz", "serve"]

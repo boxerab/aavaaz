@@ -14,6 +14,9 @@ RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/wh
 RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu .[whisper-cpu] && \
     pip uninstall -y nvidia-cublas-cu12 nvidia-cudnn-cu12 nvidia-cuda-nvrtc-cu12 triton
 
+# an undeclared dependency of the engine only shows up on import
+RUN python3 -c "import aavaaz.server"
+
 EXPOSE 9090 8000 9100
 
 ENTRYPOINT ["aavaaz", "serve"]

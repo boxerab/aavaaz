@@ -12,6 +12,9 @@ COPY aavaaz/ aavaaz/
 
 RUN pip install --no-cache-dir .[whisper-cpu]
 
+# an undeclared dependency of the engine only shows up on import
+RUN python3 -c "import aavaaz.server"
+
 EXPOSE 9090 8000 9100
 
 ENTRYPOINT ["aavaaz", "serve"]
