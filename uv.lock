@@ -8,7 +8,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-09-10T19:36:59.906744384Z"
+exclude-newer = "2026-09-11T00:16:03.333720259Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -52,10 +52,12 @@ whisper = [
     { name = "noisereduce" },
     { name = "nvidia-cublas-cu12", marker = "sys_platform == 'linux'" },
     { name = "nvidia-cudnn-cu12", marker = "sys_platform == 'linux'" },
+    { name = "requests" },
     { name = "whisper-live" },
 ]
 whisper-cpu = [
     { name = "noisereduce" },
+    { name = "requests" },
     { name = "whisper-live" },
 ]
 
@@ -80,6 +82,8 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'" },
     { name = "python-multipart" },
+    { name = "requests", marker = "extra == 'whisper'" },
+    { name = "requests", marker = "extra == 'whisper-cpu'" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "soundfile", marker = "extra == 'loadtest'" },
     { name = "stripe", marker = "extra == 'saas'", specifier = ">=8" },

@@ -36,6 +36,8 @@ dependencies = [
 [project.optional-dependencies]
 whisper = [
     "whisper-live>=0.10.0",
+    # faster-whisper imports requests without declaring it
+    "requests",
     # CTranslate2 (faster-whisper's backend) loads CUDA via the system
     # dynamic loader and can't find torch's bundled copies under
     # site-packages/nvidia/. These wheels install the libraries in a
@@ -48,6 +50,8 @@ whisper = [
 ]
 whisper-cpu = [
     "whisper-live>=0.10.0",
+    # faster-whisper imports requests without declaring it
+    "requests",
     "noisereduce",
 ]
 loadtest = [

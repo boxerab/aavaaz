@@ -5,6 +5,8 @@
 -r base.txt
 
 whisper-live>=0.10.0
+# faster-whisper imports requests without declaring it
+requests
 torch
 torchaudio
 faster-whisper>=1.2

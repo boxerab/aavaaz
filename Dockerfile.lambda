@@ -9,7 +9,8 @@ RUN dnf install -y xz tar && \
 COPY pyproject.toml README.md LICENSE ./
 COPY aavaaz/ aavaaz/
 
-RUN pip install --no-cache-dir . faster-whisper==1.2.0
+# faster-whisper imports requests without declaring it
+RUN pip install --no-cache-dir . faster-whisper==1.2.0 requests
 
 RUN pip install --no-cache-dir --no-deps "whisper-live>=0.10.0"
 
