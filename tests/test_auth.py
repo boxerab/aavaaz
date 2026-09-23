@@ -1,8 +1,12 @@
 """Integration tests for the auth module."""
 
+import time
 from unittest.mock import MagicMock
 
+import jwt
 import pytest
+from fastapi import HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 
 from aavaaz.api.auth import configure_auth, create_token, require_auth, verify_token
 
@@ -71,6 +75,54 @@ class TestRequireAuth:
         with pytest.raises(HTTPException) as exc_info:
             await require_auth(request, credentials=None)
         assert exc_info.value.status_code == 401
+
+
+class TestPlatformTokensOnTheRestPath:
+    SECRET = "0123456789abcdef0123456789abcdef"
+
+    def setup_method(self):
+        configure_auth(self.SECRET)
+
+    def _token(self, **claims):
+        payload = {"sub": "user-1", "exp": int(time.time()) + 3600, **claims}
+        return jwt.encode(payload, self.SECRET, algorithm="HS256")
+
+    async def _authenticate(self, token):
+        request = MagicMock()
+        request.headers = {}
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+        return await require_auth(request, credentials=credentials)
+
+    async def test_a_plain_platform_token_is_accepted(self):
+        claims = await self._authenticate(self._token(name="Ann"))
+        assert claims["sub"] == "user-1"
+
+    @pytest.mark.parametrize(
+        "claims",
+        [
+            {"aud": "agora-session"},
+            {"geolang_use": "mcp"},
+            {"token_use": "tool", "scope": ["agora:write"]},
+            {"agora_use": "feed"},
+        ],
+    )
+    async def test_a_token_scoped_elsewhere_is_refused(self, claims):
+        with pytest.raises(HTTPException) as refusal:
+            await self._authenticate(self._token(**claims))
+        assert refusal.value.status_code == 401
+
+    async def test_a_token_without_an_expiry_is_refused(self):
+        token = jwt.encode({"sub": "user-1"}, self.SECRET, algorithm="HS256")
+        with pytest.raises(jwt.MissingRequiredClaimError):
+            verify_token(token)
+        with pytest.raises(HTTPException) as refusal:
+            await self._authenticate(token)
+        assert refusal.value.status_code == 401
+
+    async def test_an_expired_token_is_refused(self):
+        with pytest.raises(HTTPException) as refusal:
+            await self._authenticate(self._token(exp=int(time.time()) - 1))
+        assert refusal.value.detail == "Token expired"
 
 
 class TestJwksVerification:

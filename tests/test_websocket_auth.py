@@ -110,6 +110,18 @@ def test_a_token_carrying_an_audience_is_refused():
     assert check_headers(subprotocol_offer(token)) == UNAUTHORIZED
 
 
+@pytest.mark.parametrize(
+    "claims",
+    [
+        {"geolang_use": "mcp"},
+        {"token_use": "tool", "scope": ["agora:write"]},
+        {"agora_use": "feed"},
+    ],
+)
+def test_a_token_scoped_to_another_service_is_refused(claims):
+    assert check_headers(subprotocol_offer(make_token(**claims))) == UNAUTHORIZED
+
+
 def test_a_token_without_a_subject_is_refused():
     for token in (make_token(sub=""), jwt.encode({"exp": 2 ** 31}, SECRET, algorithm="HS256")):
         assert check_headers(subprotocol_offer(token)) == UNAUTHORIZED

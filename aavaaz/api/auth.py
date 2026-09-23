@@ -30,6 +30,8 @@ BEARER_SUBPROTOCOL = "bearer"
 _BEARER_SCHEME = "Bearer "
 _WEBSOCKET_UNAUTHORIZED_BODY = "Unauthorized\n"
 _PLATFORM_REQUIRED_CLAIMS = ["exp", "sub"]
+# geolang mcp, geolang tool and agora feed tokens, in that order
+_OTHER_SERVICE_TOKEN_CLAIMS = ("geolang_use", "token_use", "agora_use")
 
 # HS256 signs with the secret itself, so a short one is worth guessing offline.
 # The rest of the platform refuses to start under this, and a gate that is weaker
@@ -116,7 +118,7 @@ def verify_token(token: str) -> dict:
         return _verify_jwks_token(token)
     if not _JWT_SECRET:
         raise ValueError("JWT secret not configured")
-    return jwt.decode(token, _JWT_SECRET, algorithms=[_JWT_ALGORITHM])
+    return verify_platform_token(token, _JWT_SECRET)
 
 
 def _websocket_token(headers) -> str | None:
@@ -152,6 +154,8 @@ def verify_platform_token(token: str, secret: str) -> dict:
         raise jwt.InvalidAudienceError("a platform token carries no aud")
     if not claims["sub"]:
         raise jwt.InvalidTokenError("the token names no subject")
+    if any(claim in claims for claim in _OTHER_SERVICE_TOKEN_CLAIMS):
+        raise jwt.InvalidTokenError("the token is scoped to another service")
     return claims
 
 
