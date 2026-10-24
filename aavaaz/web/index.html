@@ -195,7 +195,7 @@
         }
 
         function apiError(status) {
-            if (status === 429) return 'The demo is busy or paused, try again later';
+            if (status === 429 || status === 503) return 'The demo is busy or paused, try again later';
             return `Server error: ${status}`;
         }
 
@@ -268,7 +268,7 @@
         }
 
         async function pollForResult(encodedKey) {
-            const maxAttempts = 120; // Up to 10 minutes (5s intervals)
+            const maxAttempts = 240; // Up to 20 minutes (5s intervals)
             for (let i = 0; i < maxAttempts; i++) {
                 await new Promise(r => setTimeout(r, 5000));
                 const resp = await fetch(`/v1/transcription/${encodedKey}`);

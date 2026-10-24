@@ -1944,12 +1944,12 @@ curl -X POST http://localhost:<span class="num">8000</span>/v1/audio/transcripti
         }
 
         function apiError(status, body) {
-            if (status === 429) return 'The demo is busy or paused, try again later';
+            if (status === 429 || status === 503) return 'The demo is busy or paused, try again later';
             return body;
         }
 
         async function pollForResult(encodedKey) {
-            const maxAttempts = 120;
+            const maxAttempts = 240;
             let usingRealProgress = false;
             for (let i = 0; i < maxAttempts; i++) {
                 await new Promise(r => setTimeout(r, 5000));
