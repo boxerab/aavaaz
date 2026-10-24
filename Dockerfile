@@ -26,6 +26,8 @@ RUN python3.12 -m pip install --no-cache-dir --no-deps --force-reinstall .
 
 # an undeclared dependency of the engine only shows up on import
 RUN python3.12 -c "import aavaaz.server"
+COPY deploy/check_audio_decode.py ./
+RUN python3.12 check_audio_decode.py
 
 EXPOSE 9090 8000 9100
 

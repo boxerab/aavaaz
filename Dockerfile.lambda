@@ -14,6 +14,8 @@ COPY aavaaz/ aavaaz/
 RUN pip install --no-cache-dir . faster-whisper==1.2.0 requests "av<19"
 
 RUN pip install --no-cache-dir --no-deps "whisper-live>=0.10.0"
+COPY deploy/check_audio_decode.py ./
+RUN python3 check_audio_decode.py
 
 # Pre-download the default model during build to avoid cold-start download.
 # Override AAVAAZ_MODEL at runtime to use a different model.
