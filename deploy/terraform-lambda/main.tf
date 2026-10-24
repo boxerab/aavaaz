@@ -150,6 +150,23 @@ resource "aws_s3_bucket_lifecycle_configuration" "input_cleanup" {
   }
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "transcript_cleanup" {
+  bucket = aws_s3_bucket.transcript_output.id
+
+  rule {
+    id     = "expire-unfetched-transcripts"
+    status = "Enabled"
+
+    filter {
+      prefix = "transcripts/"
+    }
+
+    expiration {
+      days = 1
+    }
+  }
+}
+
 # ---------- Monthly Budget Guardrail ----------
 
 resource "aws_budgets_budget" "lambda_monthly_usage" {
@@ -287,6 +304,17 @@ resource "aws_iam_role_policy" "lambda_s3" {
           "${aws_s3_bucket.transcript_output.arn}/transcripts/*",
           "${aws_s3_bucket.transcript_output.arn}/audio/*",
         ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:DeleteObject"]
+        Resource = "${aws_s3_bucket.transcript_output.arn}/transcripts/*"
+      },
+      # without it S3 reports a missing transcript as AccessDenied, not NoSuchKey
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = aws_s3_bucket.transcript_output.arn
       },
     ]
   })

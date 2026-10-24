@@ -209,6 +209,7 @@ The public demo has no authentication, so these limits bound what one caller can
 - S3-triggered jobs are not retried, so a failed or timed-out file runs once.
 - Presigned uploads are refused by S3 above 50 MB.
 - A presigned upload expires after 10 minutes, and uploaded files are deleted after 1 day.
+- A transcript is deleted once the status endpoint returns it, or after 1 day if nobody fetches it.
 - `callback_url` is ignored on unauthenticated requests.
 
 ## Model Selection
