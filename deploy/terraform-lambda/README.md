@@ -58,7 +58,7 @@ Ensure Docker is installed and running: https://docs.docker.com/engine/install/
 
 #### Add SNS permissions for the budget shutdown guardrail
 
-The `$50` budget shutdown path uses AWS Budgets → SNS → Lambda. The deploy user therefore needs permission to create and manage the SNS topic named `aavaaz-lambda-budget-shutdown`.
+The budget shutdown path uses AWS Budgets → SNS → Lambda. The deploy user therefore needs permission to create and manage the SNS topic named `aavaaz-lambda-budget-shutdown`.
 
 In the AWS Console:
 
@@ -100,7 +100,10 @@ In the AWS Console:
         "budgets:TagResource",
         "budgets:UntagResource"
       ],
-      "Resource": "arn:aws:budgets::000152811496:budget/aavaaz-lambda-monthly-usage"
+      "Resource": [
+        "arn:aws:budgets::000152811496:budget/aavaaz-lambda-monthly-usage",
+        "arn:aws:budgets::000152811496:budget/aavaaz-account-monthly-usage"
+      ]
     }
   ]
 }
@@ -177,29 +180,36 @@ curl -X POST "$API_ENDPOINT" \
 | S3 | 5GB storage | Audio + transcript storage |
 | ECR | 500MB storage | Container image |
 
-With `small` at 3GB RAM on CPU, transcription runs at roughly 1.5x realtime (5-min audio ≈ 200s processing), so free tier gives you approximately **37 hours of Lambda compute per month**.
+With `small` at 3GB RAM on CPU, transcription runs at about realtime: 4.5 minutes of audio took 244 to 353 s on a warm Lambda. The free tier gives you approximately **37 hours of Lambda compute per month**, which is about 37 hours of audio.
 
 ## Monthly Budget Guardrail
 
-Terraform creates an AWS Budget named `aavaaz-lambda-monthly-usage` with a default monthly limit of **$50**. It also deploys a budget shutdown handler by default. When actual monthly spend reaches 100% of the budget, AWS Budgets publishes to SNS and the handler disables the transcription Lambda by setting reserved concurrency to `0`.
+Terraform creates two AWS Budgets. Both count spend before credits, so they track real usage while AWS credits pay the bill.
 
-Add an alert email to receive notifications at 80% forecasted spend and 100% actual spend:
+- `aavaaz-lambda-monthly-usage`, default **$100**, counts Lambda, API Gateway and S3. It emails at 50%, 80% and 100% of actual spend. At 100% it also publishes to SNS, and the shutdown handler sets the transcription Lambda's reserved concurrency to `0`.
+- `aavaaz-account-monthly-usage`, **$250**, counts the whole account and only emails, on forecasted and actual spend reaching 100%.
 
-```bash
-terraform apply \
-  -var="monthly_budget_limit_usd=50" \
-  -var="budget_alert_email=you@example.com"
+`budget_alert_email` is required. Put it in `terraform.tfvars`, which is gitignored:
+
+```hcl
+budget_alert_email = "you@example.com"
 ```
 
-AWS Budgets sends notifications; it does not hard-stop Lambda invocations by itself. The included shutdown handler performs the stop action, but AWS Budget notifications can lag behind real-time spend.
+AWS sends a confirmation email to that address before alerts start. Budget data lags real spend by several hours, so the shutdown can fire after the limit is passed.
 
-To re-enable the service after reviewing spend:
+To re-enable the service after reviewing spend, run `terraform apply`, which sets reserved concurrency back to 5.
 
-```bash
-aws lambda delete-function-concurrency \
-  --function-name aavaaz-transcribe \
-  --region us-east-1
-```
+## Demo Limits
+
+The public demo has no authentication, so these limits bound what one caller can spend:
+
+- The Lambda runs at most 5 invocations at once.
+- The API Gateway stage allows 10 requests per second, with a burst of 20.
+- Audio longer than 5 minutes is refused before transcription, with a 413 on the API and a `failed` status on S3 uploads.
+- S3-triggered jobs are not retried, so a failed or timed-out file runs once.
+- Presigned uploads are refused by S3 above 50 MB.
+- A presigned upload expires after 10 minutes, and uploaded files are deleted after 1 day.
+- `callback_url` is ignored on unauthenticated requests.
 
 ## Model Selection
 
@@ -207,7 +217,7 @@ aws lambda delete-function-concurrency \
 |-------|--------|-----------|--------------|-----------|----------|-----------|
 | `tiny.en` | 39M | ~47s | ~7x realtime | ~43s | Good for clear English | ~$0.002 |
 | `base.en` | 74M | ~60s | ~4x realtime | ~75s | Better | ~$0.004 |
-| `small` | 244M | ~90s | ~1.5x realtime | ~200s | Much better (accents, noise, multilingual audio) | ~$0.01 |
+| `small` | 244M | ~100s | ~1x realtime | ~270-390s | Much better (accents, noise, multilingual audio) | ~$0.02 |
 | `medium.en` | 769M | ❌ | - | - | - | Won't fit in 3GB |
 
 **Recommendations:**
@@ -237,11 +247,11 @@ terraform apply -var="whisper_model=base" -var="lambda_memory_mb=2048"
 |----------|---------|-------------|
 | `whisper_model` | `small` | Whisper model (tiny, base, small) |
 | `lambda_memory_mb` | 3008 | Lambda memory (more = more CPU, max 3008 free tier) |
-| `lambda_timeout` | 300 | Max seconds per invocation |
+| `lambda_timeout` | 900 | Max seconds per invocation |
 | `output_format` | json | Transcript format |
 | `enable_api_gateway` | true | Create HTTP API |
-| `monthly_budget_limit_usd` | 50 | Monthly AWS Budget limit in USD |
-| `budget_alert_email` | empty | Optional email for budget alerts |
+| `monthly_budget_limit_usd` | 100 | Monthly limit on Lambda, API Gateway and S3 spend in USD |
+| `budget_alert_email` | required | Email for budget alerts |
 | `enable_budget_shutdown` | true | Disable the Lambda function when actual spend reaches the budget limit |
 
 **Note:** The deploy script uses `WHISPER_MODEL` env var to control the Docker build model. The Terraform variable controls the Lambda environment variable (they should match).
@@ -271,9 +281,6 @@ Check CloudWatch logs:
 ```bash
 aws logs tail /aws/lambda/aavaaz-transcribe --since 5m
 ```
-
-### Function URL returns 403
-Some AWS accounts restrict public Lambda Function URLs. Use the API Gateway endpoint instead.
 
 ## Cleanup
 

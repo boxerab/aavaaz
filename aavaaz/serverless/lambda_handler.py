@@ -219,6 +219,24 @@ def _store_audio(audio_path: str, filename: str | None = None) -> str | None:
         return None
 
 
+MAX_AUDIO_SECONDS = 5 * 60
+
+
+class AudioTooLongError(ValueError):
+    pass
+
+
+def _reject_long_audio(audio_path: str) -> None:
+    from faster_whisper.audio import decode_audio
+
+    seconds = len(decode_audio(audio_path, sampling_rate=16000)) / 16000
+    if seconds > MAX_AUDIO_SECONDS:
+        raise AudioTooLongError(
+            f"Audio is {seconds / 60:.1f} minutes, the demo limit is "
+            f"{MAX_AUDIO_SECONDS // 60} minutes."
+        )
+
+
 def _transcribe(
     audio_path: str,
     progress_callback=None,
@@ -241,6 +259,7 @@ def _transcribe(
         os.environ.get("AAVAAZ_MODEL", "small"),
     )
     t0 = time.time()
+    _reject_long_audio(audio_path)
 
     model = _get_model()
     language = os.environ.get("AAVAAZ_LANGUAGE") or None
@@ -494,13 +513,18 @@ def handler(event: dict, context: Any) -> dict:
 
         user_id, err = _authenticate(event)
         return err or _handle_api(event, context, user_id)
+    except AudioTooLongError as exc:
+        return _response(413, json.dumps({"error": str(exc)}))
     except Exception:
         logger.exception("Unhandled error: request_id=%s", request_id)
         return _response(500, json.dumps({"error": "Internal server error"}))
 
 
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+
 def _handle_upload_url(event: dict, user_id: str | None = None) -> dict:
-    """Generate a presigned S3 PUT URL for direct browser upload.
+    """Generate a presigned S3 POST for direct browser upload.
 
     Query params:
       filename — original filename (used as S3 key suffix)
@@ -509,7 +533,8 @@ def _handle_upload_url(event: dict, user_id: str | None = None) -> dict:
         stored as S3 object metadata and applied when the S3-trigger transcription
         runs (the S3 path has no request body of its own).
 
-    Returns the presigned URL plus `required_headers` the client must echo on the PUT.
+    Returns the POST URL plus the `fields` the client must send before the file
+    in a multipart form. S3 refuses files over MAX_UPLOAD_BYTES.
     """
     params = event.get("queryStringParameters") or {}
     filename = params.get("filename", f"{uuid.uuid4().hex}.wav")
@@ -528,12 +553,6 @@ def _handle_upload_url(event: dict, user_id: str | None = None) -> dict:
 
     # Optional per-request feature config, url-safe base64 so it survives as ASCII
     # S3 object metadata and gets read back in the S3-trigger transcription path.
-    put_params: dict[str, Any] = {
-        "Bucket": bucket,
-        "Key": key,
-        "ContentType": content_type,
-    }
-    required_headers = {"Content-Type": content_type}
     metadata = {
         name: params[q]
         for name, q in (
@@ -545,23 +564,30 @@ def _handle_upload_url(event: dict, user_id: str | None = None) -> dict:
     }
     if user_id:
         metadata["user_id"] = user_id
-    if metadata:
-        put_params["Metadata"] = metadata
-        required_headers.update({f"x-amz-meta-{k}": v for k, v in metadata.items()})
+    fields = {
+        "Content-Type": content_type,
+        **{f"x-amz-meta-{k}": v for k, v in metadata.items()},
+    }
 
-    s3 = _s3_client()
-    presigned_url = s3.generate_presigned_url(
-        "put_object", Params=put_params, ExpiresIn=3600
+    post = _s3_client().generate_presigned_post(
+        Bucket=bucket,
+        Key=key,
+        Fields=fields,
+        Conditions=[
+            *({name: value} for name, value in fields.items()),
+            ["content-length-range", 1, MAX_UPLOAD_BYTES],
+        ],
+        ExpiresIn=600,
     )
 
     return _response(
         200,
         json.dumps(
             {
-                "upload_url": presigned_url,
+                "upload_url": post["url"],
+                "fields": post["fields"],
                 "key": key,
                 "bucket": bucket,
-                "required_headers": required_headers,
             }
         ),
         {"Content-Type": "application/json"},
@@ -788,7 +814,7 @@ def _handle_s3(event: dict, context: Any) -> dict:
 
             _record_usage(cfg.get("user_id"), result, os.path.basename(key))
 
-            callback_url = cfg.get("callback_url")
+            callback_url = cfg.get("callback_url") if cfg.get("user_id") else None
             if callback_url:
                 from aavaaz.features.webhook import send_webhook
 
@@ -823,9 +849,7 @@ def _handle_s3(event: dict, context: Any) -> dict:
         except Exception as exc:
             logger.exception("Failed processing s3://%s/%s", bucket, key)
             _write_status("failed", 0, str(exc))
-            continue
 
-        # Delete the input audio file from S3 after successful transcription
         try:
             s3.delete_object(Bucket=bucket, Key=key)
             logger.info("Deleted input s3://%s/%s", bucket, key)
@@ -994,7 +1018,7 @@ def _handle_api(event: dict, context: Any, user_id: str | None = None) -> dict:
 
     _record_usage(user_id, result, source_name)
 
-    callback_url = payload.get("callback_url")
+    callback_url = payload.get("callback_url") if user_id else None
     if callback_url:
         from aavaaz.features.webhook import send_webhook
 

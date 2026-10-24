@@ -113,6 +113,7 @@ class WebSocketAdapter:
     timeout=600,
     secrets=[_aavaaz_secret],
     scaledown_window=120,
+    max_containers=1,
 )
 @modal.concurrent(max_inputs=4)
 class LiveTranscriber:

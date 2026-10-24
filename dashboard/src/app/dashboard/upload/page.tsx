@@ -184,21 +184,21 @@ export default function UploadPage() {
     if (!urlRes.ok) {
       throw new Error(`Failed to get upload URL: ${await urlRes.text()}`);
     }
-    const { upload_url, key, required_headers } = await urlRes.json();
+    const { upload_url, fields, key }: { upload_url: string; fields: Record<string, string>; key: string } =
+      await urlRes.json();
     activeUploadKeyRef.current = key;
 
-    // Step 2: Upload file directly to S3 via presigned URL (no size limit)
+    // Step 2: Upload file directly to S3 via presigned POST
     setProgress(10);
     setProgressStage("Uploading to S3...");
 
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       activeXhrRef.current = xhr;
-      xhr.open("PUT", upload_url);
-      const putHeaders: Record<string, string> = required_headers || {
-        "Content-Type": file.type || "application/octet-stream",
-      };
-      Object.entries(putHeaders).forEach(([h, v]) => xhr.setRequestHeader(h, v as string));
+      xhr.open("POST", upload_url);
+      const uploadForm = new FormData();
+      Object.entries(fields).forEach(([name, value]) => uploadForm.append(name, value));
+      uploadForm.append("file", file);
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
@@ -214,7 +214,7 @@ export default function UploadPage() {
       xhr.onabort = () => reject(new Error("Upload canceled"));
       xhr.timeout = 300000;
       xhr.ontimeout = () => reject(new Error("Upload timed out"));
-      xhr.send(file);
+      xhr.send(uploadForm);
     });
 
     // Step 3: Poll for transcription result (S3 trigger handles processing)
@@ -506,7 +506,7 @@ export default function UploadPage() {
             <Upload className="h-12 w-12 mx-auto text-muted-foreground" />
             <p className="font-medium">Drop audio file here or click to browse</p>
             <p className="text-sm text-muted-foreground">
-              MP3, WAV, M4A, FLAC, OGG, MOV, MP4, WebM up to 25MB
+              MP3, WAV, M4A, FLAC, OGG, MOV, MP4, WebM, up to 5 minutes of audio, 50 MB
             </p>
           </div>
         )}

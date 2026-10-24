@@ -46,15 +46,14 @@ variable "whisper_model" {
 }
 
 variable "monthly_budget_limit_usd" {
-  description = "Monthly AWS budget limit for this Lambda deployment account"
+  description = "Monthly limit on Lambda, API Gateway and S3 spend before credits"
   type        = number
-  default     = 50
+  default     = 100
 }
 
 variable "budget_alert_email" {
-  description = "Optional email address for budget alerts"
+  description = "Email address for budget alerts"
   type        = string
-  default     = ""
 }
 
 variable "enable_budget_shutdown" {
@@ -72,7 +71,7 @@ variable "lambda_memory_mb" {
 variable "lambda_timeout" {
   description = "Lambda timeout in seconds (max 900)"
   type        = number
-  default     = 300
+  default     = 900
 }
 
 variable "output_format" {
@@ -123,7 +122,7 @@ resource "aws_s3_bucket_cors_configuration" "audio_input_cors" {
 
   cors_rule {
     allowed_headers = ["*"]
-    allowed_methods = ["PUT"]
+    allowed_methods = ["POST"]
     allowed_origins = ["*"]
     max_age_seconds = 3600
   }
@@ -146,7 +145,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "input_cleanup" {
     }
 
     expiration {
-      days = 7
+      days = 1
     }
   }
 }
@@ -160,40 +159,65 @@ resource "aws_budgets_budget" "lambda_monthly_usage" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
-  dynamic "notification" {
-    for_each = var.budget_alert_email == "" ? [] : [var.budget_alert_email]
+  cost_filter {
+    name   = "Service"
+    values = ["AWS Lambda", "Amazon API Gateway", "Amazon Simple Storage Service"]
+  }
 
-    content {
-      comparison_operator        = "GREATER_THAN"
-      threshold                  = 80
-      threshold_type             = "PERCENTAGE"
-      notification_type          = "FORECASTED"
-      subscriber_email_addresses = [notification.value]
-    }
+  # credits bring actual spend to zero
+  cost_types {
+    include_credit = false
+    include_refund = false
   }
 
   dynamic "notification" {
-    for_each = var.budget_alert_email == "" ? [] : [var.budget_alert_email]
+    for_each = [50, 80]
 
     content {
       comparison_operator        = "GREATER_THAN"
-      threshold                  = 100
+      threshold                  = notification.value
       threshold_type             = "PERCENTAGE"
       notification_type          = "ACTUAL"
-      subscriber_email_addresses = [notification.value]
+      subscriber_email_addresses = [var.budget_alert_email]
     }
   }
 
-  dynamic "notification" {
-    for_each = var.enable_budget_shutdown ? [aws_sns_topic.budget_shutdown[0].arn] : []
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 100
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
+    subscriber_email_addresses = [var.budget_alert_email]
+    subscriber_sns_topic_arns  = var.enable_budget_shutdown ? [aws_sns_topic.budget_shutdown[0].arn] : []
+  }
+}
 
-    content {
-      comparison_operator       = "GREATER_THAN"
-      threshold                 = 100
-      threshold_type            = "PERCENTAGE"
-      notification_type         = "ACTUAL"
-      subscriber_sns_topic_arns = [notification.value]
-    }
+resource "aws_budgets_budget" "account_monthly_usage" {
+  name         = "aavaaz-account-monthly-usage"
+  budget_type  = "COST"
+  limit_amount = "250"
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+
+  cost_types {
+    include_credit = false
+    include_refund = false
+  }
+
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 100
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "FORECASTED"
+    subscriber_email_addresses = [var.budget_alert_email]
+  }
+
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 100
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
+    subscriber_email_addresses = [var.budget_alert_email]
   }
 }
 
@@ -323,6 +347,9 @@ resource "aws_lambda_function" "transcribe" {
   memory_size   = var.lambda_memory_mb
   timeout       = var.lambda_timeout
 
+  # the budget shutdown sets this to 0 until the next apply
+  reserved_concurrent_executions = 5
+
   environment {
     variables = {
       AAVAAZ_MODEL         = var.whisper_model
@@ -337,6 +364,12 @@ resource "aws_lambda_function" "transcribe" {
       AAVAAZ_INPUT_BUCKET  = aws_s3_bucket.audio_input.id
     }
   }
+}
+
+# a timed-out S3 job times out again on retry
+resource "aws_lambda_function_event_invoke_config" "transcribe" {
+  function_name          = aws_lambda_function.transcribe.function_name
+  maximum_retry_attempts = 0
 }
 
 data "archive_file" "budget_shutdown" {
@@ -377,12 +410,6 @@ resource "aws_sns_topic_subscription" "budget_shutdown" {
   topic_arn = aws_sns_topic.budget_shutdown[0].arn
   protocol  = "lambda"
   endpoint  = aws_lambda_function.budget_shutdown[0].arn
-}
-
-# Lambda Function URL — no 29s API Gateway timeout limitation
-resource "aws_lambda_function_url" "transcribe" {
-  function_name      = aws_lambda_function.transcribe.function_name
-  authorization_type = "NONE"
 }
 
 # ---------- S3 Event Trigger ----------
@@ -484,6 +511,11 @@ resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.transcribe[0].id
   name        = "$default"
   auto_deploy = true
+
+  default_route_settings {
+    throttling_rate_limit  = 10
+    throttling_burst_limit = 20
+  }
 }
 
 resource "aws_lambda_permission" "apigw_invoke" {
@@ -519,8 +551,4 @@ output "api_endpoint" {
 
 output "web_demo_url" {
   value = var.enable_api_gateway ? aws_apigatewayv2_api.transcribe[0].api_endpoint : ""
-}
-
-output "function_url" {
-  value = aws_lambda_function_url.transcribe.function_url
 }

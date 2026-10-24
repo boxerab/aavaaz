@@ -20,6 +20,7 @@ transcripts/
 *.tfstate
 *.tfstate.backup
 .terraform.lock.hcl
+terraform.tfvars
 
 loadtest/results*/
 loadtest/profile/

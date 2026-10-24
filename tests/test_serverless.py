@@ -35,6 +35,14 @@ def _reset_globals():
     yield
 
 
+@pytest.fixture(autouse=True)
+def decode_audio():
+    audio_module = types.ModuleType("faster_whisper.audio")
+    audio_module.decode_audio = MagicMock(return_value=[0.0] * 16000)
+    with patch.dict(sys.modules, {"faster_whisper.audio": audio_module}):
+        yield audio_module.decode_audio
+
+
 @pytest.fixture
 def _env(monkeypatch):
     monkeypatch.setenv("AAVAAZ_MODEL", "tiny.en")
@@ -250,6 +258,9 @@ def test_handler_s3_failure_writes_failed_status(_env, monkeypatch):
     progress = json.loads(progress_call.kwargs["Body"].decode())
     assert progress["status"] == "failed"
     assert "download failed" in progress["error"]
+    s3.delete_object.assert_called_once_with(
+        Bucket="input-bucket", Key="uploads/broken.mov"
+    )
 
 
 @patch("faster_whisper.WhisperModel")
@@ -293,8 +304,41 @@ def test_handler_adds_intelligence_when_enabled(mock_whisper, _env, monkeypatch)
 
 
 @patch("faster_whisper.WhisperModel")
-def test_handler_fires_webhook_callback(mock_whisper, _env):
-    """A callback_url in the request should trigger a webhook POST of the result."""
+def test_handler_fires_webhook_callback(mock_whisper, _env, monkeypatch):
+    """A callback_url in an authenticated request triggers a webhook POST of the result."""
+    model = MagicMock()
+    model.transcribe.return_value = (_fake_segments(), _fake_info())
+    mock_whisper.return_value = model
+    monkeypatch.setenv("AAVAAZ_REQUIRE_API_KEY", "1")
+
+    from aavaaz.serverless.lambda_handler import handler
+
+    event = {
+        "headers": {"Authorization": "Bearer good-key"},
+        "body": json.dumps(
+            {
+                "audio_base64": base64.b64encode(b"x").decode(),
+                "filename": "a.wav",
+                "callback_url": "https://example.com/hook",
+            }
+        )
+    }
+    with (
+        patch("aavaaz.api.dynamo_store.validate_api_key", return_value="user-1"),
+        patch("aavaaz.api.dynamo_store.record_usage"),
+        patch("aavaaz.api.dynamo_store.save_transcript"),
+        patch("aavaaz.features.webhook.send_webhook") as mock_send,
+    ):
+        result = handler(event, None)
+
+    assert result["statusCode"] == 200
+    mock_send.assert_called_once()
+    assert mock_send.call_args.args[0] == "https://example.com/hook"
+    assert mock_send.call_args.args[1]["segments"][0]["text"] == "Hello world"
+
+
+@patch("faster_whisper.WhisperModel")
+def test_handler_ignores_webhook_when_anonymous(mock_whisper, _env):
     model = MagicMock()
     model.transcribe.return_value = (_fake_segments(), _fake_info())
     mock_whisper.return_value = model
@@ -314,9 +358,7 @@ def test_handler_fires_webhook_callback(mock_whisper, _env):
         result = handler(event, None)
 
     assert result["statusCode"] == 200
-    mock_send.assert_called_once()
-    assert mock_send.call_args.args[0] == "https://example.com/hook"
-    assert mock_send.call_args.args[1]["segments"][0]["text"] == "Hello world"
+    mock_send.assert_not_called()
 
 
 @patch("faster_whisper.WhisperModel")
@@ -651,7 +693,7 @@ def test_s3_records_usage_with_user_metadata(mock_whisper, _env, monkeypatch):
 
 @patch("faster_whisper.WhisperModel")
 def test_s3_fires_webhook_from_metadata(mock_whisper, _env, monkeypatch):
-    """The S3 path fires the callback_url stored in object metadata on completion."""
+    """The S3 path fires the callback_url stored in an authenticated upload's metadata."""
     model = MagicMock()
     model.transcribe.return_value = (_fake_segments(), _fake_info())
     mock_whisper.return_value = model
@@ -670,11 +712,92 @@ def test_s3_fires_webhook_from_metadata(mock_whisper, _env, monkeypatch):
         s3 = MagicMock()
         mock_s3.return_value = s3
         s3.download_file.side_effect = lambda b, k, p: open(p, "wb").close()
-        s3.head_object.return_value = {"Metadata": {"callback_url": cb_b64}}
+        s3.head_object.return_value = {
+            "Metadata": {"callback_url": cb_b64, "user_id": "user-1"}
+        }
         monkeypatch.setenv("AAVAAZ_OUTPUT_BUCKET", "out")
-        result = handler(event, None)
+        with (
+            patch("aavaaz.api.dynamo_store.record_usage"),
+            patch("aavaaz.api.dynamo_store.save_transcript"),
+        ):
+            result = handler(event, None)
 
     assert result["statusCode"] == 200
     send.assert_called_once()
     assert send.call_args.args[0] == "https://example.com/hook"
     assert send.call_args.args[1]["segments"][0]["text"] == "Hello world"
+
+
+def _audio_of_seconds(seconds):
+    audio = MagicMock()
+    audio.__len__.return_value = seconds * 16000
+    return audio
+
+
+@patch("faster_whisper.WhisperModel")
+def test_api_refuses_audio_over_demo_limit(mock_whisper, _env, decode_audio):
+    model = MagicMock()
+    mock_whisper.return_value = model
+    decode_audio.return_value = _audio_of_seconds(301)
+
+    from aavaaz.serverless.lambda_handler import handler
+
+    event = {
+        "body": json.dumps(
+            {"audio_base64": base64.b64encode(b"x").decode(), "filename": "long.wav"}
+        )
+    }
+    result = handler(event, None)
+
+    assert result["statusCode"] == 413
+    assert "5 minutes" in json.loads(result["body"])["error"]
+    model.transcribe.assert_not_called()
+
+
+def test_s3_long_audio_writes_failed_status(_env, monkeypatch, decode_audio):
+    decode_audio.return_value = _audio_of_seconds(301)
+    monkeypatch.setenv("AAVAAZ_OUTPUT_BUCKET", "out")
+
+    from aavaaz.serverless.lambda_handler import handler
+
+    event = {
+        "Records": [{"s3": {"bucket": {"name": "in"}, "object": {"key": "uploads/long.wav"}}}]
+    }
+    with patch("aavaaz.serverless.lambda_handler._s3_client") as mock_s3:
+        s3 = MagicMock()
+        mock_s3.return_value = s3
+        s3.download_file.side_effect = lambda b, k, p: open(p, "wb").close()
+        s3.head_object.return_value = {"Metadata": {}}
+        handler(event, None)
+
+    progress = json.loads(s3.put_object.call_args.kwargs["Body"].decode())
+    assert progress["status"] == "failed"
+    assert "5 minutes" in progress["error"]
+
+
+def test_upload_url_caps_size_and_signs_metadata(_env, monkeypatch):
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    monkeypatch.setenv("AAVAAZ_INPUT_BUCKET", "input-bucket")
+
+    from aavaaz.serverless.lambda_handler import MAX_UPLOAD_BYTES, handler
+
+    event = {
+        "requestContext": {"http": {"method": "GET", "path": "/v1/upload-url"}},
+        "queryStringParameters": {
+            "filename": "talk.mp3",
+            "content_type": "audio/mpeg",
+            "hotwords_b64": "YWF2YWF6",
+        },
+    }
+    with mock_aws():
+        result = handler(event, None)
+
+    body = json.loads(result["body"])
+    assert body["key"].startswith("uploads/") and body["key"].endswith("_talk.mp3")
+    assert body["fields"]["x-amz-meta-hotwords"] == "YWF2YWF6"
+    policy = json.loads(base64.b64decode(body["fields"]["policy"]))
+    assert ["content-length-range", 1, MAX_UPLOAD_BYTES] in policy["conditions"]
+    assert {"Content-Type": "audio/mpeg"} in policy["conditions"]
+    assert {"x-amz-meta-hotwords": "YWF2YWF6"} in policy["conditions"]

@@ -105,7 +105,7 @@ defaults for that request:
 |-------|------|-------------|
 | `features` | object | Feature config (dashboard `FeaturesConfig` shape): `formatting`, `pii`, `profanity`, `intelligence`, `noiseReduction`. Overrides the `AAVAAZ_ENABLE_*` defaults. |
 | `hotwords` | string | Custom-vocabulary terms to bias recognition. |
-| `callback_url` | string | Webhook URL POSTed with the transcript on completion. |
+| `callback_url` | string | Webhook URL POSTed with the transcript on completion. Ignored unless the request carries a valid API key, which needs `AAVAAZ_REQUIRE_API_KEY=1`. |
 
 The S3-trigger path has no request body, so the large-file upload flow carries
 the same options as url-safe base64 in `/v1/upload-url` query params

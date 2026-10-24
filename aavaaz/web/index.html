@@ -97,6 +97,7 @@
 
         <div id="dropZone" aria-label="Drop audio file here or click to select" style="position: relative;">
             Drop audio file here or click to select
+            <p>Free demo: up to 5 minutes of audio, 50 MB</p>
             <input type="file" id="fileInput" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;">
         </div>
         
@@ -113,7 +114,6 @@
         const progress = document.getElementById('progress');
         const result = document.getElementById('result');
         const downloadBtn = document.getElementById('downloadBtn');
-        const serverUrl = '/v1/audio/transcriptions';
 
         // Allowed audio extensions (lowercase for consistency)
         const allowedExtensions = ['.mp3', '.wav', '.ogg', '.aac', '.flac', '.m4a', '.wma', '.mov'];
@@ -156,7 +156,7 @@
                 if (isAudioFile(file)) {
                     uploadFile(file);
                 } else {
-                    alert('Invalid file type or size exceeds 25MB. Please drop an audio file (e.g., MP3, WAV).');
+                    alert('Free demo: up to 5 minutes of audio, 50 MB. Please drop an audio file (e.g., MP3, WAV).');
                 }
             }
         }
@@ -169,7 +169,7 @@
                     uploadFile(file);
                     fileInput.value = ''; // Reset to allow re-selecting the same file
                 } else {
-                    alert('Invalid file type or size exceeds 25MB. Please select an audio file (e.g., MP3, WAV).');
+                    alert('Free demo: up to 5 minutes of audio, 50 MB. Please select an audio file (e.g., MP3, WAV).');
                     fileInput.value = ''; // Optional reset on invalid
                 }
             }
@@ -179,7 +179,7 @@
         function isAudioFile(file) {
             const extension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
             const isValidType = file.type.startsWith('audio/') && allowedExtensions.includes(extension);
-            const isValidSize = file.size <= 25 * 1024 * 1024; // 25MB limit
+            const isValidSize = file.size <= 50 * 1024 * 1024;
             return isValidType && isValidSize;
         }
 
@@ -191,56 +191,12 @@
             result.textContent = '';
             downloadBtn.style.display = 'none';
 
-            // Files > 6 MB use presigned S3 upload to bypass API Gateway limits
-            if (file.size > 6 * 1024 * 1024) {
-                uploadViaS3(file, progressBar);
-            } else {
-                uploadDirect(file, progressBar);
-            }
+            uploadViaS3(file, progressBar);
         }
 
-        function uploadDirect(file, progressBar) {
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('model', 'whisper-1');
-            formData.append('response_format', 'text');
-            const language = document.getElementById('language').value;
-            if (language) {
-                formData.append('language', language);
-            }
-
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', serverUrl);
-            xhr.upload.onprogress = (event) => {
-                if (event.lengthComputable) {
-                    progressBar.value = (event.loaded / event.total) * 100;
-                }
-            };
-            xhr.onload = () => {
-                if (xhr.status >= 200 && xhr.status < 300) {
-                    const transcription = xhr.responseText;
-                    progress.textContent = 'Transcription complete!';
-                    result.textContent = transcription;
-                    downloadBtn.style.display = 'block';
-                    downloadBtn.onclick = () => {
-                        const blob = new Blob([transcription], { type: 'text/plain' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `${file.name.replace(/\.[^/.]+$/, "")}_transcription.txt`;
-                        a.click();
-                        URL.revokeObjectURL(url);
-                    };
-                } else {
-                    progress.textContent = `Server error: ${xhr.status}`;
-                }
-                progressBar.style.display = 'none';
-            };
-            xhr.onerror = () => {
-                progress.textContent = 'Network error occurred.';
-                progressBar.style.display = 'none';
-            };
-            xhr.send(formData);
+        function apiError(status) {
+            if (status === 429) return 'The demo is busy or paused, try again later';
+            return `Server error: ${status}`;
         }
 
         async function uploadViaS3(file, progressBar) {
@@ -253,17 +209,19 @@
                 });
                 const urlResp = await fetch(`/v1/upload-url?${params}`);
                 if (!urlResp.ok) {
-                    progress.textContent = `Error getting upload URL: ${urlResp.status}`;
+                    progress.textContent = apiError(urlResp.status);
                     progressBar.style.display = 'none';
                     return;
                 }
-                const { upload_url, key } = await urlResp.json();
+                const { upload_url, fields, key } = await urlResp.json();
 
-                // Step 2: Upload directly to S3 via presigned URL
+                // Step 2: Upload directly to S3 via presigned POST
                 progress.textContent = 'Uploading file...';
+                const uploadForm = new FormData();
+                for (const [name, value] of Object.entries(fields)) uploadForm.append(name, value);
+                uploadForm.append('file', file);
                 const xhr = new XMLHttpRequest();
-                xhr.open('PUT', upload_url);
-                xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+                xhr.open('POST', upload_url);
                 xhr.upload.onprogress = (event) => {
                     if (event.lengthComputable) {
                         progressBar.value = (event.loaded / event.total) * 100;
@@ -279,7 +237,7 @@
                         }
                     };
                     xhr.onerror = () => reject(new Error('Network error during upload'));
-                    xhr.send(file);
+                    xhr.send(uploadForm);
                 });
 
                 // Step 3: Poll for transcription result
@@ -320,7 +278,7 @@
                         return data.transcript;
                     }
                     if (data.status === 'failed' || data.status === 'canceled') {
-                        throw new Error(`Transcription ${data.status}`);
+                        throw new Error(data.error || `Transcription ${data.status}`);
                     }
                 }
                 // 202 means still processing — continue polling
