@@ -38,6 +38,8 @@ whisper = [
     "whisper-live>=0.10.0",
     # faster-whisper imports requests without declaring it
     "requests",
+    # PyAV 19 dropped the metadata_errors argument that faster-whisper's decode_audio passes
+    "av<19",
     # CTranslate2 (faster-whisper's backend) loads CUDA via the system
     # dynamic loader and can't find torch's bundled copies under
     # site-packages/nvidia/. These wheels install the libraries in a
@@ -52,6 +54,8 @@ whisper-cpu = [
     "whisper-live>=0.10.0",
     # faster-whisper imports requests without declaring it
     "requests",
+    # PyAV 19 dropped the metadata_errors argument that faster-whisper's decode_audio passes
+    "av<19",
     "noisereduce",
 ]
 loadtest = [

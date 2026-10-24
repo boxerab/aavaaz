@@ -10,6 +10,8 @@ requests
 torch
 torchaudio
 faster-whisper>=1.2
+# PyAV 19 dropped the metadata_errors argument that faster-whisper's decode_audio passes
+av<19
 websockets
 scipy
 
