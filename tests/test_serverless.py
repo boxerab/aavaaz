@@ -14,16 +14,6 @@ from moto import mock_aws
 _mock_fw = MagicMock()
 sys.modules.setdefault("faster_whisper", _mock_fw)
 
-# lambda_handler tries `from whisper_live.transcriber.transcriber_faster_whisper
-# import WhisperModel` first; make that submodule a real, empty ModuleType so the
-# import raises ImportError and the handler falls back to the mocked faster_whisper.
-sys.modules.setdefault("whisper_live", MagicMock())
-sys.modules.setdefault("whisper_live.transcriber", MagicMock())
-sys.modules.setdefault(
-    "whisper_live.transcriber.transcriber_faster_whisper",
-    types.ModuleType("whisper_live.transcriber.transcriber_faster_whisper"),
-)
-
 
 @pytest.fixture(autouse=True)
 def _reset_globals():

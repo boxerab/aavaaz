@@ -80,10 +80,8 @@ def _get_model() -> Any:
     """Return a cached WhisperModel, loading on first call."""
     global _model
     if _model is None:
-        try:
-            from whisper_live.transcriber.transcriber_faster_whisper import WhisperModel
-        except ImportError:
-            from faster_whisper import WhisperModel
+        # whisper_live's WhisperModel returns no segment until all of them are decoded
+        from faster_whisper import WhisperModel
 
         name = os.environ.get("AAVAAZ_MODEL", "small")
         logger.info("Loading Whisper model %s", name)

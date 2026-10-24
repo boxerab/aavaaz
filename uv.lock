@@ -8,12 +8,12 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-09-11T00:16:03.333720259Z"
+exclude-newer = "2026-10-17T21:39:25.234691062Z"
 exclude-newer-span = "P7D"
 
 [[package]]
 name = "aavaaz"
-version = "0.10.0"
+version = "0.10.1"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
@@ -49,6 +49,7 @@ sdk = [
     { name = "websockets" },
 ]
 whisper = [
+    { name = "av" },
     { name = "noisereduce" },
     { name = "nvidia-cublas-cu12", marker = "sys_platform == 'linux'" },
     { name = "nvidia-cudnn-cu12", marker = "sys_platform == 'linux'" },
@@ -56,6 +57,7 @@ whisper = [
     { name = "whisper-live" },
 ]
 whisper-cpu = [
+    { name = "av" },
     { name = "noisereduce" },
     { name = "requests" },
     { name = "whisper-live" },
@@ -64,6 +66,8 @@ whisper-cpu = [
 [package.metadata]
 requires-dist = [
     { name = "av", marker = "extra == 'dev'" },
+    { name = "av", marker = "extra == 'whisper'", specifier = "<19" },
+    { name = "av", marker = "extra == 'whisper-cpu'", specifier = "<19" },
     { name = "boto3" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", marker = "extra == 'dev'" },
