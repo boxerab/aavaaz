@@ -218,89 +218,15 @@ class LiveTranscriber:
         return ClientManager(max_clients=max_clients, max_connection_time=max_time)
 
     def _build_post_processor(self, features=None):
-        """Build a segment post-processing pipeline.
+        from aavaaz.features.enrichment import build_pipeline
 
-        If `features` dict is provided (from client options), build a
-        per-connection pipeline based on the client's feature config.
-        Otherwise, fall back to environment-variable-based defaults.
-        """
-        import os
-
-        fns = []
-
-        if features:
-            # Per-client feature configuration from dashboard
-            fmt = features.get("formatting", {})
-            if fmt.get("enabled", False):
-                from aavaaz.features.formatting import format_transcript
-
-                capitalize = fmt.get("capitalize", True)
-                numbers = fmt.get("numbers", True)
-                smart = fmt.get("smart", False)
-                fns.append(
-                    lambda text: format_transcript(
-                        text, capitalize=capitalize, numbers=numbers, smart=smart
-                    )
-                )
-
-            pii = features.get("pii", {})
-            if pii.get("enabled", False):
-                from aavaaz.features.pii_redaction import redact_pii
-
-                pii_types = set(
-                    pii.get(
-                        "types", ["ssn", "credit_card", "phone", "email", "ip_address"]
-                    )
-                )
-                fns.append(lambda text, _t=pii_types: redact_pii(text, pii_types=_t))
-
-            profanity = features.get("profanity", {})
-            if profanity.get("enabled", False):
-                from aavaaz.features.profanity_filter import filter_profanity
-
-                mode = profanity.get("mode", "partial")
-                extra = profanity.get("extraWords", [])
-                fns.append(
-                    lambda text, _m=mode, _e=extra: filter_profanity(
-                        text, mode=_m, extra_words=_e or None
-                    )
-                )
-
-            intel = features.get("intelligence", {})
-            if intel.get("fillerRemoval", False):
-                from aavaaz.features.audio_intelligence import remove_filler_words
-
-                aggressive = intel.get("fillerAggressive", False)
-                fns.append(
-                    lambda text, _a=aggressive: remove_filler_words(text, aggressive=_a)
-                )
-
-            nr = features.get("noiseReduction", {})
-            if nr.get("enabled", False):
-                # Note: noise reduction operates on audio, not text segments.
-                # It will be applied in the audio pre-processing step.
-                pass
-
-        else:
-            # Legacy env-var-based config
-            if os.environ.get("AAVAAZ_ENABLE_FORMAT", "1") == "1":
-                from aavaaz.features.formatting import smart_format
-
-                fns.append(smart_format)
-            if os.environ.get("AAVAAZ_ENABLE_PII", "0") == "1":
-                from aavaaz.features.pii_redaction import redact_pii
-
-                fns.append(redact_pii)
-
+        fns = build_pipeline(features)
         if not fns:
             return None
 
         def pipeline(segment):
             for fn in fns:
-                if isinstance(segment, dict) and "text" in segment:
-                    segment["text"] = fn(segment["text"])
-                else:
-                    segment = fn(segment)
+                segment["text"] = fn(segment["text"])
             return segment
 
         return pipeline

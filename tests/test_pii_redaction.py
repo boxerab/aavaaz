@@ -85,6 +85,16 @@ class TestPIIPhone:
         # Short numbers shouldn't be matched as phone numbers
         assert "2024" in result
 
+    def test_digits_read_out_one_at_a_time(self):
+        result = redact_pii("Please call me at 5-5-5-1-2-3-4-5-6-7.")
+        assert result == "Please call me at [PHONE_REDACTED]."
+
+    def test_ten_digit_run_is_not_split_into_an_ssn(self):
+        assert redact_pii("call 1 2 3 4 5 6 7 8 9 0") == "call [PHONE_REDACTED]"
+
+    def test_numbers_side_by_side_are_not_joined(self):
+        assert redact_pii("In 2024 1500 people came") == "In 2024 1500 people came"
+
 
 class TestPIIEmail:
     """5.7 - PII redaction: email addresses."""

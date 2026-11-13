@@ -34,7 +34,7 @@ Wired = reachable through a running entry point. Library = importable but not co
 | Module | Status | Where wired |
 |---|---|---|
 | `formatting` | Wired | streaming plugin (`--smart-format`), lambda, modal |
-| find and replace (`formatting.compile_replacements`) | Wired | streaming plugin (`--replace`, `--replace-regex`), lambda + modal batch (`formatting.replacements` in features), not app_live |
+| find and replace (`formatting.compile_replacements`) | Wired | streaming plugin (`--replace`, `--replace-regex`), lambda + modal (`formatting.replacements` in features) |
 | `pii_redaction` | Wired | streaming plugin (`--pii-redaction`), lambda, modal |
 | `profanity_filter` | Wired | streaming plugin (`--profanity-filter`, `--profanity-mode`, `--profanity-words`), lambda, modal, app_live |
 | `audio_intelligence` | Wired | streaming plugin per segment + whole-transcript analysis at stream end (`--intelligence`); filler removal (`--filler-removal`); chapters at stream end (`--chapters`); lambda (`AAVAAZ_ENABLE_INTELLIGENCE`, `intelligence.chapters` in features), modal |

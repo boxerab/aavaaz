@@ -32,12 +32,24 @@ _EMAIL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+_NOT_AFTER_DIGIT = r"(?<!\d)(?<!\d[-.\s])"
+_NOT_BEFORE_DIGIT = r"(?![-.\s]?\d)"
+
+
+def _digits(count: int, separators: str) -> str:
+    # whisper writes digits read out one at a time as "5-5-5-1-2-3-4-5-6-7"
+    return rf"\d(?:[{separators}]?\d){{{count - 1}}}"
+
+
 # Regex patterns for PII detection
 _PATTERNS = {
-    "ssn": re.compile(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b"),
-    "credit_card": re.compile(r"\b(?:\d{4}[-\s]?){3}\d{4}\b"),
+    "ssn": re.compile(_NOT_AFTER_DIGIT + _digits(9, r"-\s") + _NOT_BEFORE_DIGIT),
+    "credit_card": re.compile(_NOT_AFTER_DIGIT + _digits(16, r"-\s") + _NOT_BEFORE_DIGIT),
     "phone": re.compile(
-        r"\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}\b"
+        _NOT_AFTER_DIGIT
+        + r"(?:\+?1[-.\s]?)?"
+        + rf"(?:\(\d{{3}}\)\s?\d{{3}}[-.\s]?\d{{4}}|{_digits(10, r'-.\s')}|{_digits(7, r'-.\s')})"
+        + _NOT_BEFORE_DIGIT
     ),
     "email": _EMAIL_PATTERN,
     "ip_address": re.compile(
