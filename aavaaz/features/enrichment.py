@@ -76,6 +76,24 @@ def build_pipeline(features: dict | None = None) -> list[Any]:
         aggressive = bool(intel.get("fillerAggressive", False))
         fns.append(lambda t: remove_filler_words(t, aggressive=aggressive))
 
+    replacement_entries = fmt.get("replacements") or []
+    if replacement_entries:
+        from aavaaz.features.formatting import apply_replacements, compile_replacements
+
+        rules = compile_replacements(
+            plain=[
+                (entry["find"], entry["replace"])
+                for entry in replacement_entries
+                if not entry.get("regex")
+            ],
+            regex=[
+                (entry["find"], entry["replace"])
+                for entry in replacement_entries
+                if entry.get("regex")
+            ],
+        )
+        fns.append(lambda t: apply_replacements(t, rules))
+
     return fns
 
 
@@ -97,12 +115,22 @@ def compile_custom_pii(patterns: list[dict]) -> dict | None:
 
 
 def enrich_result(result: dict, features: dict | None = None) -> None:
-    """Attach optional paragraph segmentation and intelligence analysis, in place."""
+    """Attach optional paragraphs, chapters and intelligence analysis, in place."""
     # paragraphs stay env-gated: the dashboard config carries no paragraph toggle
     if os.environ.get("AAVAAZ_ENABLE_PARAGRAPHS", "0") == "1":
         from aavaaz.features.utterance import segment_into_paragraphs
 
         result["paragraphs"] = segment_into_paragraphs(result["segments"])
+
+    intel = (features or {}).get("intelligence") or {}
+    if intel.get("chapters"):
+        from aavaaz.features.audio_intelligence import generate_chapters
+
+        result["chapters"] = generate_chapters(
+            result["segments"],
+            max_chapter_duration=float(intel.get("maxChapterDuration", 300)),
+            min_chapter_duration=float(intel.get("minChapterDuration", 30)),
+        )
 
     intel_opts = intelligence_options(features)
     if intel_opts is not None:

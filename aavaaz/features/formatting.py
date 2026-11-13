@@ -10,6 +10,7 @@ Applies optional formatting rules:
 """
 
 import re
+from collections.abc import Sequence
 
 # Spoken-number word values
 _ONES = {
@@ -335,39 +336,20 @@ def smart_format(text):
     return text
 
 
-# ---------------------------------------------------------------------------
-# Find & Replace — custom term substitutions
-# ---------------------------------------------------------------------------
+def compile_replacements(
+    plain: Sequence[tuple[str, str]], regex: Sequence[tuple[str, str]]
+) -> list[tuple[re.Pattern, str]]:
+    rules = []
+    for find, replacement in plain:
+        pattern = re.compile(rf"(?<!\w){re.escape(find)}(?!\w)", re.IGNORECASE)
+        # re.sub reads backslashes in the replacement as group references
+        rules.append((pattern, replacement.replace("\\", "\\\\")))
+    for find, replacement in regex:
+        rules.append((re.compile(find), replacement))
+    return rules
 
 
-def find_and_replace(
-    text: str,
-    replacements: list[tuple[str, str]],
-    use_regex: bool = False,
-    case_sensitive: bool = False,
-) -> str:
-    """Apply a list of find-and-replace substitutions to text.
-
-    Args:
-        text: Input text.
-        replacements: List of (find, replace) tuples.
-        use_regex: If True, treat find patterns as regex.
-        case_sensitive: If True, matches are case-sensitive.
-
-    Returns:
-        Text with all substitutions applied.
-    """
-    if not text or not replacements:
-        return text
-
-    flags = 0 if case_sensitive else re.IGNORECASE
-
-    for find, replace_with in replacements:
-        if use_regex:
-            text = re.sub(find, replace_with, text, flags=flags)
-        else:
-            # Escape the find pattern for literal matching
-            pattern = re.escape(find)
-            text = re.sub(pattern, replace_with, text, flags=flags)
-
+def apply_replacements(text: str, rules: list[tuple[re.Pattern, str]]) -> str:
+    for pattern, replacement in rules:
+        text = pattern.sub(replacement, text)
     return text

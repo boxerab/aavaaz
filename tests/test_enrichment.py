@@ -39,6 +39,31 @@ def test_enrich_result_adds_intelligence():
     assert "sentiment" in result.get("intelligence", {})
 
 
+def test_features_replacements_apply_plain_and_regex():
+    pipeline = build_pipeline(
+        {
+            "formatting": {
+                "replacements": [
+                    {"find": "pie torch", "replace": "PyTorch"},
+                    {"find": r"v(\d)", "replace": r"version \1", "regex": True},
+                ]
+            }
+        }
+    )
+    assert _apply(pipeline, "pie torch v2 is out") == "PyTorch version 2 is out"
+
+
+def test_enrich_result_adds_chapters():
+    segments = [
+        {"start": 0.0, "end": 40.0, "text": "Kubernetes clusters schedule containers."},
+        {"start": 45.0, "end": 80.0, "text": "Billing invoices go out monthly."},
+    ]
+    result = {"segments": segments}
+    enrich_result(result, {"intelligence": {"chapters": True, "minChapterDuration": 30}})
+    assert [(c["start"], c["end"]) for c in result["chapters"]] == [(0.0, 40.0), (45.0, 80.0)]
+    assert all(c["title"] for c in result["chapters"])
+
+
 def test_intelligence_options_off_by_default(monkeypatch):
     monkeypatch.delenv("AAVAAZ_ENABLE_INTELLIGENCE", raising=False)
     assert intelligence_options(None) is None

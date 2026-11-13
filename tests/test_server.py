@@ -217,6 +217,17 @@ def test_finalize_transcript_merges_paragraphs_and_intelligence():
     assert intelligence["sentiment"]["label"] == "positive"
 
 
+def test_finalize_transcript_reads_whisper_live_string_times():
+    server = AavaazServer(enable_paragraphs=True, enable_chapters=True)
+    transcript = [
+        {"start": "0.000", "end": "40.000", "text": "Kubernetes clusters schedule containers."},
+        {"start": "45.000", "end": "80.000", "text": "Billing invoices go out monthly."},
+    ]
+    payload = server.finalize_transcript(transcript)
+    assert len(payload["paragraphs"]) == 2
+    assert [(c["start"], c["end"]) for c in payload["chapters"]] == [(0.0, 40.0), (45.0, 80.0)]
+
+
 def test_finalize_transcript_without_steps_returns_none():
     server = AavaazServer()
     assert server.finalize_transcript([{"start": 0.0, "end": 1.0, "text": "hi"}]) is None
@@ -280,6 +291,23 @@ def test_filler_removal_options_configure_the_registered_plugin():
     finally:
         builtin_registry.disable("filler_removal")
         configure_filler_removal()
+
+
+def test_replacement_options_configure_the_registered_plugin():
+    from aavaaz.plugins.builtins import configure_replacements
+    from aavaaz.plugins.builtins import registry as builtin_registry
+
+    server = AavaazServer(
+        replacements=[("cube ernestes", "Kubernetes")],
+        regex_replacements=[(r"ticket (\d+)", r"#\1")],
+    )
+    server.configure_plugins()
+    try:
+        segment = builtin_registry.apply({"text": "cube ernestes ticket 7", "start": 0})
+        assert segment["text"] == "Kubernetes #7"
+    finally:
+        builtin_registry.disable("replacements")
+        configure_replacements([])
 
 
 def test_audio_preprocessor_reduces_frames():
@@ -352,6 +380,13 @@ def test_cli_parse_all_flags():
         "--filler-aggressive",
         "--callback-url",
         "http://hook.test/cb",
+        "--chapters",
+        "--replace",
+        "cube ernestes",
+        "Kubernetes",
+        "--replace-regex",
+        r"ticket (\d+)",
+        r"#\1",
     ]
 
     with (
@@ -385,6 +420,9 @@ def test_cli_parse_all_flags():
         assert kwargs["enable_filler_removal"] is True
         assert kwargs["filler_aggressive"] is True
         assert kwargs["callback_url"] == "http://hook.test/cb"
+        assert kwargs["enable_chapters"] is True
+        assert kwargs["replacements"] == [("cube ernestes", "Kubernetes")]
+        assert kwargs["regex_replacements"] == [(r"ticket (\d+)", r"#\1")]
 
 
 def test_cli_profanity_defaults():

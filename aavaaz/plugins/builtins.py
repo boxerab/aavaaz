@@ -60,6 +60,18 @@ class _FillerRemovalPlugin:
         return segment
 
 
+class _ReplacementPlugin:
+    def __init__(self):
+        self.rules: list = []
+
+    def __call__(self, segment):
+        from aavaaz.features.formatting import apply_replacements
+
+        if "text" in segment:
+            segment["text"] = apply_replacements(segment["text"], self.rules)
+        return segment
+
+
 def _make_profanity_plugin():
     """Create a profanity filter plugin."""
     return _ProfanityPlugin()
@@ -79,6 +91,10 @@ def configure_profanity(mode: str = "partial", extra_words: set[str] | None = No
 def configure_filler_removal(aggressive: bool = False):
     """Set the options used by the registered filler_removal plugin."""
     _filler_removal_plugin.aggressive = aggressive
+
+
+def configure_replacements(rules: list):
+    _replacement_plugin.rules = rules
 
 
 def _make_formatting_plugin():
@@ -120,11 +136,13 @@ def _make_intelligence_plugin():
 # Register all built-in plugins with ascending priority, disabled by default
 _profanity_plugin = _make_profanity_plugin()
 _filler_removal_plugin = _make_filler_removal_plugin()
+_replacement_plugin = _ReplacementPlugin()
 
 registry.add("formatting", _make_formatting_plugin(), priority=10, enabled=False)
 registry.add("pii_redaction", _make_pii_plugin(), priority=20, enabled=False)
 registry.add("profanity_filter", _profanity_plugin, priority=30, enabled=False)
 registry.add("filler_removal", _filler_removal_plugin, priority=40, enabled=False)
+registry.add("replacements", _replacement_plugin, priority=50, enabled=False)
 
 try:
     registry.add("audio_intelligence", _make_intelligence_plugin(), priority=90, enabled=False)

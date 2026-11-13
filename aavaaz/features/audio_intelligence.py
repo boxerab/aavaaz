@@ -612,33 +612,6 @@ def remove_filler_words(text: str, aggressive: bool = False) -> str:
     return result
 
 
-# --- Custom Spelling Hints ---
-
-
-def apply_spelling_hints(text: str, hints: dict[str, str]) -> str:
-    """Apply custom spelling corrections to transcript text.
-
-    Unlike find & replace, this is specifically for correcting ASR
-    mis-spellings of proper nouns, technical terms, etc.
-
-    Args:
-        text: Input transcript text.
-        hints: Dict mapping wrong spelling → correct spelling.
-            Example: {"cube ernestes": "Kubernetes", "pie torch": "PyTorch"}
-
-    Returns:
-        Text with spelling corrections applied.
-    """
-    if not text or not hints:
-        return text
-
-    for wrong, correct in hints.items():
-        pattern = re.compile(re.escape(wrong), re.IGNORECASE)
-        text = pattern.sub(correct, text)
-
-    return text
-
-
 # --- Pipeline ---
 
 

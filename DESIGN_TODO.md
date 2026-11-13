@@ -67,7 +67,7 @@ Wanted features that the README or `docs/site` advertised but no entry point del
 - [x] **Published Aavaaz images** — `ghcr.io/collabora/aavaaz-{gpu,cpu,openvino}` and Docker Hub `collabora/aavaaz` do not exist; only the WhisperLive engine images do. Needs a registry publish job and CPU/OpenVINO/TensorRT variants of `Dockerfile`. — done: `.github/workflows/images.yml` pushes `ghcr.io/<owner>/aavaaz-gpu` and `aavaaz-cpu` on `v*` tags and manual dispatch; `Dockerfile.cpu` uses the new `whisper-cpu` extra (no CUDA wheels). First publish needs a tag.
 - [x] **`/health` on the streaming REST API** — done: `GET /health` on the WhisperLive REST app returns status, backend, model, clients, max_clients (fork branch `rest-fixes`, PR collabora/WhisperLive#536).
 - [x] **Helm `gpu.enabled`** — the chart always requests one `nvidia.com/gpu`; no CPU-only toggle. — done: `gpu.enabled` in `values.yaml` (default true) toggles the `nvidia.com/gpu` limit and adds `--backend faster_whisper` when off.
-- [ ] **Fine-tuning tooling** — `docs/FINE_TUNING.md` is a guide, no training script in the repo.
+- [x] **Fine-tuning tooling** — `scripts/finetune_whisper.py` trains from a CSV manifest, `docs/FINE_TUNING.md` covers training, conversion and serving.
 - [ ] **Web UI in `aavaaz serve`** — only the Lambda and Modal deployments serve a page.
 - [ ] **Multi-GPU** — one process serves one GPU; nothing spreads sessions across devices (the SCALING guide covers one node per GPU behind a load balancer).
 

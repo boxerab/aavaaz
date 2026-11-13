@@ -9,6 +9,7 @@ plugin pipeline without modifying WhisperLive core code.
 import logging
 import os
 import threading
+from collections.abc import Sequence
 
 from whisper_live.server import TranscriptionServer
 
@@ -62,6 +63,9 @@ class AavaazServer:
         filler_aggressive: bool = False,
         enable_intelligence: bool = False,
         enable_paragraphs: bool = False,
+        enable_chapters: bool = False,
+        replacements: Sequence[tuple[str, str]] = (),
+        regex_replacements: Sequence[tuple[str, str]] = (),
         callback_url: str | None = None,
         noise_reduction: str | None = None,
     ):
@@ -98,6 +102,9 @@ class AavaazServer:
         self.filler_aggressive = filler_aggressive
         self.enable_intelligence = enable_intelligence
         self.enable_paragraphs = enable_paragraphs
+        self.enable_chapters = enable_chapters
+        self.replacements = replacements
+        self.regex_replacements = regex_replacements
         self.callback_url = callback_url
         self.noise_reduction = noise_reduction
 
@@ -136,11 +143,20 @@ class AavaazServer:
         if not transcript:
             return None
 
+        # whisper_live sends segment times as strings such as "1.500"
+        timed_transcript = [
+            {**segment, "start": float(segment["start"]), "end": float(segment["end"])}
+            for segment in transcript
+        ]
         payload: dict = {}
         if self.enable_paragraphs:
-            payload.update(self._paragraph_finalizer(transcript) or {})
+            payload.update(self._paragraph_finalizer(timed_transcript) or {})
+        if self.enable_chapters:
+            from aavaaz.features.audio_intelligence import generate_chapters
+
+            payload["chapters"] = generate_chapters(timed_transcript)
         if self.enable_intelligence:
-            payload.update(self._intelligence_finalizer(transcript) or {})
+            payload.update(self._intelligence_finalizer(timed_transcript) or {})
 
         if self.callback_url:
             self._post_callback({"segments": transcript, **payload})
@@ -208,9 +224,11 @@ class AavaazServer:
         Built-ins are registered disabled so raw transcripts are never silently
         altered; this turns on the ones the operator asked for.
         """
+        from aavaaz.features.formatting import compile_replacements
         from aavaaz.plugins.builtins import (
             configure_filler_removal,
             configure_profanity,
+            configure_replacements,
         )
 
         for plugin_name, flag in self._FEATURE_PLUGINS.items():
@@ -221,6 +239,11 @@ class AavaazServer:
             configure_profanity(self.profanity_mode, self.profanity_words)
         if self.enable_filler_removal:
             configure_filler_removal(self.filler_aggressive)
+
+        replacement_rules = compile_replacements(self.replacements, self.regex_replacements)
+        if replacement_rules:
+            configure_replacements(replacement_rules)
+            self.plugin_registry.enable("replacements")
 
     def serve(self, **overrides):
         """Apply keyword overrides (e.g. word_timestamps=True) then start the server."""
@@ -308,7 +331,10 @@ class AavaazServer:
         server.initialize_client = initialize_client_with_defaults
 
         needs_finalizer = bool(
-            self.enable_paragraphs or self.enable_intelligence or self.callback_url
+            self.enable_paragraphs
+            or self.enable_chapters
+            or self.enable_intelligence
+            or self.callback_url
         )
 
         server.run(

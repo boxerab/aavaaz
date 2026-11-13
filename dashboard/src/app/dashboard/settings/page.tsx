@@ -42,7 +42,7 @@ interface FormattingConfig {
   capitalize: boolean;
   numbers: boolean;
   smart: boolean;
-  replacements: { find: string; replace: string }[];
+  replacements: { find: string; replace: string; regex?: boolean }[];
 }
 
 interface ProfanityConfig {

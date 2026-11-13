@@ -19,7 +19,7 @@ The transcription engine, the streaming WebSocket protocol, VAD, cross-client ba
 
 | Path | File | Engine | Notes |
 |---|---|---|---|
-| Self-hosted streaming | `aavaaz serve` → `server.py` | WhisperLive | WS 9090 + REST 8000; plugin pipeline applies per segment; `--noise-reduction` preprocesses live frames; `--paragraphs`/`--intelligence`/`--callback-url` run at stream end |
+| Self-hosted streaming | `aavaaz serve` → `server.py` | WhisperLive | WS 9090 + REST 8000; plugin pipeline applies per segment; `--noise-reduction` preprocesses live frames; `--paragraphs`/`--chapters`/`--intelligence`/`--callback-url` run at stream end |
 | AWS Lambda (batch) | `serverless/lambda_handler.py` | faster-whisper (own pipeline) | S3-trigger + API Gateway; the primary batch path |
 | Modal (GPU) | `deploy/modal/app_live.py` (live), `app.py` (batch) | WhisperLive | both install `whisper-live` from pypi, the live app fires no webhook |
 | SaaS API (self-host) | `saas_server.py` → `api/saas.py` | n/a | in-memory store; JWT auth (HS256 secret or RS256 JWKS) |
@@ -34,9 +34,10 @@ Wired = reachable through a running entry point. Library = importable but not co
 | Module | Status | Where wired |
 |---|---|---|
 | `formatting` | Wired | streaming plugin (`--smart-format`), lambda, modal |
+| find and replace (`formatting.compile_replacements`) | Wired | streaming plugin (`--replace`, `--replace-regex`), lambda + modal batch (`formatting.replacements` in features), not app_live |
 | `pii_redaction` | Wired | streaming plugin (`--pii-redaction`), lambda, modal |
 | `profanity_filter` | Wired | streaming plugin (`--profanity-filter`, `--profanity-mode`, `--profanity-words`), lambda, modal, app_live |
-| `audio_intelligence` | Wired | streaming plugin per segment + whole-transcript analysis at stream end (`--intelligence`); filler removal (`--filler-removal`); lambda (`AAVAAZ_ENABLE_INTELLIGENCE`), modal |
+| `audio_intelligence` | Wired | streaming plugin per segment + whole-transcript analysis at stream end (`--intelligence`); filler removal (`--filler-removal`); chapters at stream end (`--chapters`); lambda (`AAVAAZ_ENABLE_INTELLIGENCE`, `intelligence.chapters` in features), modal |
 | `utterance` (paragraphs) | Wired | lambda + modal (`AAVAAZ_ENABLE_PARAGRAPHS`), streaming (`--paragraphs`) |
 | `webhook` | Wired | lambda + modal (`callback_url` in request), streaming (`--callback-url`) |
 | `plugins` | Wired (core) | server pipeline |

@@ -188,6 +188,27 @@ def main():
         action="store_true",
         help="Group the transcript into paragraphs, sent as a final message at stream end",
     )
+    serve_parser.add_argument(
+        "--chapters",
+        action="store_true",
+        help="Split the transcript into titled chapters, sent as a final message at stream end",
+    )
+    serve_parser.add_argument(
+        "--replace",
+        nargs=2,
+        action="append",
+        default=[],
+        metavar=("FIND", "REPLACEMENT"),
+        help="Replace a word or phrase in every segment, case-insensitive, whole words only",
+    )
+    serve_parser.add_argument(
+        "--replace-regex",
+        nargs=2,
+        action="append",
+        default=[],
+        metavar=("PATTERN", "REPLACEMENT"),
+        help="Replace every match of a Python regular expression in every segment",
+    )
     serve_parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging")
 
     # --- transcribe ---
@@ -268,6 +289,9 @@ def main():
             filler_aggressive=args.filler_aggressive,
             enable_intelligence=args.intelligence,
             enable_paragraphs=args.paragraphs,
+            enable_chapters=args.chapters,
+            replacements=[tuple(pair) for pair in args.replace],
+            regex_replacements=[tuple(pair) for pair in args.replace_regex],
             callback_url=args.callback_url,
         )
         server.run()

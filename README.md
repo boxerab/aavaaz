@@ -186,7 +186,8 @@ aavaaz serve --model large-v3 \
   --noise-reduction near_field \
   --profanity-filter --profanity-mode full --profanity-words foo,bar \
   --filler-removal --filler-aggressive \
-  --intelligence --paragraphs \
+  --intelligence --paragraphs --chapters \
+  --replace "cube ernestes" Kubernetes --replace-regex 'ticket (\d+)' '#\1' \
   --callback-url https://example.com/hook
 ```
 - `--noise-reduction {near_field,far_field}` — reduce noise on live audio frames before transcription.
@@ -196,7 +197,10 @@ aavaaz serve --model large-v3 \
 - `--filler-aggressive` — also drop borderline fillers ("like", "actually", "right").
 - `--intelligence` — per-segment sentiment/topics/entities, plus a final `{"intelligence": ...}` message with summary and highlights for the whole transcript.
 - `--paragraphs` — a final `{"paragraphs": [...]}` message at stream end.
-- `--callback-url URL` — POST the final transcript (segments, paragraphs, intelligence) to URL, with retries.
+- `--chapters`: a final `{"chapters": [...]}` message at stream end. Chapters break at pauses of 3 s or more once 30 s long, and at 5 minutes. Each has a keyword title and a short summary.
+- `--replace FIND REPLACEMENT`: replace a word or phrase in every segment, case-insensitive, whole words only. Repeat for more rules. Fixes misheard terms such as "cube ernestes".
+- `--replace-regex PATTERN REPLACEMENT`: replace every match of a Python regular expression. Plain rules run before regex rules, after formatting, PII redaction, profanity and filler removal.
+- `--callback-url URL` — POST the final transcript (segments, paragraphs, chapters, intelligence) to URL, with retries.
 
 ### Authentication
 Protect both REST API and WebSocket connections with a shared API key:

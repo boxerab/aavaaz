@@ -5,6 +5,8 @@ from aavaaz.features.formatting import (
     _collapse_whitespace,
     _replace_spoken_numbers,
     _words_to_number,
+    apply_replacements,
+    compile_replacements,
     format_transcript,
     smart_format,
 )
@@ -114,3 +116,21 @@ class TestSmartFormat:
 
     def test_leaves_numeric_punctuation_alone(self):
         assert smart_format("3:30 PM costs 1.5") == "3:30 PM costs 1.5"
+
+
+class TestReplacements:
+    def test_plain_rule_ignores_case(self):
+        rules = compile_replacements(plain=[("cube ernestes", "Kubernetes")], regex=[])
+        assert apply_replacements("Cube Ernestes runs it", rules) == "Kubernetes runs it"
+
+    def test_plain_rule_skips_matches_inside_words(self):
+        rules = compile_replacements(plain=[("ai", "AI")], regex=[])
+        assert apply_replacements("she said ai helps", rules) == "she said AI helps"
+
+    def test_plain_replacement_keeps_backslashes(self):
+        rules = compile_replacements(plain=[("share", r"\\server\share")], regex=[])
+        assert apply_replacements("open share now", rules) == r"open \\server\share now"
+
+    def test_regex_rule_uses_groups(self):
+        rules = compile_replacements(plain=[], regex=[(r"ticket (\d+)", r"#\1")])
+        assert apply_replacements("see ticket 42", rules) == "see #42"
