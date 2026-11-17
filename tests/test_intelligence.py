@@ -4,6 +4,7 @@ from aavaaz.features.audio_intelligence import (
     analyze_sentiment,
     detect_topics,
     extract_entities,
+    remove_filler_words,
     summarize,
 )
 
@@ -66,3 +67,29 @@ def test_summarize():
     assert len(result) > 0
     # Summary should be shorter than original
     assert len(result) < len(text)
+
+
+def test_filler_removal_leaves_no_comma_before_sentence_end():
+    assert remove_filler_words("we ship on Friday, you know") == "We ship on Friday"
+    assert remove_filler_words("we ship on Friday, um. Then test") == "We ship on Friday. Then test"
+
+
+def test_filler_removal_drops_commas_around_mid_sentence_filler():
+    assert remove_filler_words("I think, uh, you know, we should") == "I think we should"
+
+
+def test_filler_removal_keeps_comma_after_opening_word():
+    assert remove_filler_words("Yes, um, I agree") == "Yes, I agree"
+
+
+def test_sentiment_inflected_negative_word():
+    assert analyze_sentiment("the customer is frustrated with the delay")["label"] == "negative"
+
+
+def test_sentiment_negation():
+    assert analyze_sentiment("The service was not good")["label"] == "negative"
+    assert analyze_sentiment("This is not bad at all")["label"] == "positive"
+
+
+def test_sentiment_but_clause():
+    assert analyze_sentiment("It works but the setup was painful")["label"] == "negative"

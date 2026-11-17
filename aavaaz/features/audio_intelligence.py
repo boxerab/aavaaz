@@ -1,8 +1,8 @@
 """
 Audio intelligence pipeline for post-transcription analysis.
 
-Provides lightweight, zero-dependency analysis modules:
-- Sentiment analysis (keyword/heuristic-based)
+Provides lightweight analysis modules:
+- Sentiment analysis (VADER)
 - Topic detection (keyword frequency)
 - Entity extraction (regex-based named entities)
 - Extractive summarization (sentence scoring)
@@ -16,109 +16,23 @@ import re
 from collections import Counter
 from typing import Any
 
+from aavaaz.features.vader.vaderSentiment import SentimentIntensityAnalyzer
+
 # --- Sentiment Analysis ---
 
-_POSITIVE_WORDS = {
-    "good",
-    "great",
-    "excellent",
-    "wonderful",
-    "amazing",
-    "fantastic",
-    "happy",
-    "love",
-    "best",
-    "perfect",
-    "awesome",
-    "outstanding",
-    "beautiful",
-    "brilliant",
-    "superb",
-    "pleased",
-    "delighted",
-    "impressive",
-    "terrific",
-    "incredible",
-    "thank",
-    "thanks",
-    "appreciate",
-    "glad",
-    "enjoy",
-    "success",
-    "successful",
-}
-
-_NEGATIVE_WORDS = {
-    "bad",
-    "terrible",
-    "awful",
-    "horrible",
-    "worst",
-    "hate",
-    "angry",
-    "sad",
-    "poor",
-    "disappointed",
-    "frustrating",
-    "annoying",
-    "ugly",
-    "stupid",
-    "fail",
-    "failed",
-    "failure",
-    "wrong",
-    "problem",
-    "issue",
-    "error",
-    "broken",
-    "sucks",
-    "unfortunately",
-    "unhappy",
-    "difficult",
-    "confused",
-    "complaint",
-    "complain",
-}
+_sentiment_analyzer = SentimentIntensityAnalyzer()
 
 
 def analyze_sentiment(text: str) -> dict[str, Any]:
-    """Analyze sentiment of text using keyword scoring.
-
-    Returns:
-        Dict with 'label' ("positive", "negative", "neutral"),
-        'score' (float -1.0 to 1.0), 'positive_count', 'negative_count'.
-    """
-    if not text:
-        return {
-            "label": "neutral",
-            "score": 0.0,
-            "positive_count": 0,
-            "negative_count": 0,
-        }
-
-    words = set(re.findall(r"\b[a-z]+\b", text.lower()))
-    pos = len(words & _POSITIVE_WORDS)
-    neg = len(words & _NEGATIVE_WORDS)
-    total = pos + neg
-
-    if total == 0:
-        score = 0.0
-    else:
-        score = (pos - neg) / total
-
-    if score > 0.1:
+    score = _sentiment_analyzer.polarity_scores(text)["compound"]
+    # vader documents a compound score between -0.05 and 0.05 as neutral
+    if score >= 0.05:
         label = "positive"
-    elif score < -0.1:
+    elif score <= -0.05:
         label = "negative"
     else:
         label = "neutral"
-
-    return {
-        "label": label,
-        "score": round(score, 3),
-        "positive_count": pos,
-        "negative_count": neg,
-    }
+    return {"label": label, "score": round(score, 3)}
 
 
 # --- Topic Detection ---
@@ -550,6 +464,16 @@ _MULTI_WORD_FILLERS = sorted(
 _SINGLE_WORD_FILLERS = {f for f in _FILLER_WORDS if " " not in f}
 
 
+def _drop_filler(match: re.Match) -> str:
+    if not match.group(1):
+        return ""
+    sentence_before = re.split(r"[.!?]", match.string[: match.start()])[-1]
+    # english sets off a lone opening word with a comma, as in "Yes, I agree"
+    if len(sentence_before.split()) == 1:
+        return ", "
+    return " "
+
+
 def remove_filler_words(text: str, aggressive: bool = False) -> str:
     """Remove filler words from transcript text.
 
@@ -592,16 +516,17 @@ def remove_filler_words(text: str, aggressive: bool = False) -> str:
     # Remove multi-word fillers first
     result = text
     for filler in multi:
-        pattern = re.compile(r"\b" + re.escape(filler) + r"\b[,]?\s*", re.IGNORECASE)
-        result = pattern.sub("", result)
+        pattern = re.compile(r"(,\s*)?\b" + re.escape(filler) + r"\b,?\s*", re.IGNORECASE)
+        result = pattern.sub(_drop_filler, result)
 
     # Remove single-word fillers
     for filler in single:
-        pattern = re.compile(r"\b" + re.escape(filler) + r"\b[,]?\s*", re.IGNORECASE)
-        result = pattern.sub("", result)
+        pattern = re.compile(r"(,\s*)?\b" + re.escape(filler) + r"\b,?\s*", re.IGNORECASE)
+        result = pattern.sub(_drop_filler, result)
 
     # Clean up double spaces and leading/trailing whitespace
     result = re.sub(r" {2,}", " ", result).strip()
+    result = re.sub(r"[\s,]+([.!?]|$)", r"\1", result)
     # Fix capitalization at the start and after sentence punctuation, since a
     # removed filler can expose a lowercased sentence start mid-text.
     result = re.sub(r"^([a-z])", lambda m: m.group(1).upper(), result)

@@ -89,8 +89,10 @@ def _replace_spoken_numbers(text):
     """Replace sequences of spoken number words with digits."""
     words = text.split()
     out = []
+    century = None
     i = 0
     while i < len(words):
+        previous_century, century = century, None
         lower = words[i].lower().rstrip(".,!?;:")
         trailing_punct = words[i][len(lower) :]
         if lower in _NUMBER_WORDS and lower != "and":
@@ -102,12 +104,16 @@ def _replace_spoken_numbers(text):
             while j < len(words):
                 raw = words[j]
                 w = raw.lower().rstrip(".,!?;:")
-                if w in _NUMBER_WORDS:
-                    num_words.append(w)
-                    j += 1
-                    if raw != w:
-                        break
-                else:
+                if w not in _NUMBER_WORDS:
+                    break
+                previous = num_words[-1] if num_words else None
+                joins_scale = previous in _SCALES or previous == "and" or w in _SCALES or w == "and"
+                tens_then_digit = previous in _TENS and w in _ONES and 0 < _ONES[w] < 10
+                if previous is not None and not joins_scale and not tens_then_digit:
+                    break
+                num_words.append(w)
+                j += 1
+                if raw.lower() != w:
                     break
             # Grab trailing punctuation from last number word
             last_raw = words[j - 1]
@@ -115,8 +121,14 @@ def _replace_spoken_numbers(text):
             end_punct = last_raw[len(last_clean) :]
 
             val = _words_to_number(num_words)
-            if val is not None:
+            if val is not None and previous_century is not None and 10 <= val <= 99:
+                out[-1] = f"{previous_century}{val}{end_punct}"
+                i = j
+            elif val is not None:
                 out.append(str(val) + end_punct)
+                # english says years 1900 to 2099 as two pairs, as in "nineteen eighty four"
+                if val in (19, 20) and not end_punct:
+                    century = val
                 i = j
             else:
                 out.append(words[i])
@@ -246,7 +258,7 @@ def _format_times(text):
     """Convert spoken times: 'three thirty p m' → '3:30 PM'."""
     # "X thirty/fifteen/forty-five AM/PM"
     time_pattern = re.compile(
-        r"\b(\d{1,2})\s+(o\'?clock|(?:fifteen|thirty|forty[\s-]?five))\s*(a\s*m|p\s*m)?\b",
+        r"\b(\d{1,2})\s+(o\'?clock|15|30|45|(?:fifteen|thirty|forty[\s-]?five))\s*(a\s*m|p\s*m)?\b",
         re.IGNORECASE,
     )
     minute_map = {

@@ -36,6 +36,17 @@ class TestSpokenNumbers:
         # a number must not span a sentence boundary
         assert _replace_spoken_numbers("I have two. Three cats") == "I have 2. 3 cats"
 
+    def test_no_merge_of_adjacent_numbers(self):
+        assert _replace_spoken_numbers("three thirty") == "3 30"
+        assert _replace_spoken_numbers("four fifteen") == "4 15"
+
+    def test_spoken_year(self):
+        assert _replace_spoken_numbers("nineteen eighty four") == "1984"
+        assert _replace_spoken_numbers("in twenty twenty three") == "in 2023"
+
+    def test_capitalized_number(self):
+        assert _replace_spoken_numbers("Twenty one apples") == "21 apples"
+
     def test_words_to_number_empty(self):
         assert _words_to_number([]) is None
 
@@ -113,6 +124,10 @@ class TestSmartFormat:
 
     def test_collapses_double_commas(self):
         assert smart_format("one,, two") == "one, two"
+
+    def test_spoken_time(self):
+        assert format_transcript("meet at three thirty pm", smart=True) == "Meet at 3:30 PM"
+        assert format_transcript("call at four forty five", smart=True) == "Call at 4:45"
 
     def test_leaves_numeric_punctuation_alone(self):
         assert smart_format("3:30 PM costs 1.5") == "3:30 PM costs 1.5"
